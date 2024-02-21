@@ -109,6 +109,12 @@ for i in trange(1, max_frames * interval, interval):
 
         for cam in cameras:
             pcl_unaligned_cam = np.load(join(data_path, f'{cam}_pcld', "pcld-%06d.npy"%(i)))
+            keep_percentage = cfg['cameras_keep_per'][str(cam)]
+            num_points_to_keep = int(len(pcl_unaligned_cam) * keep_percentage)
+            # Shuffle the array
+            np.random.shuffle(pcl_unaligned_cam)
+            # Randomly select a subset of pcl_unaligned_cam
+            pcl_unaligned_cam = pcl_unaligned_cam[:num_points_to_keep]
             
             if len(pcl_unaligned_merged)==0:
                 pcl_unaligned_merged = pcl_unaligned_cam
@@ -118,11 +124,18 @@ for i in trange(1, max_frames * interval, interval):
         latent = process_and_generate_latent(pcl_unaligned_merged, align_matrix, generator, device, export_pc, out_dir, f'pcl-merged-{i:06d}')
         
         if export_each_frame==True:
-            generate_and_save_mesh(generator, latent.clone(), out_dir, f'merged-{i:06d}')
+            if i >= 865:
+                generate_and_save_mesh(generator, latent.clone(), out_dir, f'merged-{i:06d}')
         
     else:
         for cam in cameras:
             pcl_unaligned_cam = np.load(join(data_path, f'{cam}_pcld', "pcld-%06d.npy"%(i)))
+            keep_percentage = cfg['cameras_keep_per'][str(cam)]
+            num_points_to_keep = int(len(pcl_unaligned_cam) * keep_percentage)
+            # Shuffle the array
+            np.random.shuffle(pcl_unaligned_cam)
+            # Randomly select a subset of pcl_unaligned_cam
+            pcl_unaligned_cam = pcl_unaligned_cam[:num_points_to_keep]
             
             latent = process_and_generate_latent(pcl_unaligned_cam, align_matrix, generator, device, export_pc, out_dir, f'pcl-{cam}-{i:06d}')
             

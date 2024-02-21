@@ -13,8 +13,8 @@ data:
   pointcloud_sampling: 0.1
   pointcloud_noise: 0.000
   grid_resolution: 24
-  input_vol: 0.7 # in meter
-  query_vol: 0.5 # in meter
+  input_vol: 1.2 # in meter
+  query_vol: 1.0 # in meter
 cameras_list: ['front_upper', 'front_lower', 'rear_upper', 'rear_lower', 'left', 'right']
 cameras_keep_per:
   front_upper: 1.0
@@ -42,7 +42,7 @@ test:
   merge_cameras: True
 generation:
   generation_dir: generation
-  resolution_0: 50 # resolution for each crop
+  resolution_0: 100 # resolution for each crop
   voxel_threshold: 0.003
   boundary_interpolation: True
-  max_byte_size: 2048000000
+  max_byte_size: 2548000000
