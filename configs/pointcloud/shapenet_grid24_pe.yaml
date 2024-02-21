@@ -2,7 +2,7 @@ method: neuralblox
 data:
   input_type: pointcloud
   classes: null
-  path: data/ShapeNet
+  path: /media/robin/Volume/MasterThesis/Datasets/NeuralBlox/data/ShapeNet
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048

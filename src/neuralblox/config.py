@@ -209,6 +209,7 @@ def get_generator(model, cfg, device, **kwargs):
         padding=cfg['data']['padding'],
         vol_info=vol_info,
         vol_bound=vol_bound,
+        max_byte_size=cfg['generation']['max_byte_size']
     )
     return generator
 
@@ -270,7 +271,8 @@ def get_generator_fusion(model, model_merge, sample_points, cfg, device, **kwarg
         voxel_threshold=voxel_threshold,
         boundary_interpolation=boundary_interpolation,
         unet_hdim = unet_hdim,
-        unet_depth = unet_depth
+        unet_depth = unet_depth,
+        max_byte_size=cfg['generation']['max_byte_size']
     )
     return generator
 

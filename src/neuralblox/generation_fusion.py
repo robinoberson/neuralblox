@@ -5,6 +5,8 @@ import trimesh
 from src.utils import libmcubes
 from src.common import normalize_coord, add_key, coord2index
 import time
+from memory_profiler import profile
+
 
 class Generator3D(object):
     '''  Generator class for scene generation and latent code fusion.
@@ -32,7 +34,7 @@ class Generator3D(object):
         boundary_interpolation (bool): whether boundary interpolation is performed
     '''
 
-    def __init__(self, model, model_merge, sample_points, points_batch_size=3000000,
+    def __init__(self, model, model_merge, sample_points, max_byte_size, points_batch_size=3000000,
                  threshold=0.05, refinement_step=0, device=None,
                  resolution0=16, upsampling_steps=3,
                  padding=0.1,
@@ -42,7 +44,8 @@ class Generator3D(object):
                  voxel_threshold = 0.01,
                  boundary_interpolation=False,
                  unet_hdim = 32,
-                 unet_depth = 2):
+                 unet_depth = 2,
+                 ):
         self.model = model.to(device)
         self.model_merge = model_merge.to(device)
         self.points_batch_size = points_batch_size
@@ -71,6 +74,7 @@ class Generator3D(object):
         # for pointcloud_crop
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
+        self.max_byte_size = max_byte_size
 
         if vol_info is not None:
             self.input_vol, _, _ = vol_info
@@ -322,7 +326,7 @@ class Generator3D(object):
         self.vol_bound['n_crop'] = num_crop
         self.vol_bound['input_vol'] = np.stack([lb_input, ub_input], axis=1)
         self.vol_bound['query_vol'] = np.stack([lb_query, ub_query], axis=1)
-
+        
     def encode_crop_sequential(self, inputs, device, vol_bound=None):
         ''' Encode a crop to feature volumes (before U-Net)
 
@@ -388,8 +392,14 @@ class Generator3D(object):
 
         occ_hat = torch.cat(occ_hats, dim=0)
         return occ_hat
-
+    # @profile
     def generate_mesh_from_neural_map(self, latent_all, return_stats=True):
+        occ_values_x = self.generate_occupancy(latent_all)
+        
+        return self.generate_mesh_from_occ(occ_values_x, return_stats=return_stats)
+
+    # @profile
+    def generate_occupancy(self, latent_all):
         self.model.eval()
         device = self.device
         decoder_unet = self.unet.decoders
@@ -399,13 +409,17 @@ class Generator3D(object):
         # acquire the boundary for every crops
         self.get_crop_bound(self.pointcloud_all)
         kwargs = {}
-        stats_dict = {}
-
-        n = self.resolution0
 
         n_crop_axis = self.vol_bound['axis_n_crop']
         max_x, max_y, max_z = n_crop_axis[0], n_crop_axis[1], n_crop_axis[2]
-        value_grid = np.zeros((max_x, max_y, max_z, n, n, n))
+                
+        denominator = max_x * max_y * max_z * 8
+        n = int(np.floor(np.power(self.max_byte_size / denominator, 1/3)))
+        n = np.min([n, self.resolution0])
+        self.resolution0 = n
+
+        print(f'max_x: {max_x}, max_y: {max_y}, max_z: {max_z}, new resolution: {n}')
+        value_grid = np.zeros((max_x, max_y, max_z, n, n, n), dtype = np.float32)
 
         if self.bound_interpolation:
             overlap = self.vol_bound['input_crop_size'] / self.vol_bound['query_crop_size']
@@ -600,11 +614,20 @@ class Generator3D(object):
             if (i + 1) % (n_crop_axis[2] * n_crop_axis[1]) == 0:
                 occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
                 occ_values_y = np.array([]).reshape(r, 0, r * n_crop_axis[2])
-
-        value_grid = occ_values_x
+        del occ_values, occ_values_y
+        
+        occ_values_x = occ_values_x.astype(np.float32)
+        
+        return occ_values_x
+    # @profile
+    def generate_mesh_from_occ(self, value_grid, return_stats=True, stats_dict=dict()):
+        print(f'Step 1')
         value_grid[np.where(value_grid == 1.0)] = 0.9999999
+        print(f'Step 2')
         value_grid[np.where(value_grid == 0.0)] = 0.0000001
-        value_grid = np.log(value_grid / (1 - value_grid))
+        print(f'Step 3')
+        np.divide(value_grid, 1 - value_grid, out=value_grid)
+        np.log(value_grid, out=value_grid)
 
         print("Generating mesh")
         t0 = time.time()
@@ -616,7 +639,6 @@ class Generator3D(object):
             return mesh, stats_dict, value_grid
         else:
             return mesh
-
 
     def unet3d_decode(self, z, decoder_unet):
         ''' Decode latent code into feature volume

@@ -1,0 +1,48 @@
+inherit_from: configs/fusion/generate_fusion.yaml
+data:
+  input_type: pointcloud_crop
+  classes: ['']
+  path: /home/robin/Dev/MasterThesis/GithubRepos/master_thesis/data/pclds
+  intrinsics: null
+  align:
+    deg_x: 90
+    deg_y: 0
+    deg_z: 0
+    shift_vertical: 0.9
+    is_flip: True
+  pointcloud_sampling: 0.1
+  pointcloud_noise: 0.000
+  grid_resolution: 24
+  input_vol: 0.7 # in meter
+  query_vol: 0.5 # in meter
+cameras_list: ['front_upper', 'front_lower', 'rear_upper', 'rear_lower', 'left', 'right']
+cameras_keep_per:
+  front_upper: 1.0
+  front_lower: 0.2
+  rear_upper: 1.0
+  rear_lower: 0.2
+  left: 1.0
+  right: 1.0
+test:
+  threshold: 0.05
+  model_file: pretrained_models/backbone/shapenet_grid24_pe.pt
+  merging_model_file: pretrained_models/fusion/Window8_Reso24_AllScenes.pt
+  out_dir: output
+  out_name: anymal
+  max_frames: 100
+  frames_interval: 12
+  scene:
+    noise:
+      shift:
+        shift_std: 0
+        on_gravity: False
+      yaw_std: 0
+  export_pointcloud: True
+  export_each_frame: True
+  merge_cameras: True
+generation:
+  generation_dir: generation
+  resolution_0: 50 # resolution for each crop
+  voxel_threshold: 0.003
+  boundary_interpolation: True
+  max_byte_size: 2048000000

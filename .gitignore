@@ -30,4 +30,5 @@ build
 /src/utils/libmesh/triangle_hash.cpp
 /src/utils/libmise/mise.cpp
 /src/utils/libvoxelize/voxelize.c
+/output/*
 
