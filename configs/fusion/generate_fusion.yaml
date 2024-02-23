@@ -57,3 +57,4 @@ generation:
   sliding_window: True
   resolution_0: 64
   upsampling_steps: 0
+  max_byte_size: 20480000

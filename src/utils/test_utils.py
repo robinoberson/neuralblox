@@ -2,8 +2,9 @@ from pathlib import Path
 from os.path import join
 import numpy as np
 import torch
+from src.neuralblox.generation_fusion import Generator3D
 
-def process_and_generate_latent(pcl_unaligned, align_matrix, generator, device, export_pc, out_dir, file_name):
+def process_and_generate_latent(pcl_unaligned, align_matrix, generator : Generator3D, device, export_pc, out_dir, file_name):
 
     N = pcl_unaligned.shape[0]
     one = np.ones((N, 1))

@@ -124,8 +124,7 @@ for i in trange(1, max_frames * interval, interval):
         latent = process_and_generate_latent(pcl_unaligned_merged, align_matrix, generator, device, export_pc, out_dir, f'pcl-merged-{i:06d}')
         
         if export_each_frame==True:
-            if i >= 865:
-                generate_and_save_mesh(generator, latent.clone(), out_dir, f'merged-{i:06d}')
+            generate_and_save_mesh(generator, latent.clone(), out_dir, f'merged-{i:06d}')
         
     else:
         for cam in cameras:

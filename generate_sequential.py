@@ -11,6 +11,13 @@ from os.path import join
 from src.common import define_align_matrix, get_shift_noise, get_yaw_noise_matrix
 from pathlib import Path
 
+def print_all_layers(model):
+    for name, module in model.named_modules():
+        print(f"Layer name: {name}")
+        print(module)
+        print("="*50)
+
+
 parser = argparse.ArgumentParser(
     description='Extract meshes from occupancy process.'
 )
@@ -91,8 +98,13 @@ for i in trange(0,num_frame, bound_interval):
 # Generate
 model.eval()
 model_merging.eval()
+
+print_all_layers(model)
+print_all_layers(model_merging)
+
 generator = config.get_generator_fusion(model, model_merging, sample_points, cfg, device=device)
 
+exit()
 if export_pc==True:
     sampled_pcl = np.array([])
 
@@ -165,3 +177,6 @@ if export_pc == True:
     Path(os.path.join(generation_dir, 'ply')).mkdir(parents=True, exist_ok=True)
     out_path = join(generation_dir, 'ply','%s.ply' % mesh_name)
     o3d.io.write_point_cloud(out_path, pcd)
+    
+import torch.nn as nn
+
