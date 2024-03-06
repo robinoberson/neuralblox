@@ -4,7 +4,7 @@ from torch.utils import data
 import numpy as np
 import yaml
 from src.common import decide_total_volume_range, update_reso
-
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -252,8 +252,17 @@ def collate_remove_none(batch):
     Args:
         batch: batch
     '''
+    
+    
 
     batch = list(filter(lambda x: x is not None, batch))
+        
+    # for i, item in enumerate(batch):
+    #     if isinstance(item, dict):
+    #         for key, value in item.items():
+    #             if isinstance(value, torch.Tensor):
+    #                 batch[i][key] = value.float()  # Convert tensor to float
+
     return data.dataloader.default_collate(batch)
 
 

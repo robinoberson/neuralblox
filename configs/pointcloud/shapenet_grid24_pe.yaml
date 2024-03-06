@@ -1,8 +1,9 @@
 method: neuralblox
 data:
   input_type: pointcloud
+  # classes: ['11111111', '02691156']
   classes: null
-  path: /media/robin/Volume/MasterThesis/Datasets/NeuralBlox/data/ShapeNet
+  path: data/ShapeNet
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
@@ -30,7 +31,7 @@ model:
   c_dim: 32
 training:
   out_dir: out_backbone/pointcloud/shapenet_grid24_pe
-  batch_size: 32
+  batch_size: 64
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 1000
@@ -50,3 +51,4 @@ generation:
   refine: false
   n_x: 128
   n_z: 1
+  max_byte_size: 60000000

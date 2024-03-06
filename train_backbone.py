@@ -24,7 +24,7 @@ parser.add_argument('--exit-after', type=int, default=-1,
                          'with exit code 2.')
 
 args = parser.parse_args()
-cfg = config.load_config(args.config, 'neuralblox/configs/default.yaml')
+cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 # Set t0
@@ -106,7 +106,9 @@ trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
 checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
 try:
-    load_dict = checkpoint_io.load('model.pt')
+    load_dict = checkpoint_io.load('aug_model_790000.pt')
+    print(f'Loaded model.pt from {load_dict["epoch_it"]}')
+    # load_dict = checkpoint_io.load('model.pt')
 except FileExistsError:
     load_dict = dict()
 epoch_it = load_dict.get('epoch_it', 0)
@@ -174,7 +176,7 @@ while True:
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
-            checkpoint_io.save('model_%d.pt' % it, epoch_it=epoch_it, it=it,
+            checkpoint_io.save('aug_model_%d.pt' % it, epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
         # Run validation
         if (validate_every > 0 and (it % validate_every) == 0) or (it0 + 1 == it):

@@ -43,7 +43,8 @@ class Generator3D(object):
                  input_type=None,
                  vol_info=None,
                  vol_bound=None,
-                 simplify_nfaces=None):
+                 simplify_nfaces=None,
+                 max_byte_size=100000000):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
         self.refinement_step = refinement_step

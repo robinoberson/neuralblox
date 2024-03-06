@@ -61,7 +61,7 @@ model = config.get_model(cfg, device=device)
 model_merging = layers.Conv3D_one_input().to(device)
 checkpoint_io = CheckpointIO(out_dir, model=model)
 checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging)
-checkpoint_io.load(join(os.getcwd(), cfg['test']['model_file']))
+load_dict = checkpoint_io.load(join(os.getcwd(), cfg['test']['model_file']))
 checkpoint_io_merging.load(join(os.getcwd(),cfg['test']['merging_model_file']))
 
 # Get aligning matrix
@@ -104,7 +104,6 @@ print_all_layers(model_merging)
 
 generator = config.get_generator_fusion(model, model_merging, sample_points, cfg, device=device)
 
-exit()
 if export_pc==True:
     sampled_pcl = np.array([])
 
