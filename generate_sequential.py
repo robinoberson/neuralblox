@@ -69,7 +69,7 @@ align_matrix = define_align_matrix(cfg['data']['align'])
 align_matrix = torch.from_numpy(align_matrix).to(device).float()
 
 # get bound
-bound_interval = 150
+bound_interval = 1500
 print("Getting scene bounds from dataset sampled every {} frames".format(bound_interval))
 sample_points = torch.empty(1, 0, 3, device=device)
 
@@ -99,17 +99,15 @@ for i in trange(0,num_frame, bound_interval):
 model.eval()
 model_merging.eval()
 
-print_all_layers(model)
-print_all_layers(model_merging)
-
 generator = config.get_generator_fusion(model, model_merging, sample_points, cfg, device=device)
 
 if export_pc==True:
     sampled_pcl = np.array([])
 
-num_processed_frame = int((num_frame/interval)+1)
+interval = interval*10
 
-for i in trange(0,num_frame, interval):
+num_processed_frame = int((num_frame/interval)+1)
+for i in trange(0, num_frame, interval):
     # Process data
     depth = join(data_path, "frame-%06d.depth.png" % (i))
     pose = join(data_path, "frame-%06d.pose.txt" % (i))

@@ -106,9 +106,10 @@ trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
 checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
 try:
-    load_dict = checkpoint_io.load('aug_model_790000.pt')
+    # load_dict = checkpoint_io.load('aug_model_790000.pt')
+    load_dict = checkpoint_io.load('model.pt')
+
     print(f'Loaded model.pt from {load_dict["epoch_it"]}')
-    # load_dict = checkpoint_io.load('model.pt')
 except FileExistsError:
     load_dict = dict()
 epoch_it = load_dict.get('epoch_it', 0)

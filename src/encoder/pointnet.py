@@ -27,7 +27,7 @@ class LocalPoolPointnet(nn.Module):
     def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
                  unet3d=False, unet3d_kwargs=None,
                  grid_resolution=None, plane_type='grid', padding=0.1, n_blocks=5,
-                 pos_encoding=True):
+                 pos_encoding=True, unit_size=0.1):
         super().__init__()
         self.c_dim = c_dim
 

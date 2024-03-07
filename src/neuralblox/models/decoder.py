@@ -19,7 +19,7 @@ class LocalDecoder(nn.Module):
     '''
 
     def __init__(self, dim=3, c_dim=128,
-                 hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear', padding=0.1, pos_encoding=True):
+                 hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear', padding=0.1, pos_encoding=True, unit_size=0.02):
         super().__init__()
         self.c_dim = c_dim
         self.n_blocks = n_blocks

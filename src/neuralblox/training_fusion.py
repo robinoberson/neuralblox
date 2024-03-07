@@ -17,9 +17,9 @@ def get_crop_bound(inputs, input_crop_size, query_crop_size):
 
     lb = inputs.min(axis=1).values[0].cpu().numpy() - 0.01
     ub = inputs.max(axis=1).values[0].cpu().numpy() + 0.01
-    lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size, \
-               lb[1]:ub[1]:query_crop_size, \
-               lb[2]:ub[2]:query_crop_size].reshape(3, -1).T
+    lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,
+                        lb[1]:ub[1]:query_crop_size,
+                        lb[2]:ub[2]:query_crop_size].reshape(3, -1).T
     ub_query = lb_query + query_crop_size
     center = (lb_query + ub_query) / 2
     lb_input = center - input_crop_size / 2

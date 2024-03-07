@@ -119,10 +119,19 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
     threshold = cfg['test']['threshold']
     out_dir = cfg['training']['out_dir']
     vis_dir = os.path.join(out_dir, 'vis')
+    grid_reso = cfg['data']['grid_resolution']
+    input_vol_size = cfg['data']['input_vol']
+    query_vol_size = cfg['data']['query_vol']
     input_type = cfg['data']['input_type']
+    vol_bound = {'query_crop_size': query_vol_size,
+                     'input_crop_size': input_vol_size,
+                     'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
+                     'reso': grid_reso
+                    }
 
     trainer = training.Trainer(
         model, optimizer,
+        vol_bound=vol_bound,
         device=device, input_type=input_type,
         vis_dir=vis_dir, threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],

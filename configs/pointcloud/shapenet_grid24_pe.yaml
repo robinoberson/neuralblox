@@ -2,7 +2,8 @@ method: neuralblox
 data:
   input_type: pointcloud
   # classes: ['11111111', '02691156']
-  classes: null
+  classes: ['03211117']
+  # classes: null
   path: data/ShapeNet
   pointcloud_n: 3000
   pointcloud_noise: 0.005
@@ -11,6 +12,11 @@ data:
   points_iou_file: points.npz
   # points_unpackbits: false
   voxels_file: null
+  unit_size: 0.02 # size of a voxel
+  query_vol_size: 25
+  grid_resolution: 24
+  input_vol: 1.2
+  query_vol: 1.0
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
