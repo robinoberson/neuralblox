@@ -1,3 +1,6 @@
+from comet_ml import Experiment
+from comet_ml.integration.pytorch import log_model
+
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
@@ -10,6 +13,13 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 import shutil
 from src import layers
+import open3d as o3d
+
+experiment = Experiment(
+  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+  project_name="training-fusion",
+  workspace="robinoberson"
+)
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -53,11 +63,13 @@ shutil.copyfile(args.config, os.path.join(out_dir, 'config.yaml'))
 # Dataset
 train_dataset = config.get_dataset('train', cfg)
 
-train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=cfg['training']['batch_size'], num_workers=cfg['training']['n_workers'], shuffle=False,
-    collate_fn=data.collate_remove_none,
-    worker_init_fn=data.worker_init_fn)
+batch_sampler = data.CategoryBatchSampler(train_dataset, batch_size=batch_size, drop_last=True)
 
+train_loader = torch.utils.data.DataLoader(
+    train_dataset, num_workers=cfg['training']['n_workers'],
+    collate_fn=data.collate_remove_none,
+    batch_sampler=batch_sampler,
+    worker_init_fn=data.worker_init_fn)
 # Model
 model, input_crop_size, query_crop_size, grid_reso = config.get_model(cfg, device=device, dataset=train_dataset)
 
@@ -76,6 +88,7 @@ else:
 
 checkpoint_io = CheckpointIO(out_dir, model=model)
 checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging, optimizer = optimizer)
+
 try:
     checkpoint_io.load(os.path.join(os.getcwd(), cfg['training']['backbone_file']))
     load_dict = checkpoint_io_merging.load('model_merging.pt')
@@ -84,6 +97,8 @@ except FileExistsError:
 
 epoch_it = load_dict.get('epoch_it', 0)
 it = load_dict.get('it', -1)
+
+print('Loading model from epoch %d, iteration %d' % (epoch_it, it))
 
 metric_val_best = load_dict.get(
     'loss_val_best', -model_selection_sign * np.inf)
@@ -106,13 +121,30 @@ print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
 
+# pcd = o3d.geometry.PointCloud()
+# base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
 while True:
     epoch_it += 1
-
+    print(epoch_it)
     for batch in train_loader:
+        p_in = batch.get('inputs').to(device)
+        batch_size, T, D = p_in.size() 
+        if batch_size < cfg['training']['batch_size']:
+            print('Batch size too small, skipping batch')
+            continue
+            
+        # full_points = batch['inputs'].view(-1, 3)
+        # pcd.points = o3d.utility.Vector3dVector(full_points)
+        # o3d.visualization.draw_geometries([pcd, base_axis])
+        
         it += 1
         loss = trainer.train_sequence_window(batch, input_crop_size, query_crop_size, grid_reso, window=cfg['training']['batch_size'])
         logger.add_scalar('train/loss', loss, it)
+        experiment.log_metric('train_loss', loss, step=it)
+        
+        for param_group in optimizer.param_groups:
+            learning_rate = param_group['lr']
+            experiment.log_metric('learning_rate', learning_rate, step=it)
 
         # Print output
         if print_every > 0 and (it % print_every) == 0:

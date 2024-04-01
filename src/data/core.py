@@ -5,6 +5,7 @@ import numpy as np
 import yaml
 from src.common import decide_total_volume_range, update_reso
 import torch
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,26 @@ class Field(object):
         '''
         raise NotImplementedError
 
-
+class CategoryBatchSampler(data.BatchSampler):
+    def __init__(self, dataset, batch_size, drop_last=True):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        super(CategoryBatchSampler, self).__init__(dataset, batch_size, drop_last)
+    
+    def __iter__(self):
+        categories = list(self.dataset.metadata.keys())
+        random.shuffle(categories)
+        for category in categories:
+            batch = []
+            category_indices = [idx for idx, model in enumerate(self.dataset.models) if model['category'] == category]
+            random.shuffle(category_indices)
+            batch.extend(category_indices)
+            while len(batch) >= self.batch_size:
+                yield batch[:self.batch_size]
+                batch = batch[self.batch_size:]
+        
+                
 class Shapes3dDataset(data.Dataset):
     ''' 3D Shapes dataset class.
     '''

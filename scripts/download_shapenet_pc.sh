@@ -1,6 +1,6 @@
 #!/bin/bash
-mkdir data
-cd data
+mkdir -p /scratch/roberson/ShapeNet_download
+cd /scratch/roberson/ShapeNet_download
 wget https://s3.eu-central-1.amazonaws.com/avg-projects/occupancy_networks/data/dataset_small_v1.1.zip
 unzip dataset_small_v1.1.zip -x "**/img_choy2016/**"
 

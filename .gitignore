@@ -32,3 +32,4 @@ build
 /src/utils/libvoxelize/voxelize.c
 /output/*
 
+output.log

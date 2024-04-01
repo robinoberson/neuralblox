@@ -139,7 +139,6 @@ def get_dataset(mode, cfg, return_idx=False):
     method = cfg['method']
     dataset_type = cfg['data']['dataset']
     dataset_folder = cfg['data']['path']
-    categories = cfg['data']['classes']
 
     # Get split
     splits = {
@@ -149,6 +148,9 @@ def get_dataset(mode, cfg, return_idx=False):
     }
 
     split = splits[mode]
+    
+    categories = cfg['data']['classes']
+
 
     # Create dataset
     if dataset_type == 'Shapes3D':
