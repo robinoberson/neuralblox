@@ -76,6 +76,15 @@ def combine_lists(list_sampled, list_gt):
 
     return return_list
 
+def get_query_points(random_points, crop_with_change):
+    pi_in = {'p': random_points[crop_with_change]}
+    p_n = {}
+    p_n['grid'] = random_points[crop_with_change]
+    pi_in['p_n'] = p_n
+    query_points = pi_in
+    
+    return query_points
+
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
 
@@ -120,6 +129,8 @@ class Trainer(BaseTrainer):
         Args:
             data (dict): data dictionary
         '''
+        torch.cuda.empty_cache()
+        
         self.model.train()
         self.model_merge.train()
         self.optimizer.zero_grad()
@@ -146,9 +157,9 @@ class Trainer(BaseTrainer):
         # with open('points.pkl', 'wb') as f:
         #     pickle.dump([points_gt.view(-1, 3).cpu().numpy(), sample_points.view(-1, 3).cpu().numpy()], f)
 
-        sample_points = torch.cat([sample_points, points_gt], dim=1)
+        combined_points = torch.cat([sample_points, points_gt], dim=1)
 
-        vol_bound_all = get_crop_bound(sample_points, input_crop_size, query_crop_size)
+        vol_bound_all = get_crop_bound(combined_points, input_crop_size, query_crop_size)
         
         # dump vol_bound_all
         # with open('vol_bound_all.pkl', 'wb') as f:
@@ -166,8 +177,7 @@ class Trainer(BaseTrainer):
 
         counter = 0
 
-        crop_with_change_count_gt = [0] * n_crop
-        crop_with_change_count_gt = get_crop_with_change(points_gt, n_crop, vol_bound_all, crop_with_change_count_gt)
+        crop_with_change_count_gt = get_crop_with_change(points_gt, n_crop, vol_bound_all)
         
         for n in range(batch_size):
             p_input_n = p_in[n].unsqueeze(0)
@@ -179,45 +189,49 @@ class Trainer(BaseTrainer):
 
             if (n+1)%window==0:
                 # Get vol bounds of updated grids
-                crop_with_change_count = combine_lists(crop_with_change_count_sampled, crop_with_change_count_gt)
                 
-                crop_with_change = list(map(bool, crop_with_change_count))
                 
+                crop_with_change_gt = list(map(bool, crop_with_change_count_gt))
+                crop_with_change_sampled = list(map(bool, crop_with_change_count_sampled))
 
-                vol_bound_valid = []
+                vol_bound_valid_gt = []
 
-                for i in range(len(crop_with_change)):
-                    if crop_with_change[i]==True:
+                for i in range(len(crop_with_change_gt)):
+                    if crop_with_change_count_gt[i]==True:
                         # Get bound of the current crop
                         vol_bound = {}
                         vol_bound['input_vol'] = vol_bound_all['input_vol'][i]
 
-                        vol_bound_valid.append(vol_bound)
+                        vol_bound_valid_gt.append(vol_bound)
                         
                 # with open('vol_bound_valid.pkl', 'wb') as f:
                 #     pickle.dump(vol_bound_valid, f)
-                        
-                 # Get ground truth
-                points_accumulated = p_in[(n+1-window):(n + 1), :, :]
-                points_accumulated = points_accumulated.view(-1, 3).unsqueeze(0)
+                random_points = torch.rand(n_crop, query_sample_size, 3).to(self.device)
                 
-                # latent_update_gt, unet_gt, p_input_masked_list = self.update_latent_map_gt(points_accumulated, vol_bound_valid)
-                latent_update_gt, unet_gt, _ = self.update_latent_map_gt(points_gt, vol_bound_valid)
+                query_points_sampled = get_query_points(random_points, crop_with_change_sampled)
+                query_points_gt = get_query_points(random_points, crop_with_change_gt)                
 
                 # Merge
-                latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count)
+                latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count_sampled)
 
                 # Get prediction logits
-                logits_pred, query_points = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change,
-                                                                       query_sample_size)
+                logits_pred, query_points = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change_sampled,
+                                                                       query_sample_size, query_points_sampled)
 
+                # latent_update_gt, unet_gt, p_input_masked_list = self.update_latent_map_gt(points_accumulated, vol_bound_valid_gt)
+                latent_update_gt, unet_gt, _ = self.update_latent_map_gt(points_gt, vol_bound_valid_gt)
+                
                 # Get ground truth logits
-                logits_gt, _ = self.get_logits_and_latent(latent_update_gt, unet_gt, crop_with_change,
-                                                          query_sample_size, query_points)
+                logits_gt, _ = self.get_logits_and_latent(latent_update_gt, unet_gt, crop_with_change_gt,
+                                                          query_sample_size, query_points_gt)
+                
                 
                 # with open('latent_update_gt.pkl', 'wb') as f:
                 #     pickle.dump(latent_update_gt, f)
-                    
+                
+                # Get ground truth
+                # points_accumulated = p_in[(n+1-window):(n + 1), :, :]
+                # points_accumulated = points_accumulated.view(-1, 3).unsqueeze(0)
                 # with open('points_accumulated.pkl', 'wb') as f:
                 #     pickle.dump(points_accumulated, f)
                 
@@ -229,15 +243,28 @@ class Trainer(BaseTrainer):
                     
                 # with open('vol_bound_all.pkl', 'wb') as f:
                 #     pickle.dump(vol_bound_all, f)
+                
+                crop_with_change_count_inter = combine_lists(crop_with_change_count_sampled, crop_with_change_count_gt)
+                crop_with_change_inter = list(map(bool, crop_with_change_count_inter))
+                
+                latent_update_pred_full = torch.zeros(n_crop, 128, 6, 6, 6).to(device)
+                latent_update_pred_full[crop_with_change_sampled] = latent_update_pred
+                latent_update_gt_full = torch.zeros(n_crop, 128, 6, 6, 6).to(device)
+                latent_update_gt_full[crop_with_change_gt] = latent_update_gt
+                
+                logits_pred_full = torch.zeros(n_crop, query_sample_size).to(device)
+                logits_pred_full[crop_with_change_sampled] = logits_pred
+                logits_gt_full = torch.zeros(n_crop, query_sample_size).to(device)
+                logits_gt_full[crop_with_change_gt] = logits_gt
     
                 # Calculate loss
                 prediction = {}
                 gt = {}
-                prediction['logits'] = logits_pred
-                gt['logits'] = logits_gt
+                prediction['logits'] = logits_pred_full[crop_with_change_inter]
+                gt['logits'] = logits_gt_full[crop_with_change_inter]
 
-                prediction['latent'] = latent_update_pred
-                gt['latent'] = latent_update_gt
+                prediction['latent'] = latent_update_pred_full[crop_with_change_inter]
+                gt['latent'] = latent_update_gt_full[crop_with_change_inter]          
 
                 loss = self.compute_sequential_loss(prediction, gt, latent_loss=True)
                 loss_all += loss.item()

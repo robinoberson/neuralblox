@@ -12,7 +12,7 @@ data:
   input_vol: 1.6
   query_vol: 1.0
 training:
-  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new
+  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new_2
   # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
   batch_size: 8
   backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
