@@ -123,7 +123,7 @@ class Trainer(BaseTrainer):
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, window = 8):
+    def train_sequence_window(self, data, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, iter, window = 8):
         ''' Performs a training step.
 
         Args:
@@ -272,11 +272,28 @@ class Trainer(BaseTrainer):
                 loss.backward()
                 self.optimizer.step()
 
+                save_dict = {}
+                save_dict['prediction'] = prediction
+                save_dict['gt'] = gt
+                save_dict['crop_with_change_count'] = crop_with_change_count_sampled
+                save_dict['latent_map_pred'] = latent_map_pred
+                save_dict['iter'] = iter
+                save_dict['loss'] = loss
+                
+                path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_inputs_gt/' + str(iter) + '.pkl'
+                if not os.path.exists(os.path.dirname(path)):
+                    os.makedirs(os.path.dirname(path))
+                
+                if iter%10 == 0:
+                    with open(path, 'wb') as f:
+                        pickle.dump(save_dict, f)
+                
                 # Re-initialize
                 latent_map_pred = torch.zeros(n_crop_axis[0], n_crop_axis[1], n_crop_axis[2],
                                               self.hdim*self.factor, d, d, d).to(device)
-
+                
                 crop_with_change_count_sampled = None
+
 
         return loss_all / counter
 

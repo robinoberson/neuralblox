@@ -155,7 +155,7 @@ while True:
         # pcd_gt.points = o3d.utility.Vector3dVector(points_gt)        
         # o3d.visualization.draw_geometries([pcd, pcd_gt, base_axis])
 
-        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, window=cfg['training']['batch_size'])
+        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, it, window=cfg['training']['batch_size'])
         logger.add_scalar('train/loss', loss, it)
         experiment.log_metric('train_loss', loss, step=it)
         
