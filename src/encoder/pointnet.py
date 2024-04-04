@@ -100,19 +100,19 @@ class LocalPoolPointnet(nn.Module):
         coord = {}
         index = {}
         
-        p_vis = p.clone().view(-1, 3)
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(p_vis.cpu().numpy())
-        o3d.visualization.draw_geometries([pcd])
+        # p_vis = p.clone().view(-1, 3)
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(p_vis.cpu().numpy())
+        # o3d.visualization.draw_geometries([pcd])
 
         if 'grid' in self.plane_type:
             coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
             index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
             
-            p_nor_vis = coord['grid'].view(-1, 3)
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(p_nor_vis.cpu().numpy())
-            o3d.visualization.draw_geometries([pcd])
+            # p_nor_vis = coord['grid'].view(-1, 3)
+            # pcd = o3d.geometry.PointCloud()
+            # pcd.points = o3d.utility.Vector3dVector(p_nor_vis.cpu().numpy())
+            # o3d.visualization.draw_geometries([pcd])
             
         if self.pos_encoding:
             pp = self.pe(p)

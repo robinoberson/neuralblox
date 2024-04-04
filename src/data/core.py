@@ -38,7 +38,7 @@ class CategoryBatchSampler(data.BatchSampler):
         self.dataset = dataset
         self.batch_size = batch_size
         self.drop_last = drop_last
-        super(CategoryBatchSampler, self).__init__(dataset, batch_size, drop_last)
+        super().__init__(dataset, batch_size, drop_last)
     
     def __iter__(self):
         categories = list(self.dataset.metadata.keys())
@@ -48,7 +48,7 @@ class CategoryBatchSampler(data.BatchSampler):
             category_indices = [idx for idx, model in enumerate(self.dataset.models) if model['category'] == category]
             random.shuffle(category_indices)
             batch.extend(category_indices)
-            while len(batch) >= self.batch_size:
+            while len(batch) >= self.batch_size:                
                 yield batch[:self.batch_size]
                 batch = batch[self.batch_size:]
         
@@ -193,6 +193,8 @@ class Shapes3dDataset(data.Dataset):
 
         if self.transform is not None:
             data = self.transform(data)
+        
+        data['category'] = category
 
         return data
     

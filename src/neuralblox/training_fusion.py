@@ -5,6 +5,7 @@ from src.common import (
 )
 from src.training import BaseTrainer
 import numpy as np
+import pickle
 
 def get_crop_bound(inputs, input_crop_size, query_crop_size):
     ''' Divide a scene into crops, get boundary for each crop
@@ -33,6 +34,47 @@ def get_crop_bound(inputs, input_crop_size, query_crop_size):
     vol_bound['query_vol'] = np.stack([lb_query, ub_query], axis=1)
 
     return vol_bound
+
+def get_crop_with_change(p_input, n_crop, vol_bound_all, crop_with_change_count=None):
+    
+    if crop_with_change_count is None:
+            crop_with_change_count = [0] * n_crop
+    
+    for i in range(n_crop):
+
+        # Get bound of the current crop
+        vol_bound = {}
+        vol_bound['input_vol'] = vol_bound_all['input_vol'][i]
+
+        # Obtain mask
+        mask_x = (p_input[:, :, 0] >= vol_bound['input_vol'][0][0]) & \
+                    (p_input[:, :, 0] < vol_bound['input_vol'][1][0])
+        mask_y = (p_input[:, :, 1] >= vol_bound['input_vol'][0][1]) & \
+                    (p_input[:, :, 1] < vol_bound['input_vol'][1][1])
+        mask_z = (p_input[:, :, 2] >= vol_bound['input_vol'][0][2]) & \
+                    (p_input[:, :, 2] < vol_bound['input_vol'][1][2])
+        mask = mask_x & mask_y & mask_z
+
+        p_input_mask = p_input[mask]
+
+        # If first scan is empty in the crop, then continue
+        if p_input_mask.shape[0] == 0:  # no points in the current crop
+            continue
+        else:
+            crop_with_change_count[i] += 1
+    
+    return crop_with_change_count
+
+def combine_lists(list_sampled, list_gt):
+    return_list = []
+
+    for elem1, elem2 in zip(list_sampled, list_gt):
+        if elem1 == 0 or elem2 == 0:
+            return_list.append(0)
+        else:
+            return_list.append(elem1)
+
+    return return_list
 
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -72,7 +114,7 @@ class Trainer(BaseTrainer):
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data, input_crop_size, query_crop_size, grid_reso, window = 8):
+    def train_sequence_window(self, data, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, window = 8):
         ''' Performs a training step.
 
         Args:
@@ -96,8 +138,22 @@ class Trainer(BaseTrainer):
 
         # Shuffle p_in
         p_in =p_in[torch.randperm(p_in.size()[0])]
+        
+        #concat sample points and points_gt
+        points_gt = points_gt.unsqueeze(0)
+        
+        # save the point s
+        # with open('points.pkl', 'wb') as f:
+        #     pickle.dump([points_gt.view(-1, 3).cpu().numpy(), sample_points.view(-1, 3).cpu().numpy()], f)
+
+        sample_points = torch.cat([sample_points, points_gt], dim=1)
 
         vol_bound_all = get_crop_bound(sample_points, input_crop_size, query_crop_size)
+        
+        # dump vol_bound_all
+        # with open('vol_bound_all.pkl', 'wb') as f:
+        #     pickle.dump(vol_bound_all, f)
+            
         n_crop = vol_bound_all['n_crop']
         n_crop_axis = vol_bound_all['axis_n_crop']
 
@@ -106,21 +162,28 @@ class Trainer(BaseTrainer):
                                       self.hdim*self.factor, d, d, d).to(device)
 
         loss_all = 0
-        crop_with_change_count = None
+        crop_with_change_count_sampled = None
 
         counter = 0
 
+        crop_with_change_count_gt = [0] * n_crop
+        crop_with_change_count_gt = get_crop_with_change(points_gt, n_crop, vol_bound_all, crop_with_change_count_gt)
+        
         for n in range(batch_size):
             p_input_n = p_in[n].unsqueeze(0)
 
             # Get prediction
-            latent_map_pred, unet, crop_with_change_count = self.update_latent_map_window(p_input_n, latent_map_pred,
+            latent_map_pred, unet, crop_with_change_count_sampled = self.update_latent_map_window(p_input_n, latent_map_pred,
                                                                                        n_crop,
-                                                                                       vol_bound_all, crop_with_change_count)
+                                                                                       vol_bound_all, crop_with_change_count_sampled)
 
             if (n+1)%window==0:
                 # Get vol bounds of updated grids
+                crop_with_change_count = combine_lists(crop_with_change_count_sampled, crop_with_change_count_gt)
+                
                 crop_with_change = list(map(bool, crop_with_change_count))
+                
+
                 vol_bound_valid = []
 
                 for i in range(len(crop_with_change)):
@@ -130,6 +193,16 @@ class Trainer(BaseTrainer):
                         vol_bound['input_vol'] = vol_bound_all['input_vol'][i]
 
                         vol_bound_valid.append(vol_bound)
+                        
+                # with open('vol_bound_valid.pkl', 'wb') as f:
+                #     pickle.dump(vol_bound_valid, f)
+                        
+                 # Get ground truth
+                points_accumulated = p_in[(n+1-window):(n + 1), :, :]
+                points_accumulated = points_accumulated.view(-1, 3).unsqueeze(0)
+                
+                # latent_update_gt, unet_gt, p_input_masked_list = self.update_latent_map_gt(points_accumulated, vol_bound_valid)
+                latent_update_gt, unet_gt, _ = self.update_latent_map_gt(points_gt, vol_bound_valid)
 
                 # Merge
                 latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count)
@@ -138,16 +211,25 @@ class Trainer(BaseTrainer):
                 logits_pred, query_points = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change,
                                                                        query_sample_size)
 
-                # Get ground truth
-                points_accumulated = p_in[(n+1-window):(n + 1), :, :]
-                points_accumulated = points_accumulated.view(-1, 3).unsqueeze(0)
-                latent_update_gt, unet_gt = self.update_latent_map_gt(points_accumulated, vol_bound_valid)
-
                 # Get ground truth logits
-                crop_with_change = list(map(bool, crop_with_change_count))
                 logits_gt, _ = self.get_logits_and_latent(latent_update_gt, unet_gt, crop_with_change,
                                                           query_sample_size, query_points)
-
+                
+                # with open('latent_update_gt.pkl', 'wb') as f:
+                #     pickle.dump(latent_update_gt, f)
+                    
+                # with open('points_accumulated.pkl', 'wb') as f:
+                #     pickle.dump(points_accumulated, f)
+                
+                # with open('gt_points.pkl', 'wb') as f:
+                #     pickle.dump(points_gt, f)
+                    
+                # with open('crop_with_change_count.pkl', 'wb') as f:
+                #     pickle.dump(crop_with_change_count, f)
+                    
+                # with open('vol_bound_all.pkl', 'wb') as f:
+                #     pickle.dump(vol_bound_all, f)
+    
                 # Calculate loss
                 prediction = {}
                 gt = {}
@@ -167,7 +249,7 @@ class Trainer(BaseTrainer):
                 latent_map_pred = torch.zeros(n_crop_axis[0], n_crop_axis[1], n_crop_axis[2],
                                               self.hdim*self.factor, d, d, d).to(device)
 
-                crop_with_change_count = None
+                crop_with_change_count_sampled = None
 
         return loss_all / counter
 
@@ -243,11 +325,15 @@ class Trainer(BaseTrainer):
 
         crop_with_change = list(map(bool, crop_with_change_count))
 
-        divisor = torch.FloatTensor(crop_with_change_count)[crop_with_change]
+        divisor = torch.FloatTensor(crop_with_change_count)[crop_with_change] #keep only the crops with change
         divisor = divisor.unsqueeze(1).unsqueeze(2).unsqueeze(3).unsqueeze(4).to(self.device)
 
-        latent_update = latent_map_pred[crop_with_change]
+        latent_update = latent_map_pred[crop_with_change] #keep only the crops with change
         latent_update = torch.div(latent_update, divisor)
+        
+        #dump latent_update
+        # with open('latent_update.pkl', 'wb') as f:
+        #     pickle.dump(latent_update, f)
 
         fea_dict = {}
         fea_dict['latent'] = latent_update
@@ -257,6 +343,8 @@ class Trainer(BaseTrainer):
 
 
     def update_latent_map_gt(self, p_input, vol_bound_valid):
+        
+        p_input_masked_list = []
 
         fea = torch.zeros(len(vol_bound_valid), self.hdim, self.reso, self.reso, self.reso).to(self.device)
 
@@ -271,11 +359,12 @@ class Trainer(BaseTrainer):
 
             fea[i], unet = self.encode_crop_sequential(p_input[mask], self.device,
                                                                         vol_bound=vol_bound_valid[i])
+            p_input_masked_list.append(p_input[mask])
 
         fea, latent_update = unet(fea)
 
 
-        return latent_update, unet
+        return latent_update, unet, p_input_masked_list
 
     def get_logits_and_latent(self, latent_update, unet, crop_with_change, query_sample_size, query_points=None):
 

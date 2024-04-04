@@ -13,15 +13,15 @@ data:
   pointcloud_sampling: 0.1
   pointcloud_noise: 0.000
   grid_resolution: 24
-  input_vol: 1.2 # in meter
+  input_vol: 1.6 # in meter
   query_vol: 1.0 # in meter
 test:
-  threshold: 0.02
+  threshold: 0.5
   # model_file: /home/roberson/MasterThesis/master_thesis/neuralblox/pretrained_models/backbone/shapenet_grid24_pe.pt
-  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/shapenet_grid24_pe/aug_model_310000.pt
-  merging_model_file_robot: /scratch2/roberson/neuralblox/out_fusion/redwood/robot/model_merging.pt
-  merging_model_file_mesh: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh/model_merging.pt
-  merging_model_file: /scratch2/roberson/neuralblox/out_fusion/redwood/robot/model_merging.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_1_6/aug_model_250000.pt
+  # merging_model_file_robot: /scratch2/roberson/neuralblox/out_fusion/redwood/robot/model_merging.pt
+  merging_model_file_mesh: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new/model_merging_16000.pt
+  merging_model_file: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new/model_merging_16000.pt
 
   out_dir: /scratch2/roberson/neuralblox/output
   out_name: anymal-22-03-2024
@@ -40,6 +40,6 @@ test:
 generation:
   generation_dir: generation
   resolution_0: 100 # resolution for each crop
-  voxel_threshold: 0.01
+  voxel_threshold: 0.001
   boundary_interpolation: True
   max_byte_size: 8096000000

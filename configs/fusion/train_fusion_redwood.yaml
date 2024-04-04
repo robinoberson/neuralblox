@@ -3,14 +3,17 @@ data:
   input_type: pointcloud_sequential
   classes: null
   # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
-  path: /media/roberson/T7/data/fusion_mesh_sampled
+  path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned
+  path_gt: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_gt
+  gt_file_name: 'pointcloud.npz'
   pointcloud_noise: 0.000
   points_subsample: 8192
   grid_resolution: 24
-  input_vol: 1.2
+  input_vol: 1.6
   query_vol: 1.0
 training:
-  # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot
-  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
+  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new
+  # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
   batch_size: 8
-  backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/shapenet_grid24_pe/model_best.pt
+  backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
+  gt_query: false

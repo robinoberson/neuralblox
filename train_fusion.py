@@ -45,6 +45,8 @@ backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 exit_after = args.exit_after
 
+gt_query = cfg['training']['gt_query']
+
 model_selection_metric = cfg['training']['model_selection_metric']
 if cfg['training']['model_selection_mode'] == 'maximize':
     model_selection_sign = 1
@@ -127,7 +129,9 @@ while True:
     epoch_it += 1
     print(epoch_it)
     for batch in train_loader:
-        p_in = batch.get('inputs').to(device)
+        it += 1
+
+        p_in = batch.get('inputs').to(device)        
         batch_size, T, D = p_in.size() 
         if batch_size < cfg['training']['batch_size']:
             print('Batch size too small, skipping batch')
@@ -135,10 +139,23 @@ while True:
             
         # full_points = batch['inputs'].view(-1, 3)
         # pcd.points = o3d.utility.Vector3dVector(full_points)
-        # o3d.visualization.draw_geometries([pcd, base_axis])
         
-        it += 1
-        loss = trainer.train_sequence_window(batch, input_crop_size, query_crop_size, grid_reso, window=cfg['training']['batch_size'])
+        categories = batch.get('category')
+        unique_cat = np.unique(categories)
+        if len(unique_cat) > 1:
+            print('Multiple categories found in batch, skipping batch')
+            continue
+        category = unique_cat[0]
+        path_gt_points = os.path.join(cfg['data']['path_gt'], category, '000000', cfg['data']['gt_file_name'])
+        points_gt = np.load(path_gt_points)['points']
+        points_gt = torch.from_numpy(points_gt).to(device).float()
+
+        
+        # pcd_gt = o3d.geometry.PointCloud()
+        # pcd_gt.points = o3d.utility.Vector3dVector(points_gt)        
+        # o3d.visualization.draw_geometries([pcd, pcd_gt, base_axis])
+
+        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, window=cfg['training']['batch_size'])
         logger.add_scalar('train/loss', loss, it)
         experiment.log_metric('train_loss', loss, step=it)
         

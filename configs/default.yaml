@@ -48,6 +48,7 @@ training:
   model_selection_mode: minimize
   n_workers: 4
   n_workers_val: 4
+  gt_query: false
 test:
   threshold: 0.5
   eval_mesh: true
