@@ -138,7 +138,7 @@ while True:
         # o3d.visualization.draw_geometries([pcd, base_axis])
         
         it += 1
-        loss = trainer.train_sequence_window(batch, input_crop_size, query_crop_size, grid_reso, window=cfg['training']['batch_size'])
+        loss = trainer.train_sequence_window(batch, input_crop_size, query_crop_size, grid_reso, it, window=cfg['training']['batch_size'])
         logger.add_scalar('train/loss', loss, it)
         experiment.log_metric('train_loss', loss, step=it)
         

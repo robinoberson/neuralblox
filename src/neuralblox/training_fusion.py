@@ -5,6 +5,7 @@ from src.common import (
 )
 from src.training import BaseTrainer
 import numpy as np
+import pickle
 
 def get_crop_bound(inputs, input_crop_size, query_crop_size):
     ''' Divide a scene into crops, get boundary for each crop
@@ -72,7 +73,7 @@ class Trainer(BaseTrainer):
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data, input_crop_size, query_crop_size, grid_reso, window = 8):
+    def train_sequence_window(self, data, input_crop_size, query_crop_size, grid_reso, iter, window = 8):
         ''' Performs a training step.
 
         Args:
@@ -156,6 +157,7 @@ class Trainer(BaseTrainer):
 
                 prediction['latent'] = latent_update_pred
                 gt['latent'] = latent_update_gt
+            
 
                 loss = self.compute_sequential_loss(prediction, gt, latent_loss=True)
                 loss_all += loss.item()
@@ -168,6 +170,22 @@ class Trainer(BaseTrainer):
                                               self.hdim*self.factor, d, d, d).to(device)
 
                 crop_with_change_count = None
+                
+                save_dict = {}
+                save_dict['prediction'] = prediction
+                save_dict['gt'] = gt
+                save_dict['crop_with_change_count'] = crop_with_change_count
+                save_dict['latent_map_pred'] = latent_map_pred
+                save_dict['iter'] = iter
+                save_dict['loss'] = loss
+                
+                path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_inputs_og/' + str(iter) + '.pkl'
+                if not os.path.exists(os.path.dirname(path)):
+                    os.makedirs(os.path.dirname(path))
+                
+                if iter%10 == 0:
+                    with open(path, 'wb') as f:
+                        pickle.dump(save_dict, f)
 
         return loss_all / counter
 
