@@ -164,12 +164,6 @@ class Trainer(BaseTrainer):
                 counter += 1
                 loss.backward()
                 self.optimizer.step()
-
-                # Re-initialize
-                latent_map_pred = torch.zeros(n_crop_axis[0], n_crop_axis[1], n_crop_axis[2],
-                                              self.hdim*self.factor, d, d, d).to(device)
-
-                crop_with_change_count = None
                 
                 save_dict = {}
                 save_dict['prediction'] = prediction
@@ -186,6 +180,12 @@ class Trainer(BaseTrainer):
                 if iter%10 == 0:
                     with open(path, 'wb') as f:
                         pickle.dump(save_dict, f)
+                        
+                                # Re-initialize
+                latent_map_pred = torch.zeros(n_crop_axis[0], n_crop_axis[1], n_crop_axis[2],
+                                              self.hdim*self.factor, d, d, d).to(device)
+
+                crop_with_change_count = None
 
         return loss_all / counter
 
