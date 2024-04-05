@@ -10,10 +10,11 @@ data:
   points_subsample: 8192
   grid_resolution: 24
   input_vol: 1.6
-  query_vol: 1.0
+  query_vol: 1.6
 training:
-  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new_2
+  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_16_16
   # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
   batch_size: 8
-  backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
+  backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_1_6/model_best.pt
+  # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
   gt_query: false

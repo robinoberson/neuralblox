@@ -123,7 +123,7 @@ class Trainer(BaseTrainer):
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, iter, window = 8):
+    def train_sequence_window(self, data, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, iter, init_it, window = 8):
         ''' Performs a training step.
 
         Args:
@@ -206,23 +206,33 @@ class Trainer(BaseTrainer):
                         
                 # with open('vol_bound_valid.pkl', 'wb') as f:
                 #     pickle.dump(vol_bound_valid, f)
-                random_points = torch.rand(n_crop, query_sample_size, 3).to(self.device)
+                bb_low = (1 - query_crop_size / input_crop_size) / 2
+                bb_high = (1 + query_crop_size/ input_crop_size) / 2
+                random_points = torch.rand(n_crop, query_sample_size, 3).to(self.device) * (bb_high - bb_low) + bb_low
+                
+                if init_it: print(f'min point over all points {torch.min(random_points)}, max {torch.max(random_points)}')
                 
                 query_points_sampled = get_query_points(random_points, crop_with_change_sampled)
                 query_points_gt = get_query_points(random_points, crop_with_change_gt)                
 
+                del random_points
+                torch.cuda.empty_cache()
+                
                 # Merge
                 latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count_sampled)
 
                 # Get prediction logits
-                logits_pred, query_points = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change_sampled,
+                logits_pred = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change_sampled,
                                                                        query_sample_size, query_points_sampled)
 
+                del query_points_sampled
+                torch.cuda.empty_cache()
+                
                 # latent_update_gt, unet_gt, p_input_masked_list = self.update_latent_map_gt(points_accumulated, vol_bound_valid_gt)
-                latent_update_gt, unet_gt, _ = self.update_latent_map_gt(points_gt, vol_bound_valid_gt)
+                latent_update_gt, unet_gt = self.update_latent_map_gt(points_gt, vol_bound_valid_gt)
                 
                 # Get ground truth logits
-                logits_gt, _ = self.get_logits_and_latent(latent_update_gt, unet_gt, crop_with_change_gt,
+                logits_gt = self.get_logits_and_latent(latent_update_gt, unet_gt, crop_with_change_gt,
                                                           query_sample_size, query_points_gt)
                 
                 
@@ -247,24 +257,36 @@ class Trainer(BaseTrainer):
                 crop_with_change_count_inter = combine_lists(crop_with_change_count_sampled, crop_with_change_count_gt)
                 crop_with_change_inter = list(map(bool, crop_with_change_count_inter))
                 
-                latent_update_pred_full = torch.zeros(n_crop, 128, 6, 6, 6).to(device)
-                latent_update_pred_full[crop_with_change_sampled] = latent_update_pred
-                latent_update_gt_full = torch.zeros(n_crop, 128, 6, 6, 6).to(device)
-                latent_update_gt_full[crop_with_change_gt] = latent_update_gt
+                mask_sampled = []
+                mask_gt = []
                 
-                logits_pred_full = torch.zeros(n_crop, query_sample_size).to(device)
-                logits_pred_full[crop_with_change_sampled] = logits_pred
-                logits_gt_full = torch.zeros(n_crop, query_sample_size).to(device)
-                logits_gt_full[crop_with_change_gt] = logits_gt
-    
+                torch.cuda.empty_cache()
+                
+                for elem1, elem2 in zip(crop_with_change_sampled, crop_with_change_gt):
+                    if elem1:
+                        if elem2:
+                            mask_sampled.append(True)
+                        else:
+                            mask_sampled.append(False)
+                    if elem2:
+                        if elem1:
+                            mask_gt.append(True)
+                        else:
+                            mask_gt.append(False)                        
+
+                # print(logits_pred[mask_sampled].shape)
+                # print(logits_gt[mask_gt].shape)
+                # print(latent_update_pred[mask_sampled].shape)
+                # print(latent_update_gt[mask_gt].shape)
+                
                 # Calculate loss
                 prediction = {}
                 gt = {}
-                prediction['logits'] = logits_pred_full[crop_with_change_inter]
-                gt['logits'] = logits_gt_full[crop_with_change_inter]
+                prediction['logits'] = logits_pred[mask_sampled]
+                gt['logits'] = logits_gt[mask_gt]
 
-                prediction['latent'] = latent_update_pred_full[crop_with_change_inter]
-                gt['latent'] = latent_update_gt_full[crop_with_change_inter]          
+                prediction['latent'] = latent_update_pred[mask_sampled]
+                gt['latent'] = latent_update_gt[mask_gt] 
 
                 loss = self.compute_sequential_loss(prediction, gt, latent_loss=True)
                 loss_all += loss.item()
@@ -272,21 +294,21 @@ class Trainer(BaseTrainer):
                 loss.backward()
                 self.optimizer.step()
 
-                save_dict = {}
-                save_dict['prediction'] = prediction
-                save_dict['gt'] = gt
-                save_dict['crop_with_change_count'] = crop_with_change_count_sampled
-                save_dict['latent_map_pred'] = latent_map_pred
-                save_dict['iter'] = iter
-                save_dict['loss'] = loss
+                # save_dict = {}
+                # save_dict['prediction'] = prediction
+                # save_dict['gt'] = gt
+                # save_dict['crop_with_change_count'] = crop_with_change_count_sampled
+                # save_dict['latent_map_pred'] = latent_map_pred
+                # save_dict['iter'] = iter
+                # save_dict['loss'] = loss
                 
-                path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_inputs_gt/' + str(iter) + '.pkl'
-                if not os.path.exists(os.path.dirname(path)):
-                    os.makedirs(os.path.dirname(path))
+                # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_inputs_gt/' + str(iter) + '.pkl'
+                # if not os.path.exists(os.path.dirname(path)):
+                #     os.makedirs(os.path.dirname(path))
                 
-                if iter%10 == 0:
-                    with open(path, 'wb') as f:
-                        pickle.dump(save_dict, f)
+                # if iter%10 == 0:
+                #     with open(path, 'wb') as f:
+                #         pickle.dump(save_dict, f)
                 
                 # Re-initialize
                 latent_map_pred = torch.zeros(n_crop_axis[0], n_crop_axis[1], n_crop_axis[2],
@@ -388,7 +410,6 @@ class Trainer(BaseTrainer):
 
     def update_latent_map_gt(self, p_input, vol_bound_valid):
         
-        p_input_masked_list = []
 
         fea = torch.zeros(len(vol_bound_valid), self.hdim, self.reso, self.reso, self.reso).to(self.device)
 
@@ -403,26 +424,19 @@ class Trainer(BaseTrainer):
 
             fea[i], unet = self.encode_crop_sequential(p_input[mask], self.device,
                                                                         vol_bound=vol_bound_valid[i])
-            p_input_masked_list.append(p_input[mask])
 
         fea, latent_update = unet(fea)
 
 
-        return latent_update, unet, p_input_masked_list
+        return latent_update, unet
 
     def get_logits_and_latent(self, latent_update, unet, crop_with_change, query_sample_size, query_points=None):
 
+        if query_points is None:
+            #raise error
+            raise ValueError('query_points is None, please provide query_points')
         # Initialize logits list
         num_valid_crops = sum(crop_with_change)
-
-        # Generate query points if not initialized
-        if query_points == None:
-            sampled_points = torch.rand(num_valid_crops, query_sample_size, 3).to(self.device)
-            pi_in = {'p': sampled_points}
-            p_n = {}
-            p_n['grid'] = sampled_points
-            pi_in['p_n'] = p_n
-            query_points = pi_in
 
         # Get latent codes of valid crops
         kwargs = {}
@@ -433,7 +447,7 @@ class Trainer(BaseTrainer):
         p_r= self.model.decode(query_points, fea, **kwargs)
         logits = p_r.logits
 
-        return logits, query_points
+        return logits
 
     def encode_crop_sequential(self, inputs, device, fea = 'grid', vol_bound=None):
         ''' Encode a crop to feature volumes

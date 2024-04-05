@@ -123,8 +123,10 @@ print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
 
-# pcd = o3d.geometry.PointCloud()
-# base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+pcd = o3d.geometry.PointCloud()
+base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+init_it = True 
+
 while True:
     epoch_it += 1
     print(epoch_it)
@@ -138,6 +140,9 @@ while True:
             continue
             
         # full_points = batch['inputs'].view(-1, 3)
+        # #convert to numpy
+        # full_points = full_points.detach().cpu().numpy()
+        
         # pcd.points = o3d.utility.Vector3dVector(full_points)
         
         categories = batch.get('category')
@@ -148,14 +153,16 @@ while True:
         category = unique_cat[0]
         path_gt_points = os.path.join(cfg['data']['path_gt'], category, '000000', cfg['data']['gt_file_name'])
         points_gt = np.load(path_gt_points)['points']
-        points_gt = torch.from_numpy(points_gt).to(device).float()
-
         
         # pcd_gt = o3d.geometry.PointCloud()
         # pcd_gt.points = o3d.utility.Vector3dVector(points_gt)        
         # o3d.visualization.draw_geometries([pcd, pcd_gt, base_axis])
 
-        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, it, window=cfg['training']['batch_size'])
+        points_gt = torch.from_numpy(points_gt).to(device).float()
+
+        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, it, init_it = init_it, window=cfg['training']['batch_size'])
+        init_it = False
+        
         logger.add_scalar('train/loss', loss, it)
         experiment.log_metric('train_loss', loss, step=it)
         
