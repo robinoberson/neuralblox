@@ -89,6 +89,6 @@ ext_modules = [
 setup(
     ext_modules=cythonize(ext_modules),
     cmdclass={
-        'build_ext': BuildExtension
+        'build_ext': BuildExtension.with_options(use_ninja=False)
     }
 )
