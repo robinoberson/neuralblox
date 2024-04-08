@@ -180,7 +180,7 @@ while True:
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
-        if it - it0 == 50:
+        if it - it0 == 1100:
             profiler.disable()
             print(f'Dumping profiler stats')
             profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')

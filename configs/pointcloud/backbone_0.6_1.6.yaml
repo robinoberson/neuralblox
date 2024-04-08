@@ -47,7 +47,7 @@ training:
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4
-  reset_training: true
+  reset_training: false
   starting_model: aug_model_250000.pt
   # starting_model: model.pt
 test:
