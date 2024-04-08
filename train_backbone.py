@@ -15,7 +15,8 @@ from collections import defaultdict
 import shutil
 from tqdm import trange
 import pickle
-
+import cProfile
+import pstats
 
 experiment = Experiment(
   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
@@ -90,7 +91,7 @@ data_vis_list = []
 # Build a data dictionary for visualization
 print("Build a data dictionary for visualization")
 iterator = iter(vis_loader)
-for i in trange(int(len(vis_loader))):
+for i in trange(int(len(vis_loader)/10)):
     data_vis = next(iterator)
     idx = data_vis['idx'].item()
     model_dict = val_dataset.get_model_dict(idx)
@@ -159,6 +160,9 @@ print('Total number of parameters: %d' % nparameters)
 
 print('output path: ', cfg['training']['out_dir'])
 
+profiler = cProfile.Profile()
+profiler.enable()
+
 while True:
     epoch_it += 1
 
@@ -176,9 +180,13 @@ while True:
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
-
+        if it - it0 == 50:
+            profiler.disable()
+            print(f'Dumping profiler stats')
+            profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
+            
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:
+        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -230,13 +238,13 @@ while True:
                 checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it,
                                    loss_val_best=metric_val_best)
                 
-                experiment.log_asset("model_best.pt")
+                # experiment.log_asset("model_best.pt")
 
         # Exit if necessary
         if exit_after > 0 and (time.time() - t0) >= exit_after:
             print('Time limit reached. Exiting.')
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
-            experiment.log_asset("model.pt")
+            # experiment.log_asset("model.pt")
 
             exit(3)

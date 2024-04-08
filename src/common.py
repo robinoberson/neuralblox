@@ -342,23 +342,25 @@ def normalize_3d_coordinate(p, padding=0.1):
     '''
 
     
-    p_vis = p.view(-1, 3)
-    p_bbox_min = torch.min(p_vis, dim=0)[0]
-    p_bbox_max = torch.max(p_vis, dim=0)[0]
+    # p_vis = p.view(-1, 3)
+    # p_bbox_min = torch.min(p_vis, dim=0)[0]
+    # p_bbox_max = torch.max(p_vis, dim=0)[0]
     
     p_nor = p / (1 + padding + 10e-4) # (-0.5, 0.5)
     p_nor = p_nor + 0.5 # range (0, 1)
     
-    p_nor_vis = p_nor.view(-1, 3)
-    p_nor_bbox_min = torch.min(p_nor_vis, dim=0)[0]
-    p_nor_bbox_max = torch.max(p_nor_vis, dim=0)[0]    
+    # p_nor_vis = p_nor.view(-1, 3)
+    # p_nor_bbox_min = torch.min(p_nor_vis, dim=0)[0]
+    # p_nor_bbox_max = torch.max(p_nor_vis, dim=0)[0]    
     
     # f there are outliers out of the range
     if p_nor.max() >= 1:
-        print(f'Problem with p_nor max: {p_nor.max()}, should be < 1, check padding')
+        if p_nor.max() >= 1.1:
+            print(f'Problem with p_nor max: {p_nor.max()}, should be < 1, check padding')
         p_nor[p_nor >= 1] = 1 - 10e-4
     if p_nor.min() < 0:
-        pritn(f'Problem with p_nor min: {p_nor.min()}, should be >= 0, check padding')
+        if p_nor.min() < -0.1:
+            print(f'Problem with p_nor min: {p_nor.min()}, should be >= 0, check padding')
         p_nor[p_nor < 0] = 0.0
     return p_nor
 
