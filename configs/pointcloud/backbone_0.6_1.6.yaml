@@ -48,7 +48,7 @@ training:
   n_workers: 8
   n_workers_val: 4
   reset_training: true
-  starting_model: aug_model_250000.pt
+  starting_model: aug_model_180000.pt
   # starting_model: model.pt
 test:
   threshold: 0.2
