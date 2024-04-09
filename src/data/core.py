@@ -194,7 +194,7 @@ class Shapes3dDataset(data.Dataset):
         if self.transform is not None:
             data = self.transform(data)
         
-        data['category'] = category
+        if self.cfg['data']['return_category']: data['category'] = category
 
         return data
     

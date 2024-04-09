@@ -1,5 +1,6 @@
 method: neuralblox
 data:
+  return_category: false
   dataset: Shapes3D
   path: data/ShapeNet
   watertight_path: data/watertight

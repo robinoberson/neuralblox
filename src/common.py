@@ -355,12 +355,10 @@ def normalize_3d_coordinate(p, padding=0.1):
     
     # f there are outliers out of the range
     if p_nor.max() >= 1:
-        if p_nor.max() >= 1.1:
-            print(f'Problem with p_nor max: {p_nor.max()}, should be < 1, check padding')
+        # print(f'Problem with p_nor max: {p_nor.max()}, should be < 1, check padding')
         p_nor[p_nor >= 1] = 1 - 10e-4
     if p_nor.min() < 0:
-        if p_nor.min() < -0.1:
-            print(f'Problem with p_nor min: {p_nor.min()}, should be >= 0, check padding')
+        # print(f'Problem with p_nor min: {p_nor.min()}, should be >= 0, check padding')
         p_nor[p_nor < 0] = 0.0
     return p_nor
 
