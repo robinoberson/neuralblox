@@ -24,6 +24,7 @@ build
 *.npz
 *.asc
 *.csv
+*.pkl
 /src/utils/libmcubes/mcubes.cpp
 /src/utils/libsimplify/simplify_mesh.cpp
 /src/utils/libsimplify/build
@@ -32,3 +33,4 @@ build
 /src/utils/libvoxelize/voxelize.c
 /output/*
 
+output.log

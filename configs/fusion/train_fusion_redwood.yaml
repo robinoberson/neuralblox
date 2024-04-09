@@ -1,16 +1,21 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
+  return_category: true
   input_type: pointcloud_sequential
-  classes: ['scene_1', 'scene_2', 'scene_3', 'scene_4']
-  path: data/redwood_custom
+  classes: null
+  # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
+  path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned
+  path_gt: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_gt
+  gt_file_name: 'pointcloud.npz'
   pointcloud_noise: 0.000
   points_subsample: 8192
   grid_resolution: 24
-  input_vol: 1.2
-  query_vol: 1.0
+  input_vol: 1.6
+  query_vol: 1.6
 training:
-  out_dir: out_fusion/redwood
+  out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_16_16
+  # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
   batch_size: 8
-  backbone_file: pretrained_models/backbone/shapenet_grid24_pe.pt
-
-
+  backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_1_6/model_best.pt
+  # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
+  gt_query: false

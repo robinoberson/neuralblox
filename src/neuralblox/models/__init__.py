@@ -58,7 +58,7 @@ class ConvolutionalOccupancyNetwork(nn.Module):
 
         if self.encoder is not None:
             c = self.encoder(inputs)
-        else:
+        else: 
             # Return inputs?
             c = torch.empty(inputs.size(0), 0)
 

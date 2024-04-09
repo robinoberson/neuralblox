@@ -415,8 +415,8 @@ class Generator3D(object):
                 
         denominator = max_x * max_y * max_z * 8
         n = int(np.floor(np.power(self.max_byte_size / denominator, 1/3)))
-        n = np.min([n, self.resolution0])
-        self.resolution0 = n
+        n = np.min([n, self.resolution0]) # number of points per voxel along each axis
+        self.resolution0 = n # number of points per voxel along each axis
 
         print(f'max_x: {max_x}, max_y: {max_y}, max_z: {max_z}, new resolution: {n}')
         value_grid = np.zeros((max_x, max_y, max_z, n, n, n), dtype = np.float32)
@@ -424,10 +424,10 @@ class Generator3D(object):
         if self.bound_interpolation:
             overlap = self.vol_bound['input_crop_size'] / self.vol_bound['query_crop_size']
             overlap = overlap - 1.0
-            overlap = overlap / 2 # 1 side
-            n_overlap = round(n*overlap*0.5)
+            overlap = overlap / 2 # 1 side # overlap distance
+            n_overlap = round(n*overlap*0.5) # number of points that overlap
             ov = n_overlap
-            n_query_overlap = n_overlap * 2 + n
+            n_query_overlap = n_overlap * 2 + n 
             n_interpolate = n_query_overlap - n
             weights = np.linspace(0.0, 1.0, num=n_interpolate)
             value_grid_overlap = np.zeros((max_x, max_y, max_z, n_query_overlap, n_query_overlap, n_query_overlap))

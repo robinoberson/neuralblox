@@ -102,7 +102,8 @@ class LocalPoolPointnet(nn.Module):
         if 'grid' in self.plane_type:
             coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
             index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
-
+            
+            
         if self.pos_encoding:
             pp = self.pe(p)
             net = self.fc_pos(pp)

@@ -1,3 +1,6 @@
+from comet_ml import Experiment
+from comet_ml.integration.pytorch import log_model
+
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
@@ -11,8 +14,15 @@ from src.checkpoints import CheckpointIO
 from collections import defaultdict
 import shutil
 from tqdm import trange
+import pickle
+import cProfile
+import pstats
 
-
+experiment = Experiment(
+  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+  project_name="backbone-training",
+  workspace="robinoberson"
+)
 # Arguments
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.'
@@ -36,6 +46,9 @@ batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 exit_after = args.exit_after
+
+reset_training = cfg['training']['reset_training']
+starting_model = cfg['training']['starting_model']
 
 model_selection_metric = cfg['training']['model_selection_metric']
 if cfg['training']['model_selection_mode'] == 'maximize':
@@ -71,13 +84,14 @@ vis_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=1, shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
+
 model_counter = defaultdict(int)
 data_vis_list = []
 
 # Build a data dictionary for visualization
 print("Build a data dictionary for visualization")
 iterator = iter(vis_loader)
-for i in trange(len(vis_loader)):
+for i in trange(int(len(vis_loader)/10)):
     data_vis = next(iterator)
     idx = data_vis['idx'].item()
     model_dict = val_dataset.get_model_dict(idx)
@@ -104,15 +118,24 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
-checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
-try:
-    # load_dict = checkpoint_io.load('aug_model_790000.pt')
-    load_dict = checkpoint_io.load('model.pt')
 
-    print(f'Loaded model.pt from {load_dict["epoch_it"]}')
+try:
+    if reset_training:
+        checkpoint_io = CheckpointIO(out_dir, model=model)
+        _ = checkpoint_io.load(starting_model)
+        load_dict = dict()
+        print(f'Loaded {starting_model}')
+    else:
+        checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
+        load_dict = checkpoint_io.load(starting_model)
+    
+        print(f'Loaded model.pt from {load_dict["epoch_it"]}')
+    
 except FileExistsError:
+    print(f'Training beginning from scratch')
     load_dict = dict()
-epoch_it = load_dict.get('epoch_it', 0)
+    
+epoch_it = load_dict.get('epoch_it', 1)
 it = load_dict.get('it', -1)
 it0 = load_dict.get('it', -1)
 
@@ -137,12 +160,17 @@ print('Total number of parameters: %d' % nparameters)
 
 print('output path: ', cfg['training']['out_dir'])
 
+profiler = cProfile.Profile()
+profiler.enable()
+
 while True:
     epoch_it += 1
 
     for batch in train_loader:
         it += 1
         loss = trainer.train_step(batch)
+        experiment.log_metric('train_loss', loss, step=it)
+
         logger.add_scalar('train/loss', loss, it)
 
         # Print output
@@ -150,9 +178,15 @@ while True:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
+            experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
+        if it - it0 == 1100:
+            profiler.disable()
+            print(f'Dumping profiler stats')
+            profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
+            
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:
+        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -164,21 +198,28 @@ while True:
                     mesh, stats_dict = out
                 except TypeError:
                     mesh, stats_dict = out, {}
-
-                mesh.export(os.path.join(out_dir, 'vis', '{}_{}_{}.off'.format(it, data_vis['category'], data_vis['it'])))
-
+                    
+                export_name_mesh = os.path.join(out_dir, 'vis', '{}_{}_{}.obj'.format(it, data_vis['category'], data_vis['it']))
+                export_name_data = os.path.join(out_dir, 'vis', '{}_{}_{}.pkl'.format(it, data_vis['category'], data_vis['it']))
+                mesh.export(export_name_mesh)
+                
+                with open(export_name_data, 'wb') as f:
+                    pickle.dump(data_vis['data'], f)
+                
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
             print('Saving checkpoint')
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
+            # experiment.log_asset("model.pt")
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
             checkpoint_io.save('aug_model_%d.pt' % it, epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
+            # experiment.log_asset("aug_model_%d.pt" % it)
         # Run validation
         if (validate_every > 0 and (it % validate_every) == 0) or (it0 + 1 == it):
             eval_dict = trainer.evaluate(val_loader)
@@ -188,16 +229,22 @@ while True:
 
             for k, v in eval_dict.items():
                 logger.add_scalar('val/%s' % k, v, it)
+                experiment.log_metric(f'val_{k}', v, step=it)
+
 
             if model_selection_sign * (metric_val - metric_val_best) > 0:
                 metric_val_best = metric_val
                 print('New best model (loss %.4f)' % metric_val_best)
                 checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it,
                                    loss_val_best=metric_val_best)
+                
+                # experiment.log_asset("model_best.pt")
 
         # Exit if necessary
         if exit_after > 0 and (time.time() - t0) >= exit_after:
             print('Time limit reached. Exiting.')
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
+            # experiment.log_asset("model.pt")
+
             exit(3)

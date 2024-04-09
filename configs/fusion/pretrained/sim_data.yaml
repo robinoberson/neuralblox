@@ -1,0 +1,45 @@
+inherit_from: configs/fusion/generate_fusion.yaml
+data:
+  input_type: pointcloud_crop
+  classes: ['']
+  path: /scratch/roberson/data/sim_data/2024-03-15_14-15-57
+  intrinsics: null
+  align:
+    deg_x: 90
+    deg_y: 0
+    deg_z: 0
+    shift_vertical: 0.9
+    is_flip: True
+  pointcloud_sampling: 0.1
+  pointcloud_noise: 0.000
+  grid_resolution: 24
+  input_vol: 1.6 # in meter
+  query_vol: 1.0 # in meter
+test:
+  threshold: 0.5
+  # model_file: /home/roberson/MasterThesis/master_thesis/neuralblox/pretrained_models/backbone/shapenet_grid24_pe.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_size_mixed_0.6_1.6/aug_model_180000.pt
+  merging_model_file_robot: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new_2model_merging.pt
+  merging_model_file_mesh: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new_2/model_merging.pt
+  merging_model_file: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_new_2/model_merging.pt
+
+  out_dir: /scratch2/roberson/neuralblox/output
+  out_name: anymal-22-03-2024
+  max_frames: 100
+  frames_interval: 1
+  scene:
+    frame_sampling: 1
+    noise:
+      shift:
+        shift_std: 0
+        on_gravity: False
+      yaw_std: 0
+  export_pointcloud: True
+  export_each_frame: True
+  merge_cameras: True
+generation:
+  generation_dir: generation
+  resolution_0: 100 # resolution for each crop
+  voxel_threshold: 0.001
+  boundary_interpolation: True
+  max_byte_size: 8096000000
