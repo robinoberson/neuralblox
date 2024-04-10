@@ -94,34 +94,42 @@ class LocalPoolPointnet(nn.Module):
         return c_out.permute(0, 2, 1)
 
     def forward(self, p):
-
-        # acquire the index for each point
-        coord = {}
-        index = {}
-
-        if 'grid' in self.plane_type:
-            coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
-            index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
-            
-            
-        if self.pos_encoding:
-            pp = self.pe(p)
-            net = self.fc_pos(pp)
-        else:
-            net = self.fc_pos(p)
-
-        net = self.blocks[0](net)
-        for block in self.blocks[1:]:
-            pooled = self.pool_local(coord, index, net)
-            net = torch.cat([net, pooled], dim=2)
-            net = block(net)
-
-        c = self.fc_c(net)
-
+        
         fea = {}
 
-        if 'grid' in self.plane_type:
-            fea['grid'] = self.generate_grid_features(p, c)
+        #check if p is empty 
+        if p.shape[0] == 0:
+            self.learnable_feature = nn.Parameter(torch.randn(p.size(0), self.dim_enc, 24, 24, 24), requires_grad=True)
+            fea['grid'] = self.learnable_feature.to(p.device)
+
+            return fea
+        else: 
+            # acquire the index for each point
+            coord = {}
+            index = {}
+
+            if 'grid' in self.plane_type:
+                coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
+                index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
+                
+                
+            if self.pos_encoding:
+                pp = self.pe(p)
+                net = self.fc_pos(pp)
+            else:
+                net = self.fc_pos(p)
+
+            net = self.blocks[0](net)
+            for block in self.blocks[1:]:
+                pooled = self.pool_local(coord, index, net)
+                net = torch.cat([net, pooled], dim=2)
+                net = block(net)
+
+            c = self.fc_c(net)
+
+
+            if 'grid' in self.plane_type:
+                fea['grid'] = self.generate_grid_features(p, c)
 
         return fea
 

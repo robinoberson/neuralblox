@@ -103,7 +103,7 @@ class Trainer(BaseTrainer):
 
     '''
 
-    def __init__(self, model, model_merge, optimizer, device=None, input_type='pointcloud',
+    def __init__(self, model, model_merge, optimizer, stack_latents = False, device=None, input_type='pointcloud',
                  vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2):
         self.model = model
         self.model_merge = model_merge
@@ -117,8 +117,8 @@ class Trainer(BaseTrainer):
         self.query_n = query_n
         self.hdim = unet_hdim
         self.factor = 2**unet_depth
-
         self.reso = None
+        self.stack_latents = stack_latents
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -219,7 +219,10 @@ class Trainer(BaseTrainer):
                 torch.cuda.empty_cache()
                 
                 # Merge
-                latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count_sampled)
+                if self.stack_latents:
+                    latent_update_pred = self.merge_latent_codes_neighbours(latent_map_pred, crop_with_change_count_sampled)
+                else:
+                    latent_update_pred = self.merge_latent_codes(latent_map_pred, crop_with_change_count_sampled)
 
                 # Get prediction logits
                 logits_pred = self.get_logits_and_latent(latent_update_pred, unet, crop_with_change_sampled,
@@ -407,6 +410,27 @@ class Trainer(BaseTrainer):
 
         return latent_update
 
+    def merge_latent_codes_neighbours(self, latent_map_pred, crop_with_change_count):
+        H, W, D, c, h, w, d = latent_map_pred.size()
+        latent_map_pred = latent_map_pred.view(-1, c, h, w, d)
+
+        crop_with_change = list(map(bool, crop_with_change_count))
+
+        divisor = torch.clone(crop_with_change_count)
+        divisor[~crop_with_change] = 1
+        divisor = divisor.unsqueeze(1).unsqueeze(2).unsqueeze(3).unsqueeze(4).to(self.device)
+
+        latent_update = torch.div(latent_map_pred, divisor)
+        
+        latent_update = latent_update.view(H, W, D, c, h, w, d)
+        grid_occ = crop_with_change.view(H, W, D, 1)
+        latent_update_stacked, crop_with_change_stacked = self.stack_neighbors(grid_values=latent_update, grid_occ=grid_occ)
+
+        fea_dict = {}
+        fea_dict['latent'] = latent_update_stacked
+        latent_update_stacked = self.model_merge(fea_dict)
+        
+        return latent_update
 
     def update_latent_map_gt(self, p_input, vol_bound_valid):
         
@@ -481,3 +505,44 @@ class Trainer(BaseTrainer):
 
         return loss
 
+    def find_cells_with_all_neighbors(self, grid_occ):
+        """
+        Find grid cells that have neighbors on all sides, including diagonals.
+        
+        Parameters:
+            grid_occ (torch.Tensor): 3D grid of boolean values.
+            
+        Returns:
+            torch.Tensor: Boolean mask indicating cells with all neighbors.
+        """
+        # Create an empty mask of the same shape as the grid_occ
+        mask = torch.zeros_like(grid_occ, dtype=torch.bool)
+        
+        # Pad the grid_occ with False values to avoid boundary checks
+        padded_grid_occ = torch.nn.functional.pad(grid_occ, (1, 1, 1, 1, 1, 1), value=False)
+        
+        # Generate a sliding window view of the padded grid_occ to efficiently check neighbors
+        sliding_window = padded_grid_occ.unfold(0, 3, 1).unfold(1, 3, 1).unfold(2, 3, 1)
+        
+        # Count the number of True values in each window
+        neighbor_count = sliding_window.sum(dim=(3, 4, 5))
+        
+        # Update the mask where the neighbor count is 26
+        mask = neighbor_count == 27
+        
+        return mask
+
+
+    def stack_neighbors(self, grid_values, grid_occ):
+        full_neighbors_mask = find_cells_with_all_neighbors(grid_occ)
+        H, W, D, c, h, w, d = grid_values.shape
+        stacked_grid = torch.zeros((H, W, D, c, h*3, w*3, d*3), dtype=torch.float32)
+        
+        for i in range(1, H - 1):
+            for j in range(1, W - 1):
+                for k in range(1, D - 1):
+                    if full_neighbors_mask[i, j, k]:
+                        stacked_vector = grid_values[i-1:i+2, j-1:j+2, k-1:k+2].view(c, h*3, w*3, d*3)
+                        stacked_grid[i, j, k] = stacked_vector
+                        
+        return stacked_grid, full_neighbors_mask.view(-1)

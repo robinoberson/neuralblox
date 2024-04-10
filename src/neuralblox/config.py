@@ -155,9 +155,11 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
     unet_depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] - 1
+    stack_latents = cfg['training']['stack_latents']
 
     trainer = training_fusion.Trainer(
-        model, model_merge, optimizer,
+        model, model_merge, optimizer, 
+        stack_latents=stack_latents,
         device=device, input_type=input_type,
         vis_dir=vis_dir, threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],

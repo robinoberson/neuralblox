@@ -13,6 +13,7 @@ data:
   voxels_file: null
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
+  return_category: true
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
@@ -44,11 +45,13 @@ training:
   backup_every: 10000
   n_workers: 8
   n_workers_val: 1
+  stack_latents: false
 test:
   threshold: 0.001
   eval_mesh: true
   eval_pointcloud: false
   model_file: model_best.pt
+  
 generation:
   generation_dir: generation
   vis_n_outputs: 2
