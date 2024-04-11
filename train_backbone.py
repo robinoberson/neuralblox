@@ -17,6 +17,8 @@ from tqdm import trange
 import pickle
 import cProfile
 import pstats
+import pynvml
+
 
 experiment = Experiment(
   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
@@ -160,17 +162,50 @@ print('Total number of parameters: %d' % nparameters)
 
 print('output path: ', cfg['training']['out_dir'])
 
-profiler = cProfile.Profile()
-profiler.enable()
+# profiler = cProfile.Profile()
+# profiler.enable()
+monitor_gpu_usage = cfg['training']['monitor_gpu_usage']
+if monitor_gpu_usage:
+    pynvml.nvmlInit()
+
+    try:
+        # Get the number of available GPUs
+        device_count = pynvml.nvmlDeviceGetCount()
+        
+        # Initialize handles for each GPU
+        handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
+    except Exception as e:
+        experiment.log_text(f"Error: {e}")
+        print(f"Error: {e}")
+        monitor_gpu_usage = False        
 
 while True:
     epoch_it += 1
 
     for batch in train_loader:
         it += 1
+                
         loss = trainer.train_step(batch)
         experiment.log_metric('train_loss', loss, step=it)
-
+        if monitor_gpu_usage:
+            total_memory_used = 0
+                
+            for i, handle in enumerate(handles):
+                # Get current memory usage for each GPU
+                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                memory_used = info.used
+                
+                # Print free and used memory for each GPU
+                # print(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB")
+                experiment.log_text(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB") 
+                experiment.log_metric(f"GPU_{i}_memory_used", memory_used / (1024**2), step=it)
+                # Calculate total memory usage
+                total_memory_used += memory_used
+            
+            # Print total memory usage across all GPUs
+            # print(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
+            experiment.log_text(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
+                
         logger.add_scalar('train/loss', loss, it)
 
         # Print output
@@ -180,10 +215,10 @@ while True:
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
-        if it - it0 == 1100:
-            profiler.disable()
-            print(f'Dumping profiler stats')
-            profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
+        # if it - it0 == 1100:
+        #     profiler.disable()
+        #     print(f'Dumping profiler stats')
+        #     profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
             
         # Visualize output
         if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
