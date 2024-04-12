@@ -281,14 +281,14 @@ class Generator3D(object):
             p_input = inputs[mask]
             if p_input.shape[0] == 0:  # no points in the current crop
                 p_input = inputs.squeeze()
-                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+                ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
                 if fea == 'grid':
                     ind[~mask] = self.vol_bound['reso'] ** 3
                 else:
                     ind[~mask] = self.vol_bound['reso'] ** 2
             else:
-                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
-            index[fea] = ind.unsqueeze(0)
+                ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+            index[fea] = ind
             input_cur = add_key(p_input.unsqueeze(0), index, 'points', 'index', device=device)
 
         with torch.no_grad():

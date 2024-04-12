@@ -254,7 +254,7 @@ class PatchPointCloudField(Field):
         index = {}
         
         for key in vol['plane_type']:
-            index[key] = coord2index(points.copy(), vol['input_vol'], reso=vol['reso'], plane=key)
+            index[key] = coord2index(np.expand_dims(points.copy(), axis=0), vol['input_vol'], reso=vol['reso'], plane=key)
             if key == 'grid':
                 index[key][:, mask] = vol['reso']**3
             else:

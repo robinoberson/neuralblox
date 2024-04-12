@@ -42,7 +42,7 @@ class LocalPoolPointnet(nn.Module):
         self.hidden_dim = hidden_dim
 
         if unet3d:
-            self.unet3d = UNet3D(**unet3d_kwargs)
+            self.unet3d = UNet3D_noskipconnection_latent(**unet3d_kwargs)
         else:
             self.unet3d = None
 

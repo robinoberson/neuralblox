@@ -154,7 +154,21 @@ class Trainer(BaseTrainer):
             # add pre-computed normalized coordinates
             p = add_key(p, data.get('points.normalized'), 'p', 'p_n', device=device)
 
-        c = self.model.encode_inputs(inputs)
+        c_old = self.model.encode_inputs(inputs)
+        
+        # coord_old = normalize_3d_coordinate(p.clone(), padding=self.padding)
+        # index_old = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
+
+        vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+        ind = coord2index(inputs.clone(), vol_range, reso=self.grid_reso, plane='grid')
+
+        input_cur = add_key(inputs.clone(), ind, 'points', 'index', device=device)
+
+        fea, unet = self.model.encode_inputs(input_cur)
+        c = unet(fea)
+            
+        # check if c is same as c_old
+        bool_same = torch.equal(c_old, c)
 
         kwargs = {}
         # General points
