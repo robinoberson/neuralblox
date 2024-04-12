@@ -187,6 +187,7 @@ while True:
                 
         loss = trainer.train_step(batch)
         experiment.log_metric('train_loss', loss, step=it)
+        
         if monitor_gpu_usage:
             total_memory_used = 0
                 
