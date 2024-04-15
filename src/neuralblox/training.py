@@ -51,6 +51,7 @@ class Trainer(BaseTrainer):
         self.eval_sample = eval_sample
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
+        self.unet = None
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -153,26 +154,37 @@ class Trainer(BaseTrainer):
             inputs['mask'] = data.get('inputs.mask').to(device)
             # add pre-computed normalized coordinates
             p = add_key(p, data.get('points.normalized'), 'p', 'p_n', device=device)
-
-        c_old = self.model.encode_inputs(inputs)
         
-        # coord_old = normalize_3d_coordinate(p.clone(), padding=self.padding)
-        # index_old = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
-
         vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
-        ind = coord2index(inputs.clone(), vol_range, reso=self.grid_reso, plane='grid')
+        vol_bound = {}
+        vol_bound['input_vol'] = vol_range
 
-        input_cur = add_key(inputs.clone(), ind, 'points', 'index', device=device)
+        fea = 'grid'
+        ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.grid_reso, plane=fea)
+        index = {}
+        index[fea] = ind
+        input_cur = add_key(inputs, index, 'points', 'index', device=device)
 
-        fea, unet = self.model.encode_inputs(input_cur)
-        c = unet(fea)
-            
-        # check if c is same as c_old
-        bool_same = torch.equal(c_old, c)
-
+        if self.unet == None:
+            fea, self.unet = self.model.encode_inputs(input_cur)
+        else:
+            fea, _ = self.model.encode_inputs(input_cur)
+        
+        c, _ = self.unet(fea)#downsample and upsample 
+         
         kwargs = {}
         # General points
-        logits = self.model.decode(p, c, **kwargs).logits
+        pi_in = p
+        pi_in = {'p': pi_in}
+        p_n = {}
+        for key in self.vol_bound['fea_type']:
+            # projected coordinates normalized to the range of [0, 1]
+            p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).to(self.device)
+        
+        pi_in['p_n'] = p_n
+        
+        logits = self.model.decode(pi_in, c, **kwargs).logits
+        
         loss_i = F.binary_cross_entropy_with_logits(
             logits, occ, reduction='none')
         loss = loss_i.sum(-1).mean()

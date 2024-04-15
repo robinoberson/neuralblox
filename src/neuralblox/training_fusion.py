@@ -444,7 +444,7 @@ class Trainer(BaseTrainer):
         fea['unet3d'] = unet
         fea['latent'] = latent_update
 
-        p_r= self.model.decode(query_points, fea, **kwargs)
+        p_r = self.model.decode(query_points, fea, **kwargs)
         logits = p_r.logits
 
         return logits

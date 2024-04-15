@@ -346,7 +346,7 @@ def normalize_3d_coordinate(p, padding=0.1):
     # p_bbox_min = torch.min(p_vis, dim=0)[0]
     # p_bbox_max = torch.max(p_vis, dim=0)[0]
     
-    p_nor = p / (1 + padding + 10e-4) # (-0.5, 0.5)
+    p_nor = p / (1 + padding) # (-0.5, 0.5)
     p_nor = p_nor + 0.5 # range (0, 1)
     
     # p_nor_vis = p_nor.view(-1, 3)
@@ -370,10 +370,9 @@ def normalize_coord(p, vol_range, plane='xz'):
         vol_range (numpy array): volume boundary
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
-    p[:, 0] = (p[:, 0] - vol_range[0][0]) / (vol_range[1][0] - vol_range[0][0])
-    p[:, 1] = (p[:, 1] - vol_range[0][1]) / (vol_range[1][1] - vol_range[0][1])
-    p[:, 2] = (p[:, 2] - vol_range[0][2]) / (vol_range[1][2] - vol_range[0][2])
-    
+    for dim in range(3):
+        p[..., dim] = (p[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+
     if plane == 'xz':
         x = p[:, [0, 2]]
     elif plane =='xy':
@@ -423,7 +422,7 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
         index = x[:, 0] + reso * x[:, 1]
         index[index > reso**2] = reso**2
     elif x.shape[-1] == 3:
-        index = x[:, 0] + reso * (x[:, 1] + reso * x[:, 2])
+        index = x[:, :, 0] + reso * (x[:, :, 1] + reso * x[:, :, 2])
         index[index > reso**3] = reso**3
     
     return index[None]
@@ -497,7 +496,7 @@ class map2local(object):
         self.s = s
         self.pe = positional_encoding(basis_function=pos_encoding)
 
-    def __call__(self, p):
+    def __call__(self, p): 
         p = torch.remainder(p, self.s) / self.s # always positive
         p = self.pe(p)
         return p

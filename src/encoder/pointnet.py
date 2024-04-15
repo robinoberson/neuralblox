@@ -72,9 +72,10 @@ class LocalPoolPointnet(nn.Module):
                                     self.reso_grid)  # sparce matrix (B x 512 x reso x reso)
 
         if self.unet3d is not None:
-            fea_grid = self.unet3d(fea_grid)
-
-        return fea_grid
+            fea_grid, latent_code = self.unet3d(fea_grid)
+            return fea_grid, latent_code
+        else:
+            return fea_grid, None
 
     def pool_local(self, xy, index, c):
         bs, fea_dim = c.size(0), c.size(2)
@@ -121,9 +122,9 @@ class LocalPoolPointnet(nn.Module):
         fea = {}
 
         if 'grid' in self.plane_type:
-            fea['grid'] = self.generate_grid_features(p, c)
+            fea['grid'], latent_code = self.generate_grid_features(p, c)
 
-        return fea
+        return fea, net, c, latent_code
 
 class PatchLocalPoolPointnetLatent(nn.Module):
     ''' PointNet-based encoder network with ResNet blocks.
@@ -207,7 +208,7 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         for key in keys:
             # scatter plane features from points
             if key == 'grid':
-                fea = self.scatter(c.permute(0, 2, 1), index[key])
+                fea = self.scatter(c.permute(0, 2, 1), index[key], dim_size=self.reso_grid ** 3)
 
             if self.scatter == scatter_max:
                 fea = fea[0]
