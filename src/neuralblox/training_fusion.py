@@ -444,7 +444,7 @@ class Trainer(BaseTrainer):
         fea['unet3d'] = unet
         fea['latent'] = latent_update
 
-        p_r= self.model.decode(query_points, fea, **kwargs)
+        p_r = self.model.decode(query_points, fea, **kwargs)
         logits = p_r.logits
 
         return logits
@@ -453,15 +453,15 @@ class Trainer(BaseTrainer):
         ''' Encode a crop to feature volumes
 
         Args:
-            inputs (dict): input point cloud
+            inputs (tensor): input point cloud
             device (device): pytorch device
             vol_bound (dict): volume boundary
         '''
 
         index = {}
         grid_reso = self.reso
-        ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=grid_reso, plane=fea)
-        index[fea] = ind.unsqueeze(0)
+        ind = coord2index(inputs.clone().unsqueeze(0), vol_bound['input_vol'], reso=grid_reso, plane=fea)
+        index[fea] = ind
         input_cur = add_key(inputs.unsqueeze(0), index, 'points', 'index', device=device)
 
         fea, unet = self.model.encode_inputs(input_cur)
