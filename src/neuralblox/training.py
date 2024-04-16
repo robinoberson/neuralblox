@@ -52,6 +52,7 @@ class Trainer(BaseTrainer):
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
         self.unet = None
+        self.vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -97,15 +98,39 @@ class Trainer(BaseTrainer):
         kwargs = {}
         
         # add pre-computed index
-        inputs = add_key(inputs, data.get('inputs.ind'), 'points', 'index', device=device)
-        # add pre-computed normalized coordinates
-        points = add_key(points, data.get('points.normalized'), 'p', 'p_n', device=device)
-        points_iou = add_key(points_iou, data.get('points_iou.normalized'), 'p', 'p_n', device=device)
+        # inputs = add_key(inputs, data.get('inputs.ind'), 'points', 'index', device=device)
+        # # add pre-computed normalized coordinates
+        # points_normalized = normalize_coord(points, vol_range=self.vol_range, plane = 'grid')
+        # points = add_key(points, points_normalized, 'p', 'p_n', device=device)
+        
+        # points_iou_normalized = normalize_coord(points_iou, vol_range=self.vol_range, plane = 'grid')
+        # points_iou = add_key(points_iou, data.get('points_iou.normalized'), 'p', 'p_n', device=device)
 
         # Compute iou
         with torch.no_grad():
-            p_out = self.model(points_iou, inputs, 
-                               sample=self.eval_sample, **kwargs)
+            fea_type = 'grid'
+            index = {}
+            ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
+            index[fea_type] = ind
+            input_cur = add_key(inputs, index, 'points', 'index', device=device)
+            
+            fea, self.unet = self.model.encode_inputs(input_cur)
+            fea_du, _ = self.unet(fea) #downsample and upsample 
+            kwargs = {}
+            
+            # Query points
+            pi_in = points_iou
+            pi_in = {'p': pi_in}
+            p_n = {}
+            
+
+            p_n[fea_type] = normalize_coord(points_iou.clone(), self.vol_range, plane=fea_type).to(self.device)
+            pi_in['p_n'] = p_n
+            
+            c = {}
+            c['grid'] = fea_du
+
+            p_out = self.model.decode(pi_in, c, **kwargs)
 
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (p_out.probs >= threshold).cpu().numpy()
@@ -155,13 +180,12 @@ class Trainer(BaseTrainer):
             # add pre-computed normalized coordinates
             p = add_key(p, data.get('points.normalized'), 'p', 'p_n', device=device)
         
-        vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+        vol_range = self.vol_range
         vol_bound = {}
         vol_bound['input_vol'] = vol_range
-
         fea = 'grid'
-        ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.grid_reso, plane=fea)
         index = {}
+        ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.grid_reso, plane=fea)
         index[fea] = ind
         input_cur = add_key(inputs, index, 'points', 'index', device=device)
 
@@ -170,7 +194,7 @@ class Trainer(BaseTrainer):
         else:
             fea, _ = self.model.encode_inputs(input_cur)
         
-        c, _ = self.unet(fea)#downsample and upsample 
+        fea_du, _ = self.unet(fea) #downsample and upsample 
          
         kwargs = {}
         # General points
@@ -179,10 +203,12 @@ class Trainer(BaseTrainer):
         p_n = {}
         for key in self.vol_bound['fea_type']:
             # projected coordinates normalized to the range of [0, 1]
-            p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).to(self.device)
-        
+            p_n[key] = normalize_coord(p.clone(), vol_bound['input_vol'], plane=key).to(self.device)
         pi_in['p_n'] = p_n
         
+        c = {}
+        c['grid'] = fea_du
+
         logits = self.model.decode(pi_in, c, **kwargs).logits
         
         loss_i = F.binary_cross_entropy_with_logits(
