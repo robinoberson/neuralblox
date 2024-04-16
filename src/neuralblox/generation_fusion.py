@@ -220,13 +220,15 @@ class Generator3D(object):
             fea_grid[i], self.unet = self.encode_crop_sequential(p_input_valid[i], self.device, vol_bound=vol_bound)
 
         with torch.no_grad():
-            latent = self.unet.encoders[0].basic_module(fea_grid)
-            latent = self.unet.encoders[1].pooling(latent)
-            latent = self.unet.encoders[1].basic_module(latent)
-            latent = self.unet.encoders[2].pooling(latent)
-            latent = self.unet.encoders[2].basic_module(latent)
+            # latent = self.unet.encoders[0].basic_module(fea_grid)
+            # latent = self.unet.encoders[1].pooling(latent)
+            # latent = self.unet.encoders[1].basic_module(latent)
+            # latent = self.unet.encoders[2].pooling(latent)
+            # latent = self.unet.encoders[2].basic_module(latent)
+            
+            x, latent_code = self.unet(fea_grid)
 
-            self.latent[crop_with_change] += latent
+            self.latent[crop_with_change] += latent_code 
 
         return self.latent
 
@@ -301,6 +303,23 @@ class Generator3D(object):
 
         return latent.view(self.n_crop_axis[0], self.n_crop_axis[1], self.n_crop_axis[2], self.unet_hdim*factor, d, d, d)
 
+    def get_divided_latent(self, latent):
+        ''' Perform latent code fusion for all voxels
+
+        Args:
+            latent (torch.Tensor): summed latent codes in a map
+        '''
+
+        factor = 2**self.unet_depth
+        d = int(self.grid_reso/factor)
+
+        for i in range(self.n_crop):
+            if self.crop_with_change_count[i] != 0:
+                
+                latent[i] = latent[i].unsqueeze(0) / self.crop_with_change_count[i]
+
+        return latent.view(self.n_crop_axis[0], self.n_crop_axis[1], self.n_crop_axis[2], self.unet_hdim*factor, d, d, d)
+    
     def get_crop_bound(self, inputs):
         ''' Divide a scene into crops, get boundary for each crop
 
@@ -340,8 +359,8 @@ class Generator3D(object):
 
         index = {}
         for fea in self.vol_bound['fea_type']:
-            ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
-            index[fea] = ind.unsqueeze(0)
+            ind = coord2index(inputs.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+            index[fea] = ind
             input_cur = add_key(inputs.unsqueeze(0), index, 'points', 'index', device=device)
 
         with torch.no_grad():

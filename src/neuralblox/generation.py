@@ -44,6 +44,7 @@ class Generator3D(object):
                  vol_info=None,
                  vol_bound=None,
                  simplify_nfaces=None,
+                 grid_reso=24,
                  max_byte_size=100000000):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
@@ -57,7 +58,8 @@ class Generator3D(object):
         self.padding = padding
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
-
+        self.vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+        self.grid_reso = grid_reso
         # for pointcloud_crop
         self.vol_bound = vol_bound
         if vol_info is not None:
@@ -84,10 +86,19 @@ class Generator3D(object):
             self.get_crop_bound(inputs)
             c = self.encode_crop(inputs, device)
         else:  # input the entire volume
-            inputs = add_key(inputs, data.get('inputs.ind'), 'points', 'index', device=device)
+            
+            fea_type = 'grid'
+            index = {}
+            ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
+            index[fea_type] = ind
+            input_cur = add_key(inputs, index, 'points', 'index', device=device)
+            
             t0 = time.time()
             with torch.no_grad():
-                c = self.model.encode_inputs(inputs)
+                
+                fea, unet = self.model.encode_inputs(input_cur)
+                c, _ = unet(fea)
+                
         stats_dict['time (encode inputs)'] = time.time() - t0
 
         mesh = self.generate_from_latent(c, stats_dict=stats_dict, **kwargs)
@@ -281,14 +292,14 @@ class Generator3D(object):
             p_input = inputs[mask]
             if p_input.shape[0] == 0:  # no points in the current crop
                 p_input = inputs.squeeze()
-                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+                ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
                 if fea == 'grid':
                     ind[~mask] = self.vol_bound['reso'] ** 3
                 else:
                     ind[~mask] = self.vol_bound['reso'] ** 2
             else:
-                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
-            index[fea] = ind.unsqueeze(0)
+                ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+            index[fea] = ind
             input_cur = add_key(p_input.unsqueeze(0), index, 'points', 'index', device=device)
 
         with torch.no_grad():
@@ -322,7 +333,7 @@ class Generator3D(object):
 
         return occ_hat
 
-    def eval_points(self, p, c=None, vol_bound=None, **kwargs):
+    def eval_points(self, p, fea_du=None, vol_bound=None, **kwargs):
         ''' Evaluates the occupancy values for the points.
 
         Args:
@@ -348,9 +359,20 @@ class Generator3D(object):
                         occ_hat = self.model.decode(pi_in, c, **kwargs).logits
                     occ_hats.append(occ_hat.squeeze(0).detach().cpu())
             else:
-                pi = pi.unsqueeze(0).to(self.device)
+                fea_type = 'grid'
+                
+                pi_in = pi.unsqueeze(0).to(self.device)
+                pi_in = {'p': pi_in}
+                p_n = {}
+                
+                p_n[fea_type] = normalize_coord(pi.clone().unsqueeze(0), self.vol_range, plane=fea_type).to(self.device)
+                pi_in['p_n'] = p_n
+                
+                c = {}
+                c['grid'] = fea_du
                 with torch.no_grad():
-                    occ_hat = self.model.decode(pi, c, **kwargs).logits
+                    occ_hat = self.model.decode(pi_in, c, **kwargs).logits
+                    
                 occ_hats.append(occ_hat.squeeze(0).detach().cpu())
 
         occ_hat = torch.cat(occ_hats, dim=0)

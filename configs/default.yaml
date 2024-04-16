@@ -50,6 +50,7 @@ training:
   n_workers: 4
   n_workers_val: 4
   gt_query: false
+  monitor_gpu_usage: false 
 test:
   threshold: 0.5
   eval_mesh: true

@@ -18,26 +18,28 @@ data:
   input_vol: 1.2
   query_vol: 1.0
 model:
-  encoder: pointnet_local_pool
+  local_coord: True
+  encoder: pointnet_crop_local_pool_latent
   encoder_kwargs:
-    hidden_dim: 32
-    plane_type: 'grid'
     grid_resolution: 24
-    pos_encoding: True
+    hidden_dim: 32
+    plane_type: ['grid']
     unet3d: True
     unet3d_kwargs:
-      num_levels: 3
+      num_levels: 3 # define the receptive field, 3 -> 32, 4 -> 64
       f_maps: 32
       in_channels: 32
       out_channels: 32
-  decoder: simple_local      
+    pos_encoding: sin_cos
+  decoder: simple_local_crop
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest
     hidden_size: 32
+  pos_encoding: sin_cos
   c_dim: 32
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_size_mixed_0.6_1.6
-  batch_size: 64
+  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6
+  batch_size: 256
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 1000
@@ -48,7 +50,8 @@ training:
   n_workers: 8
   n_workers_val: 4
   reset_training: true
-  starting_model: aug_model_150000.pt
+  starting_model: model.pt
+  monitor_gpu_usage: false 
   # starting_model: model.pt
 test:
   threshold: 0.2
