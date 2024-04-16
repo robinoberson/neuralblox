@@ -38,7 +38,7 @@ model:
   pos_encoding: sin_cos
   c_dim: 32
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_size_mixed_0.6_1.6
+  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6
   batch_size: 256
   model_selection_metric: iou
   model_selection_mode: maximize
