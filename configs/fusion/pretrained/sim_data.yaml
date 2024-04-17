@@ -18,7 +18,7 @@ data:
 test:
   threshold: 0.6
   # model_file: /home/roberson/MasterThesis/master_thesis/neuralblox/pretrained_models/backbone/shapenet_grid24_pe.pt
-  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_size_mixed_0.6_1.6/aug_model_250000.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_100000.pt
   merging_model_file_robot: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_16_16/model_merging.pt
   merging_model_file_mesh: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_16_16/model_merging.pt
   merging_model_file: /scratch2/roberson/neuralblox/out_fusion/redwood/robot_16_16/model_merging.pt
