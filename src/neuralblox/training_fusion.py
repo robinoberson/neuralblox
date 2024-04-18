@@ -73,13 +73,13 @@ class Trainer(BaseTrainer):
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 3), input_crop_size, query_crop_size)
 
         # Encode latents 
-        # latent_map_sampled = self.encode_latent_map(inputs, self.vol_bound_all)
+        latent_map_sampled = self.encode_latent_map(inputs, self.vol_bound_all)
         # Stack latents 
-        # latent_map_sampled_neighbored = self.stack_neighbors(latent_map_sampled, vol_bound_all)
-        # latent_map_sampled_stacked = self.stack_latents(latent_map_sampled)
+        latent_map_sampled_neighbored = self.stack_neighbors(latent_map_sampled, vol_bound_all)
+        latent_map_sampled_stacked = self.stack_latents(latent_map_sampled)
 
         # Merge latents
-        # latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked)        
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked)        
         
         
         
@@ -88,7 +88,7 @@ class Trainer(BaseTrainer):
         # Merge latents 
         
         
-        # return latent_map_sampled
+        return latent_map_sampled_merged
     
     def merge_latent_map(self, latent_map):
         H, W, D, c, h, w, d = latent_map.size()
