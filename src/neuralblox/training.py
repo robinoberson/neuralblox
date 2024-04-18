@@ -169,12 +169,12 @@ class Trainer(BaseTrainer):
         occ = data.get('points.occ').to(device)
         inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device)
         
-        is_zero = torch.all(torch.abs(inputs) == 0, dim=(1, 2))
-        zero_indices = torch.nonzero(is_zero).squeeze()
+        # is_zero = torch.all(inputs == 0, dim=(1, 2))
+        # zero_indices = torch.nonzero(is_zero).squeeze()
 
-        if zero_indices.numel() > 0:
-            print("Indices where row contains only zeros:")
-            print(zero_indices)
+        # if zero_indices.numel() > 0:
+        #     print("Indices where row contains only zeros:")
+        #     print(zero_indices)
 
         if (DEGREES != 0):
             inputs, rotation = self.rotate_points(inputs, DEGREES=DEGREES)
