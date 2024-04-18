@@ -93,7 +93,7 @@ data_vis_list = []
 # Build a data dictionary for visualization
 print("Build a data dictionary for visualization")
 iterator = iter(vis_loader)
-for i in trange(int(len(vis_loader)/1)):
+for i in trange(int(len(vis_loader)/100)):
     data_vis = next(iterator)
     idx = data_vis['idx'].item()
     model_dict = val_dataset.get_model_dict(idx)
@@ -119,7 +119,6 @@ generator = config.get_generator(model, cfg, device=device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
-
 
 try:
     if reset_training:
@@ -222,7 +221,7 @@ while True:
         #     profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
             
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:
+        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:

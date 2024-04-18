@@ -106,6 +106,10 @@ def compute_iou(occ1, occ2):
     area_union = (occ1 | occ2).astype(np.float32).sum(axis=-1)
     area_intersect = (occ1 & occ2).astype(np.float32).sum(axis=-1)
 
+    if area_union < 0.01:
+        max_area = np.ones_like(occ1).astype(np.float32).sum(axis=-1)
+        return 1 - occ2.astype(np.float32).sum(axis=-1) / max_area
+
     iou = (area_intersect / area_union)
 
     return iou

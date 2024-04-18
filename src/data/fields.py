@@ -313,7 +313,11 @@ class PointCloudField(Field):
         }
 
         if self.transform is not None:
-            data = self.transform(data)
+            all_zeros = np.all(points == 0)
+            if all_zeros: #Do not apply noise to 0 inputs 
+                data = self.transform.transforms[0](data)
+            else:
+                data = self.transform(data)
 
         return data
 

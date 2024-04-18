@@ -5,6 +5,7 @@ data:
   classes: null
   # classes: ['04530566']
   path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6
+  # path: /media/roberson/T7/data/backbone_data/window_size_mixed_0.6_1.6_empty
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
