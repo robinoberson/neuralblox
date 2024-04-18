@@ -93,7 +93,7 @@ data_vis_list = []
 # Build a data dictionary for visualization
 print("Build a data dictionary for visualization")
 iterator = iter(vis_loader)
-for i in trange(int(len(vis_loader)/100)):
+for i in trange(int(len(vis_loader)/1)):
     data_vis = next(iterator)
     idx = data_vis['idx'].item()
     model_dict = val_dataset.get_model_dict(idx)
