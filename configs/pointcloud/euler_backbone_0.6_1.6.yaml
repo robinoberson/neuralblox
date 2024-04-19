@@ -45,6 +45,7 @@ training:
   print_every: 1000
   visualize_every: 10000
   validate_every: 10000
+  validate_loss_every: 1000
   checkpoint_every: 2000
   backup_every: 10000
   n_workers: 8

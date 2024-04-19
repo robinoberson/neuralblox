@@ -7,14 +7,16 @@ class BaseTrainer(object):
     ''' Base trainer class.
     '''
 
-    def evaluate(self, val_loader):
+    def evaluate(self, val_loader, reduce_size_testing=False):
         ''' Performs an evaluation.
         Args:
             val_loader (dataloader): pytorch dataloader
         '''
         eval_list = defaultdict(list)
-
-        for data in tqdm(val_loader):
+            
+        for batch_idx, data in enumerate(tqdm(val_loader, desc='Evaluate IoU')):
+            if batch_idx > 10 and reduce_size_testing:
+                break
             eval_step_dict = self.eval_step(data)
 
             for k, v in eval_step_dict.items():

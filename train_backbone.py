@@ -3,6 +3,8 @@ from comet_ml.integration.pytorch import log_model
 
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from tensorboardX import SummaryWriter
 import numpy as np
 import os
@@ -13,7 +15,7 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 from collections import defaultdict
 import shutil
-from tqdm import trange
+from tqdm import trange, tqdm
 import pickle
 import cProfile
 import pstats
@@ -29,16 +31,23 @@ experiment = Experiment(
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.'
 )
+parser.add_argument('--config', type=str, help='Path to config file.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
 parser.add_argument('--exit-after', type=int, default=-1,
                     help='Checkpoint and exit after specified number of seconds'
                          'with exit code 2.')
+parser.add_argument('--fast-testing', action='store_true', help='Enable fast testing mode.')
+
 
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
+reduce_size_testing = args.fast_testing
+if args.fast_testing:
+    print('Fast testing mode enabled. Dividing dataset by %d' % reduce_size_testing)
+    
 # Set t0
 t0 = time.time()
 
@@ -93,7 +102,12 @@ data_vis_list = []
 # Build a data dictionary for visualization
 print("Build a data dictionary for visualization")
 iterator = iter(vis_loader)
-for i in trange(int(len(vis_loader)/1)):
+if reduce_size_testing:
+    len_vis = 10
+else:
+    len_vis = len(vis_loader)
+    
+for i in trange(len_vis, desc='Vis dict'):
     data_vis = next(iterator)
     idx = data_vis['idx'].item()
     model_dict = val_dataset.get_model_dict(idx)
@@ -117,6 +131,8 @@ generator = config.get_generator(model, cfg, device=device)
 
 # Intialize training
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.3, patience=5)
+
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
@@ -155,6 +171,7 @@ print_every = cfg['training']['print_every']
 checkpoint_every = cfg['training']['checkpoint_every']
 validate_every = cfg['training']['validate_every']
 visualize_every = cfg['training']['visualize_every']
+validate_loss_every = cfg['training']['validate_loss_every']
 
 # Print model
 nparameters = sum(p.numel() for p in model.parameters())
@@ -216,13 +233,8 @@ while True:
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
-        # if it - it0 == 1100:
-        #     profiler.disable()
-        #     print(f'Dumping profiler stats')
-        #     profiler.dump_stats('/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/train.prof')
-            
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:
+        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -242,6 +254,35 @@ while True:
                 with open(export_name_data, 'wb') as f:
                     pickle.dump(data_vis['data'], f)
                 
+        if validate_loss_every > 0 and (it % validate_loss_every) == 0:
+            loss_val = 0
+            if reduce_size_testing:
+                len_val = 10
+            else:
+                len_val = len(val_loader) // 10
+            
+            # Randomly sample 1/10 of the validation loader
+            sampled_indices = torch.randperm(len(val_loader))[:len_val]
+            
+            total_iterations = len(val_loader)
+            with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
+                for batch_val_idx, batch_val in enumerate(val_loader):
+                    if batch_val_idx not in sampled_indices:
+                        continue
+                    
+                    loss_val += trainer.validate_step(batch_val)
+                    pbar.update(1)  # Manually update the tqdm progress bar
+            
+            loss_val /= len_val
+            logger.add_scalar('val/loss', loss_val, it)
+            print('Validation loss: %.4f' % (loss_val))
+            experiment.log_metric('val_loss', loss_val, step=it)
+            scheduler.step(loss_val)
+            for param_group in optimizer.param_groups:
+                lr = param_group['lr']
+                experiment.log_metric("learning_rate", lr, step=it)
+
+
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
@@ -258,7 +299,7 @@ while True:
             # experiment.log_asset("aug_model_%d.pt" % it)
         # Run validation
         if (validate_every > 0 and (it % validate_every) == 0) or (it0 + 1 == it):
-            eval_dict = trainer.evaluate(val_loader)
+            eval_dict = trainer.evaluate(val_loader, reduce_size_testing)
             metric_val = eval_dict[model_selection_metric]
             print('Validation metric (%s): %.4f'
                   % (model_selection_metric, metric_val))
@@ -267,7 +308,6 @@ while True:
                 logger.add_scalar('val/%s' % k, v, it)
                 experiment.log_metric(f'val_{k}', v, step=it)
 
-
             if model_selection_sign * (metric_val - metric_val_best) > 0:
                 metric_val_best = metric_val
                 print('New best model (loss %.4f)' % metric_val_best)
@@ -275,7 +315,9 @@ while True:
                                    loss_val_best=metric_val_best)
                 
                 # experiment.log_asset("model_best.pt")
-
+            
+            
+            # Update the learning rate scheduler based on validation loss
         # Exit if necessary
         if exit_after > 0 and (time.time() - t0) >= exit_after:
             print('Time limit reached. Exiting.')

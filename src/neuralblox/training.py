@@ -72,6 +72,17 @@ class Trainer(BaseTrainer):
 
         return loss.item()
     
+    def validate_step(self, data, DEGREES = 0):
+        ''' Performs an evaluation step.
+
+        Args:
+            data (dict): data dictionary
+            DEGREES (integer): degree range in which object is going to be rotated
+        '''
+        self.model.eval()
+        loss = self.compute_loss(data, DEGREES = DEGREES)
+        return loss.item()
+    
     def eval_step(self, data):
         ''' Performs an evaluation step.
 
