@@ -168,7 +168,14 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         c = c.permute(0, 2, 1)
         if index.max() < self.reso_grid ** 3:
             fea_grid = c.new_zeros(c.size(0), self.c_dim, self.reso_grid ** 3)
-            fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
+            fea_grid = scatter_mean(c, index, out = fea_grid)  # B x c_dim x reso^3
+            
+            # #save index and c 
+            # import pickle 
+            # with open('/home/roberson/MasterThesis/master_thesis/Playground/Training/neighbours/index.pkl', 'wb') as f:
+            #     pickle.dump(index, f)
+            # with open('/home/roberson/MasterThesis/master_thesis/Playground/Training/neighbours/c.pkl', 'wb') as f:
+            #     pickle.dump(c, f)
         else:
             fea_grid = scatter_mean(c, index)  # B x c_dim x reso^3
             if fea_grid.shape[-1] > self.reso_grid ** 3:  # deal with outliers

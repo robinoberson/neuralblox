@@ -51,10 +51,10 @@ class Conv3D_one_input(nn.Module):
         num_channels (int): number of channels
     '''
 
-    def __init__(self, num_channels_in = 256, num_channels_out = 128):
+    def __init__(self, num_channels_in = 128, num_channels_out = 128):
         super().__init__()
-        self.conv3d0 = nn.Conv3d(num_channels_in, int(num_channels_out), kernel_size= 3, padding = 0, stride = 2)
-        self.conv3d1 = nn.Conv3d(int(num_channels_out), int(num_channels_out), kernel_size=3, padding=0)
+        self.conv3d0 = nn.Conv3d(num_channels_in, int(num_channels_out), kernel_size= 3, padding = 1)
+        self.conv3d1 = nn.Conv3d(int(num_channels_out), int(num_channels_out), kernel_size=3, padding=1)
         self.activation = nn.ReLU()
 
     def forward(self, fea):

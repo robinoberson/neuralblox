@@ -413,6 +413,10 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
     # normalize to [0, 1]
     x = normalize_coord(p, vol_range, plane=plane)
     
+    # bbmin = torch.min(x, dim=1)[0].squeeze()
+    # bbmax = torch.max(x, dim=1)[0].squeeze()
+
+    
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)
     else: #* pytorch tensor

@@ -41,6 +41,7 @@ class Trainer(BaseTrainer):
         self.factor = 2**unet_depth
         self.reso = None
         self.stack_latents = stack_latents
+        self.unet = None
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -71,15 +72,18 @@ class Trainer(BaseTrainer):
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs)
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 3), input_crop_size, query_crop_size)
+        inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound_all)
 
         # Encode latents 
-        latent_map_sampled = self.encode_latent_map(inputs, self.vol_bound_all)
-        # Stack latents 
-        latent_map_sampled_neighbored = self.stack_neighbors(latent_map_sampled, vol_bound_all)
-        latent_map_sampled_stacked = self.stack_latents(latent_map_sampled)
+        latent_map_sampled = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid)
+        return latent_map_sampled
+        # # Stack latents 
+        latent_map_sampled_neighbored = self.stack_neighbors(latent_map_sampled, self.vol_bound_all)
+        # return latent_map_sampled_neighbored
+        # latent_map_sampled_stacked = self.stack_latents(latent_map_sampled)
 
-        # Merge latents
-        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked)        
+        # # Merge latents
+        # latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked)        
         
         
         
@@ -88,7 +92,7 @@ class Trainer(BaseTrainer):
         # Merge latents 
         
         
-        return latent_map_sampled_merged
+        # return latent_map_sampled_merged
     
     def merge_latent_map(self, latent_map):
         H, W, D, c, h, w, d = latent_map.size()
@@ -99,12 +103,6 @@ class Trainer(BaseTrainer):
         
         latent_map = self.model_merge(fea_dict)
         return latent_map
-    
-    def stack_latents(self, latent_map):
-        n_in, H, W, D, c, h, w, d = latent_map.shape
-        latent_map_stacked = torch.reshape(latent_map, (H, W, D, c*n_in, h, w, d))
-        return latent_map_stacked
-
 
     def stack_neighbors(self, latent_map, vol_bound):
         n_in, n_crops, c, h, w, d = latent_map.shape
@@ -112,37 +110,73 @@ class Trainer(BaseTrainer):
 
         latent_map = torch.reshape(latent_map, (n_in, H, W, D, c, h, w, d))
         
-        latent_map_neighbored = torch.zeros(n_in, H-2, W-2, D-2, c, h*3, w*3, d*3).to(self.device) #take padding off
+        latent_map_neighbored = torch.zeros(H-2, W-2, D-2, c*n_in, h*3, w*3, d*3).to(self.device) #take padding off
 
+        #TODO: Rework with unfolding
         # Stack neighbors and take padding in account
         for idx_n_in in range(n_in):
             for i in range(1, H - 1):
                 for j in range(1, W - 1):
                     for k in range(1, D - 1):
                         stacked_vector = latent_map[idx_n_in, i-1:i+2, j-1:j+2, k-1:k+2].reshape(c, h*3, w*3, d*3)
-                        latent_map_neighbored[idx_n_in, i-1, j-1, k-1] = stacked_vector
+                        latent_map_neighbored[i-1, j-1, k-1, (idx_n_in)*c:(idx_n_in+1)*c] = stacked_vector
                         
         return latent_map_neighbored
     
-    def encode_latent_map(self, p_in, vol_bound_all):
-        n_crop = vol_bound_all['n_crop']
+    def encode_latent_map(self, inputs_distributed, occupied_voxels, vol_bound_valid):
+        n_inputs = occupied_voxels.shape[0]
+        n_crop = occupied_voxels.shape[1]
         d = self.reso//self.factor
-        latent_map = torch.zeros(p_in.shape[0], n_crop, self.hdim*self.factor, d, d, d).to(self.device)
-        
-        for idx_pin in range(p_in.shape[0]):
-            fea = torch.zeros(n_crop, self.hdim, self.reso, self.reso, self.reso).to(self.device)
+        latent_map = torch.zeros(n_inputs, n_crop, self.hdim*self.factor, d, d, d).to(self.device)
+    
+        for idx_pin in range(n_inputs):
+            n_valid_crops = torch.sum(occupied_voxels, dim=1)[idx_pin].item()
+            fea = torch.zeros(n_valid_crops, self.hdim, self.reso, self.reso, self.reso).to(self.device)
 
-            for i in range(n_crop):
+            idx_input_valid = 0
+            for bool_valid in occupied_voxels[idx_pin]:
+                if bool_valid:
+                    fea[idx_input_valid], self.unet = self.encode_crop_sequential(inputs_distributed[idx_pin][idx_input_valid].unsqueeze(0).float(), self.device, vol_bound = vol_bound_valid[idx_pin][idx_input_valid])
+            
+                    idx_input_valid += 1
+            
+            _, latent_map[idx_pin, occupied_voxels[idx_pin]] = self.unet(fea) #down and upsample
+            
+        
+            
+            
+            # fea = torch.zeros(n_crop, self.hdim, self.reso, self.reso, self.reso).to(self.device)
+
+            # for i in range(n_crop):
                 
-                inputs_crop = self.get_input_crop(p_in[idx_pin].unsqueeze(0), vol_bound_all['input_vol'][i])
-                if inputs_crop.shape[0] == 0:
-                    inputs_crop = torch.zeros(100, 3).to(self.device) + torch.tensor(vol_bound_all['input_vol'][i][0]).to(self.device)
-                fea[i], unet = self.encode_crop_sequential(inputs_crop.unsqueeze(0).float(), self.device, vol_bound = vol_bound_all['input_vol'][i])
-            torch.cuda.empty_cache()
-            _, latent_map[idx_pin] = unet(fea) #down and upsample
+            #     inputs_crop = self.get_input_crop(p_in[idx_pin].unsqueeze(0), vol_bound_all['input_vol'][i])
+            #     if inputs_crop.shape[0] == 0:
+            #         latent_map[idx_pin, i] = torch.zeros(self.hdim, self.reso, self.reso, self.reso).to(self.device)
+            #         # inputs_crop = torch.zeros(100, 3).to(self.device) + torch.tensor(vol_bound_all['input_vol'][i][0]).to(self.device)
+            #     else: 
+            #         fea[i], unet = self.encode_crop_sequential(inputs_crop.unsqueeze(0).float(), self.device, vol_bound = vol_bound_all['input_vol'][i])
+            #         _, latent_map[idx_pin] = unet(fea) #down and upsample
         
         return latent_map
+    
+    def distribute_inputs(self, p_input, vol_bound_all):
+        n_inputs = p_input.shape[0]
+        occpied_voxels = torch.zeros(n_inputs, vol_bound_all['n_crop'], dtype=torch.bool).to(self.device)
+        inputs_croped_list = [[] for i in range(n_inputs)]
+        vol_bound_valid = [[] for i in range(n_inputs)]
         
+        for idx_pin in range(n_inputs):
+            for i in range(vol_bound_all['n_crop']):
+                inputs_crop = self.get_input_crop(p_input[idx_pin], vol_bound_all['input_vol'][i])
+                
+                if inputs_crop.shape[0] > 0:
+                    inputs_croped_list[idx_pin].append(inputs_crop)
+                    vol_bound_valid[idx_pin].append(vol_bound_all['input_vol'][i])
+                    occpied_voxels[idx_pin, i] = True
+                    
+        return inputs_croped_list, occpied_voxels, vol_bound_valid
+
+            
     def encode_crop_sequential(self, inputs, device, vol_bound, fea = 'grid'):
         ''' Encode a crop to feature volumes
 
