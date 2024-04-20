@@ -44,6 +44,7 @@ training:
   checkpoint_every: 1000
   validate_every: 2000
   backup_every: 100000
+  validate_loss_every: 1000
   eval_sample: false
   model_selection_metric: loss
   model_selection_mode: minimize
