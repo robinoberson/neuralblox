@@ -131,7 +131,7 @@ generator = config.get_generator(model, cfg, device=device)
 
 # Intialize training
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.3, patience=5)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=10)
 
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
