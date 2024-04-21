@@ -93,7 +93,9 @@ checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging, optimizer = o
 
 try:
     checkpoint_io.load(os.path.join(os.getcwd(), cfg['training']['backbone_file']))
-    load_dict = checkpoint_io_merging.load('model_merging.pt')
+    # load_dict = checkpoint_io_merging.load('model_merging.pt')
+    load_dict = dict()
+
 except FileExistsError:
     load_dict = dict()
 

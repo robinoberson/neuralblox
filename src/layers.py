@@ -48,19 +48,25 @@ class Conv3D_one_input(nn.Module):
     ''' 2-layer 3D convolutional networks.
 
     Args:
-        num_channels (int): number of channels
+        num_channels (list of int): number of channels for each layer
     '''
 
-    def __init__(self, num_channels_in = 128, num_channels_out = 128):
-        super().__init__()
-        self.conv3d0 = nn.Conv3d(num_channels_in, int(num_channels_out), kernel_size= 3, padding = 1)
-        self.conv3d1 = nn.Conv3d(int(num_channels_out), int(num_channels_out), kernel_size=3, padding=1)
+    def __init__(self, num_channels=[256, 224, 192, 160, 128]):
+        super(Conv3D_one_input, self).__init__()
+        
+        self.conv3d0 = nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0)
+        self.conv3d1 = nn.Conv3d(num_channels[1], num_channels[2], kernel_size=3, padding=1, stride=2)
+        self.conv3d2 = nn.Conv3d(num_channels[2], num_channels[3], kernel_size=3, padding=0)
+        self.conv3d3 = nn.Conv3d(num_channels[3], num_channels[4], kernel_size=3, padding=1)
+        
+        self.conv_layers = nn.ModuleList([self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3])
         self.activation = nn.ReLU()
 
     def forward(self, fea):
-        # Extract latent code
         z = fea['latent']
-        z = self.conv3d0(z)
-        z = self.conv3d1(self.activation(z))
+        
+        for conv_layer in self.conv_layers:
+            z = conv_layer(z)
+            z = self.activation(z)
 
         return z

@@ -387,6 +387,9 @@ class Generator3D(object):
             # projected coordinates normalized to the range of [0, 1]
             p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).unsqueeze(0).to(self.device)
         pi_in['p_n'] = p_n
+        
+        min_vals, _ = torch.min(p_n['grid'], dim=1)
+        max_vals, _ = torch.max(p_n['grid'], dim=1)
 
         # predict occupancy of the current crop
         with torch.no_grad():

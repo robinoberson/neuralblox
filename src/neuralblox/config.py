@@ -159,7 +159,6 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
 
     trainer = training_fusion.Trainer(
         model, model_merge, optimizer, 
-        stack_latents=stack_latents,
         device=device, input_type=input_type,
         vis_dir=vis_dir, threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],
