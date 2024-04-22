@@ -13,7 +13,6 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 import shutil
 from src import layers
-# import open3d as o3d
 
 experiment = Experiment(
   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
