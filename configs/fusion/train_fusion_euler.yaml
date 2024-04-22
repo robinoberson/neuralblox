@@ -15,7 +15,6 @@ data:
   return_category: true
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/first_test
-  # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
   batch_size: 8
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_new/aug_model_40000.pt
   # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
