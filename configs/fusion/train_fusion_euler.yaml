@@ -1,0 +1,23 @@
+inherit_from: configs/fusion/train_fusion.yaml
+data:
+  return_category: true
+  input_type: pointcloud_sequential
+  classes: null
+  # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
+  path: /cluster/scratch/roberson/data/fusion_high_res_clusterized_aligned/fusion_high_res_clusterized_aligned
+  path_gt: /cluster/scratch/roberson/data/fusion_high_res_clusterized_aligned_gt
+  gt_file_name: 'pointcloud.npz'
+  pointcloud_noise: 0.000
+  points_subsample: 8192
+  grid_resolution: 24
+  input_vol: 1.2
+  query_vol: 1.0
+  return_category: true
+training:
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/first_test
+  # out_dir: /scratch2/roberson/neuralblox/out_fusion/redwood/mesh
+  batch_size: 8
+  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_new/aug_model_40000.pt
+  # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
+  gt_query: false
+  stack_latents: true

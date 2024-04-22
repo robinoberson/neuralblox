@@ -76,65 +76,163 @@ class Trainer(BaseTrainer):
 
         # Encode latents 
         latent_map_sampled = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid)
-        # # Stack latents 
+        
+        # Stack latents 
         latent_map_sampled_stacked = self.stack_latents(latent_map_sampled, self.vol_bound_all)
 
         # Merge latents
-        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked)
-        # print(f'latent_map_sampled: {latent_map_sampled.shape}')  
-        # print(f'latent_map_sampled_merged: {latent_map_sampled_merged.shape}')      
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        
+        del latent_map_sampled, latent_map_sampled_stacked
+        torch.cuda.empty_cache()
         # Compute gt latent
-        inputs_distributed_gt, occupied_voxels_gt, vol_bound_valid_gt = self.distribute_inputs(points_gt, self.vol_bound_all['n_crop'], self.vol_bound_all['input_vol'])
-        latent_map_gt = self.get_latent_gt(points_gt)
+        latent_map_gt, occupied_voxels_gt = self.get_latent_gt(points_gt)
 
-        # Compute loss
+        # get logits
         random_points = torch.rand(1, self.query_n, 3).to(device)
-        query_points_sampled = self.get_query_points(random_points, query_size = 1, input_size = 1)
-        query_points_gt = self.get_query_points(random_points, query_size = query_crop_size, input_size = input_crop_size)
-        return query_points_sampled, query_points_gt
+        
+        logits_sampled, query_points_sampled = self.get_logits(latent_map_sampled_merged, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = 1, input_size = 1)
+        del latent_map_sampled_merged
+        torch.cuda.empty_cache()
+        
+        occupied_voxels_gt_unpadded = self.remove_padding_single_dim(occupied_voxels_gt.squeeze(0)).reshape(-1)
+        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = occupied_voxels_gt_unpadded, random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
+        
+        if logits_gt.shape != logits_sampled.shape:
+            print(logits_gt.shape, logits_sampled.shape)
+            raise ValueError
+        
+        
+        # compute cost
+        loss_logits = torch.nn.L1Loss(reduction='mean')
+        loss = 1 * loss_logits(logits_sampled, logits_gt)
+
+        loss.backward()
+        self.optimizer.step()
+        
+        # self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
+        
+        return loss
     
-        logits_sampled = self.get_logits_and_latent(latent_map_sampled_merged, query_points)
-        logits_gt = self.get_logits_and_latent(latent_map_gt, query_points)
+    # def visualize_logits(self, logits_gt, logits_sampled, query_points):
+    #     import open3d as o3d
         
-        # n_in, H, W, D, c, h, w, d = n_inputs, vol_bound_all['axis_n_crop'][0], vol_bound_all['axis_n_crop'][1], vol_bound_all['axis_n_crop'][2], 256, 18, 18, 18
-        # latent_map_sampled_stacked = torch.randn((H, W, D, c*n_in, h, w, d))
-        # Merge latents 
+    #     points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+    #     points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+
+    #     occ_gt = logits_gt.detach().cpu().numpy()
+    #     occ_sampled = logits_sampled.detach().cpu().numpy()
+
+    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-        return None
-        # return latent_map_sampled_merged
-    def get_logits_and_latent(self, latent_map, query_points):
+    #     values_gt = values_gt.reshape(-1)
+    #     values_sampled = values_sampled.reshape(-1)
+
+    #     threshold = 0.5
+
+    #     values_gt[values_gt < threshold] = 0
+    #     values_gt[values_gt >= threshold] = 1
+
+    #     values_sampled[values_sampled < threshold] = 0
+    #     values_sampled[values_sampled >= threshold] = 1
+
+    #     pcd_occ_gt = o3d.geometry.PointCloud()
+    #     pcd_unoccc_gt = o3d.geometry.PointCloud()
+    #     pcd_occ_sampled = o3d.geometry.PointCloud()
+    #     pcd_unoccc_sampled = o3d.geometry.PointCloud()
+
+    #     pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
+    #     pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
+
+    #     pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
+    #     pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
+
+    #     pcd_occ_gt.paint_uniform_color([0, 1, 0])
+    #     pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
+
+    #     pcd_occ_sampled.paint_uniform_color([1, 1, 0])
+    #     pcd_unoccc_sampled.paint_uniform_color([1, 1, 0])
+
+    #     o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
+        
+    def remove_padding_single_dim(self, tensor):
+        other_dims = tensor.shape[1:]
+        H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+        tensor = tensor.reshape(H, W, D, *other_dims)
+        return tensor[1:-1, 1:-1, 1:-1]
+    
+    def remove_padding(self, tensor):
+        is_latent = False
+        H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+
+        if len(tensor.shape) == 7:
+            H, W, D, c, h, w, d = tensor.shape
+            is_latent = True
+
+        elif len(tensor.shape) == 5:
+            _, c, h, w, d = tensor.shape
+            is_latent = True
+
+        elif len(tensor.shape) == 4:
+            n_in, H, W, D = tensor.shape
+
+        elif len(tensor.shape) == 2:
+            n_in = tensor.shape[0]
+
+        else:
+            raise ValueError
+        
+        if is_latent:
+            tensor = tensor.reshape(H, W, D, c, h, w, d)
+            return tensor[1:-1, 1:-1, 1:-1]
+        else:
+            return tensor.reshape(n_in, H, W, D)
+                
+    def get_logits(self, latent_map_full, occupied_voxels, random_points, query_size, input_size):
+        
+        n_crops_total = latent_map_full.shape[0]
+        n_crops_valid = occupied_voxels.sum().item()
+
+        query_points_stacked = self.get_query_points(random_points, occupied_voxels, query_size=query_size, input_size=input_size)
 
         # Get latent codes of valid crops
-        n_crops = latent_map.shape[0]
-        query_points_stacked = query_points.repeat(n_crops, 1, 1)
-        print(f'query_points_stacked: {query_points_stacked.shape}')
         kwargs = {}
         fea = {}
         fea['unet3d'] = self.unet
-        fea['latent'] = latent_map
+        fea['latent'] = latent_map_full[occupied_voxels]
 
-        p_r = self.model.decode(query_points, fea, **kwargs)
-        logits = p_r.logits
-
-        return logits
-    def get_query_points(self, random_points, query_size, input_size):
-        pi_in = {'p': random_points}
-        p_n = {}
-        p_n['grid'] = (random_points - 0.5) * query_size / input_size + 0.5
-        pi_in['p_n'] = p_n
-        query_points = pi_in
+        p_r = self.model.decode(query_points_stacked, fea, **kwargs)
+        logits_decoded = p_r.logits
+        logits = torch.full((n_crops_total, random_points.shape[1]), -100.).to(self.device)
+        logits[occupied_voxels] = logits_decoded
         
-        return query_points
+        return logits, query_points_stacked
+    def get_query_points(self, random_points, occupied_voxels, query_size, input_size):
+        n_crops_unpadded = (self.vol_bound_all['axis_n_crop'][0] - 2) * (self.vol_bound_all['axis_n_crop'][1] - 2) * (self.vol_bound_all['axis_n_crop'][2] - 2)
+        random_points_stacked = random_points.repeat(n_crops_unpadded, 1, 1)
+
+        centers = torch.from_numpy((self.vol_bound_all['input_vol'][:,1] - self.vol_bound_all['input_vol'][:,0])/2.0 + self.vol_bound_all['input_vol'][:,0]).to(self.device) #shape [n_crops, 3]
+        centers = self.remove_padding_single_dim(centers).reshape(-1,3)
+        centers = centers.unsqueeze(1)
+        
+        p = (random_points_stacked.clone() + centers)[occupied_voxels]
+        p_n = ((random_points_stacked.clone() - 0.5) * query_size / input_size + 0.5)[occupied_voxels]
+
+        p_n_dict = {'grid': p_n}
+                        
+        pi_in = {'p': p}
+        pi_in['p_n'] = p_n_dict
+        
+        return pi_in
     
     def get_latent_gt(self, points_gt):
         inputs_distributed_gt, occupied_voxels_gt, vol_bound_valid_gt = self.distribute_inputs(points_gt, self.vol_bound_all['n_crop'], self.vol_bound_all['input_vol'])
+        
         latent_map_gt = self.encode_latent_map(inputs_distributed_gt, occupied_voxels_gt, vol_bound_valid_gt).squeeze(0)
-        H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
-        _, c, h, w, d = latent_map_gt.shape
-        latent_map_gt = latent_map_gt.reshape(H, W, D, c, h, w, d)
-        latent_map_gt = latent_map_gt[1:-1, 1:-1, 1:-1] #take padding off
+        latent_map_gt = self.remove_padding(latent_map_gt)
 
-        return latent_map_gt
+        return latent_map_gt.reshape(-1, *tuple(latent_map_gt.shape[3:])), occupied_voxels_gt
     def merge_latent_map(self, latent_map):
         H, W, D, c, h, w, d = latent_map.size()
         latent_map = latent_map.reshape(-1, c, h, w, d)

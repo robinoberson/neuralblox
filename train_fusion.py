@@ -13,7 +13,7 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 import shutil
 from src import layers
-import open3d as o3d
+# import open3d as o3d
 
 experiment = Experiment(
   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
@@ -125,8 +125,8 @@ print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
 
-pcd = o3d.geometry.PointCloud()
-base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+# pcd = o3d.geometry.PointCloud()
+# base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
 init_it = True 
 
 while True:
@@ -162,7 +162,7 @@ while True:
 
         points_gt = torch.from_numpy(points_gt).to(device).float()
 
-        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso, gt_query, it, init_it = init_it, window=cfg['training']['batch_size'])
+        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso)
         init_it = False
         
         logger.add_scalar('train/loss', loss, it)

@@ -373,6 +373,9 @@ def normalize_coord(p, vol_range, plane='xz'):
     for dim in range(3):
         p[..., dim] = (p[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
 
+    if torch.min(p) < -0.0001 or torch.max(p) > 1.0001:
+        print('normalize_coord out of range: ', torch.min(p), torch.max(p))
+        
     if plane == 'xz':
         x = p[:, [0, 2]]
     elif plane =='xy':
@@ -416,7 +419,6 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
     # bbmin = torch.min(x, dim=1)[0].squeeze()
     # bbmax = torch.max(x, dim=1)[0].squeeze()
 
-    
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)
     else: #* pytorch tensor
