@@ -113,7 +113,7 @@ def get_generator(model, cfg, device):
     generator = method_dict[method].config.get_generator(model, cfg, device)
     return generator
 
-def get_generator_fusion(model, model_merge, sample_points, cfg, device):
+def get_generator_fusion(model, model_merge, cfg, sample_points = None, device = None):
     ''' Returns a generator instance.
 
     Args:
@@ -124,7 +124,7 @@ def get_generator_fusion(model, model_merge, sample_points, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    generator = method_dict[method].config.get_generator_fusion(model, model_merge, sample_points, cfg, device)
+    generator = method_dict[method].config.get_generator_fusion(model, model_merge, cfg, device, sample_points=sample_points)
     return generator
 
 # Datasets

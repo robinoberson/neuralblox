@@ -2,7 +2,7 @@ from torch import nn
 import os
 from src.encoder import encoder_dict
 from src.neuralblox import models, training, training_fusion
-from src.neuralblox import generation, generation_fusion
+from src.neuralblox import generation, generation_fusion, generation_fusion_neighbors
 from src import data
 from src.common import decide_total_volume_range, update_reso
 
@@ -150,12 +150,12 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
     '''
     threshold = cfg['test']['threshold']
     out_dir = cfg['training']['out_dir']
+    stack_latents = cfg['training']['stack_latents']
     vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
     unet_depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] - 1
-    stack_latents = cfg['training']['stack_latents']
 
     trainer = training_fusion.Trainer(
         model, model_merge, optimizer, 
@@ -224,7 +224,7 @@ def get_generator(model, cfg, device, **kwargs):
     return generator
 
 
-def get_generator_fusion(model, model_merge, sample_points, cfg, device, **kwargs):
+def get_generator_fusion(model, model_merge, cfg, device, sample_points=None, **kwargs):
     ''' Returns the generator object.
 
     Args:
@@ -235,7 +235,7 @@ def get_generator_fusion(model, model_merge, sample_points, cfg, device, **kwarg
         device (device): pytorch device
     '''
 
-    if cfg['data']['input_type'] == 'pointcloud_crop':
+    if cfg['data']['input_type'] == 'pointcloud_crop' or cfg['data']['input_type'] == 'pointcloud_sequential':
         # calculate the volume boundary
         query_vol_metric = cfg['data']['padding'] + 1
         unit_size = cfg['data']['unit_size']
@@ -259,31 +259,45 @@ def get_generator_fusion(model, model_merge, sample_points, cfg, device, **kwarg
         vol_bound = {'query_crop_size': query_vol_size,
                      'input_crop_size': input_vol_size,
                      'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
-                     'reso': grid_reso}
-
+                     'reso': grid_reso}          
     else:
         vol_bound = None
         vol_info = None
 
-    generator = generation_fusion.Generator3D(
-        model,
-        model_merge,
-        sample_points,
-        device=device,
-        threshold=cfg['test']['threshold'],
-        resolution0=cfg['generation']['resolution_0'],
-        upsampling_steps=cfg['generation']['upsampling_steps'],
-        refinement_step=cfg['generation']['refinement_step'],
-        input_type=cfg['data']['input_type'],
-        padding=cfg['data']['padding'],
-        vol_info=vol_info,
-        vol_bound=vol_bound,
-        voxel_threshold=voxel_threshold,
-        boundary_interpolation=boundary_interpolation,
-        unet_hdim = unet_hdim,
-        unet_depth = unet_depth,
-        max_byte_size=cfg['generation']['max_byte_size']
-    )
+    if cfg['generation']['generator_type'] == 'neighbors':
+        generator = generation_fusion_neighbors.Generator3DNeighbors(
+            model,
+            model_merge,
+            threshold=cfg['test']['threshold'],
+            device=device,
+            resolution0=cfg['generation']['resolution_0'],
+            upsampling_steps=cfg['generation']['upsampling_steps'],
+            padding=cfg['data']['padding'],
+            vol_bound=vol_bound,
+            voxel_threshold=voxel_threshold,
+        )
+        
+    else:
+        generator = generation_fusion.Generator3D(
+            model,
+            model_merge,
+            sample_points,
+            device=device,
+            threshold=cfg['test']['threshold'],
+            resolution0=cfg['generation']['resolution_0'],
+            upsampling_steps=cfg['generation']['upsampling_steps'],
+            refinement_step=cfg['generation']['refinement_step'],
+            input_type=cfg['data']['input_type'],
+            padding=cfg['data']['padding'],
+            vol_info=vol_info,
+            vol_bound=vol_bound,
+            voxel_threshold=voxel_threshold,
+            boundary_interpolation=boundary_interpolation,
+            unet_hdim = unet_hdim,
+            unet_depth = unet_depth,
+            max_byte_size=cfg['generation']['max_byte_size']
+        )
+        
     return generator
 
 def get_data_fields(mode, cfg):

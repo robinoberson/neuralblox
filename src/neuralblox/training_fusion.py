@@ -72,6 +72,7 @@ class Trainer(BaseTrainer):
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs)
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 3), input_crop_size, query_crop_size)
+        
         inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound_all['n_crop'], self.vol_bound_all['query_vol'])
 
         # Encode latents 
@@ -313,7 +314,7 @@ class Trainer(BaseTrainer):
                     
         return inputs_croped_list, occpied_voxels, vol_bound_valid
 
-            
+
     def encode_crop_sequential(self, inputs, device, vol_bound, fea = 'grid'):
         ''' Encode a crop to feature volumes
 
@@ -362,7 +363,7 @@ class Trainer(BaseTrainer):
         vol_bound = {}
 
         lb = torch.min(inputs, dim=0).values.cpu().numpy() - 0.01 - query_crop_size #Padded once
-        ub = torch.max(inputs, dim=0).values.cpu().numpy() + 0.01 + query_crop_size
+        ub = torch.max(inputs, dim=0).values.cpu().numpy() + 0.01 + query_crop_size #Padded once
         
         lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,
                             lb[1]:ub[1]:query_crop_size,

@@ -231,7 +231,7 @@ class Generator3D(object):
             self.latent[crop_with_change] += latent_code 
 
         return self.latent
-
+    
     def get_to_be_processed_crops(self, inputs):
         ''' Obtain voxel indexes to be encoded
 
@@ -304,12 +304,6 @@ class Generator3D(object):
         return latent.view(self.n_crop_axis[0], self.n_crop_axis[1], self.n_crop_axis[2], self.unet_hdim*factor, d, d, d)
 
     def get_divided_latent(self, latent):
-        ''' Perform latent code fusion for all voxels
-
-        Args:
-            latent (torch.Tensor): summed latent codes in a map
-        '''
-
         factor = 2**self.unet_depth
         d = int(self.grid_reso/factor)
 
@@ -320,6 +314,12 @@ class Generator3D(object):
 
         return latent.view(self.n_crop_axis[0], self.n_crop_axis[1], self.n_crop_axis[2], self.unet_hdim*factor, d, d, d)
     
+    def merge_latent(self, latent):
+        self.model.eval()
+        self.model_merge.eval()
+        
+        
+            
     def get_crop_bound(self, inputs):
         ''' Divide a scene into crops, get boundary for each crop
 

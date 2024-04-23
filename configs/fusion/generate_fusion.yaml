@@ -53,6 +53,7 @@ test:
   model_file: model_best.pt
 generation:
   generation_dir: generation
+  generator_type: standard # standard / neighbors
   vis_n_outputs: 2
   sliding_window: True
   resolution_0: 64

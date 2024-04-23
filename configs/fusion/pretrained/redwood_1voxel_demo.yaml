@@ -17,7 +17,7 @@ data:
   input_vol: 1.2 # in meter
   query_vol: 1.0 # in meter
 test:
-  threshold: 0.05
+  threshold: 0.4
   model_file: pretrained_models/backbone/shapenet_grid24_pe.pt
   merging_model_file: pretrained_models/fusion/Window8_Reso24_AllScenes.pt
   out_dir: out_mesh
@@ -32,6 +32,6 @@ test:
   export_pointcloud: False
 generation:
   generation_dir: generation
-  resolution_0: 100 # resolution for each crop
+  resolution_0: 24 # resolution for each crop
   voxel_threshold: 0.01
   boundary_interpolation: True

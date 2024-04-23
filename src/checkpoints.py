@@ -65,6 +65,7 @@ class CheckpointIO(object):
             scalars = self.parse_state_dict(state_dict)
             return scalars
         else:
+            print('Warning: Could not find %s in checkpoint!' % filename)
             raise FileExistsError
 
     def load_url(self, url):
