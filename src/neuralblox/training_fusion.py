@@ -6,6 +6,7 @@ from src.common import (
 from src.training import BaseTrainer
 import numpy as np
 import pickle
+from torch.nn import functional as F
 
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -84,8 +85,8 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         
-        # del latent_map_sampled, latent_map_sampled_stacked
-        # torch.cuda.empty_cache()
+        del latent_map_sampled, latent_map_sampled_stacked
+        torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, occupied_voxels_gt = self.get_latent_gt(points_gt)
 
@@ -93,69 +94,74 @@ class Trainer(BaseTrainer):
         random_points = torch.rand(1, self.query_n, 3).to(device)
         
         logits_sampled, query_points_sampled = self.get_logits(latent_map_sampled_merged, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = 1, input_size = 1)
-        # del latent_map_sampled_merged
-        # torch.cuda.empty_cache()
+        del latent_map_sampled_merged
+        torch.cuda.empty_cache()
         
         occupied_voxels_gt_unpadded = self.remove_padding_single_dim(occupied_voxels_gt.squeeze(0)).reshape(-1)
-        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
+        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = occupied_voxels_gt_unpadded, random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
         
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
             raise ValueError
         
+        occ_gt = logits_gt.detach().cpu().numpy()
+        threshold = 0.5
+        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+        values_gt[values_gt < threshold] = 0
+        values_gt[values_gt >= threshold] = 1
         
         # compute cost
-        loss_logits = torch.nn.L1Loss(reduction='mean')
-        loss = 1 * loss_logits(logits_sampled, logits_gt)
+        loss = F.binary_cross_entropy_with_logits(logits_sampled, values_gt, reduction='none')
+        # loss = 1 * loss_logits(logits_sampled, logits_gt)
 
         loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
+        self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
         
         return loss
     
-    # def visualize_logits(self, logits_gt, logits_sampled, query_points):
-    #     import open3d as o3d
+    def visualize_logits(self, logits_gt, logits_sampled, query_points):
+        import open3d as o3d
         
-    #     points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
-    #     points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+        points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+        points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
 
-    #     occ_gt = logits_gt.detach().cpu().numpy()
-    #     occ_sampled = logits_sampled.detach().cpu().numpy()
+        occ_gt = logits_gt.detach().cpu().numpy()
+        occ_sampled = logits_sampled.detach().cpu().numpy()
 
-    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-    #     values_gt = values_gt.reshape(-1)
-    #     values_sampled = values_sampled.reshape(-1)
+        values_gt = values_gt.reshape(-1)
+        values_sampled = values_sampled.reshape(-1)
 
-    #     threshold = 0.5
+        threshold = 0.5
 
-    #     values_gt[values_gt < threshold] = 0
-    #     values_gt[values_gt >= threshold] = 1
+        values_gt[values_gt < threshold] = 0
+        values_gt[values_gt >= threshold] = 1
 
-    #     values_sampled[values_sampled < threshold] = 0
-    #     values_sampled[values_sampled >= threshold] = 1
+        values_sampled[values_sampled < threshold] = 0
+        values_sampled[values_sampled >= threshold] = 1
 
-    #     pcd_occ_gt = o3d.geometry.PointCloud()
-    #     pcd_unoccc_gt = o3d.geometry.PointCloud()
-    #     pcd_occ_sampled = o3d.geometry.PointCloud()
-    #     pcd_unoccc_sampled = o3d.geometry.PointCloud()
+        pcd_occ_gt = o3d.geometry.PointCloud()
+        pcd_unoccc_gt = o3d.geometry.PointCloud()
+        pcd_occ_sampled = o3d.geometry.PointCloud()
+        pcd_unoccc_sampled = o3d.geometry.PointCloud()
 
-    #     pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
-    #     pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
+        pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
+        pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
 
-    #     pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
-    #     pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
+        pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
+        pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
 
-    #     pcd_occ_gt.paint_uniform_color([0, 1, 0])
-    #     pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
+        pcd_occ_gt.paint_uniform_color([0, 1, 0])
+        pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
 
-    #     pcd_occ_sampled.paint_uniform_color([1, 1, 0])
-    #     pcd_unoccc_sampled.paint_uniform_color([1, 1, 0])
+        pcd_occ_sampled.paint_uniform_color([1, 1, 0])
+        pcd_unoccc_sampled.paint_uniform_color([1, 1, 0])
 
-    #     o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
+        o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
         
     def remove_padding_single_dim(self, tensor):
         other_dims = tensor.shape[1:]
