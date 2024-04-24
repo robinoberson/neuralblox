@@ -4,7 +4,7 @@ data:
   input_type: pointcloud_sequential
   classes: ['scene_1', 'scene_2', 'scene_3', 'scene_4', 'scene_5']
   path: data/redwood_custom
-  pointcloud_n: 25000
+  pointcloud_n: 20000
   pointcloud_noise: 0.005
   points_subsample: 8192
   points_file: points.npz

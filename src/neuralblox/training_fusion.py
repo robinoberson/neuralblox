@@ -84,8 +84,8 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         
-        del latent_map_sampled, latent_map_sampled_stacked
-        torch.cuda.empty_cache()
+        # del latent_map_sampled, latent_map_sampled_stacked
+        # torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, occupied_voxels_gt = self.get_latent_gt(points_gt)
 
@@ -93,11 +93,11 @@ class Trainer(BaseTrainer):
         random_points = torch.rand(1, self.query_n, 3).to(device)
         
         logits_sampled, query_points_sampled = self.get_logits(latent_map_sampled_merged, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = 1, input_size = 1)
-        del latent_map_sampled_merged
-        torch.cuda.empty_cache()
+        # del latent_map_sampled_merged
+        # torch.cuda.empty_cache()
         
         occupied_voxels_gt_unpadded = self.remove_padding_single_dim(occupied_voxels_gt.squeeze(0)).reshape(-1)
-        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = occupied_voxels_gt_unpadded, random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
+        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
         
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
