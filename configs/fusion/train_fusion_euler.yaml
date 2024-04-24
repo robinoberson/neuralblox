@@ -15,7 +15,7 @@ data:
   query_vol: 1.0
   return_category: true
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_flat
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_flat_v2
   batch_size: 8
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_new/aug_model_100000.pt
   # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
