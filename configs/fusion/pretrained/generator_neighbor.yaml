@@ -8,7 +8,7 @@ data:
 test:
   threshold: 0.01
   # model_file: /home/roberson/MasterThesis/master_thesis/neuralblox/pretrained_models/backbone/shapenet_grid24_pe.pt
-  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_80000.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_100000.pt
   merging_model_file: /scratch2/roberson/neuralblox/out_fusion/neighbors/models/model_merging.pt
 
   out_dir: /scratch2/roberson/neuralblox/output
@@ -16,6 +16,6 @@ test:
 
 generation:
   generation_dir: generation
-  resolution_0: 24 # resolution for each crop
+  resolution_0: 100 # resolution for each crop
   voxel_threshold: 0.001
   generator_type: neighbors

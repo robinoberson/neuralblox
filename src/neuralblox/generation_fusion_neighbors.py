@@ -52,7 +52,7 @@ class Generator3DNeighbors(object):
         self.points_batch_size = points_batch_size
         self.threshold = threshold
         self.device = device
-        self.resolution0 = 16
+        self.resolution0 = resolution0
         self.upsampling_steps = upsampling_steps
         self.padding = padding
 
@@ -106,7 +106,7 @@ class Generator3DNeighbors(object):
         
         return latent_map_merged.reshape(H, W, D, *latent_map_merged.shape[1:])
 
-    def generate_latent_no_merge(self, data):
+    def generate_latent_no_merge(self, data: torch.Tensor):
         ''' Generates voxels of latent codes from input point clouds.
             Adapt for real-world scale.
 
@@ -114,21 +114,21 @@ class Generator3DNeighbors(object):
             data (tensor): data tensor
         '''
         inputs = data.get('inputs', [])
-
-        full_points = torch.from_numpy(np.concatenate(inputs, axis=0)).to(self.device)
-        self.vol_bound_all = self.get_crop_bound(full_points.view(-1, 3), self.input_crop_size, self.query_crop_size)
+                
+        vol_bound = self.get_crop_bound(inputs.view(-1, 3), self.input_crop_size, self.query_crop_size, padding=False)
         
-        vol_bound = self.get_crop_bound(full_points.view(-1, 3), self.input_crop_size, self.query_crop_size, padding=False)
         if self.vol_bound is not None:
             self.vol_bound['axis_n_crop'] = vol_bound['axis_n_crop']
             self.vol_bound['n_crop'] = vol_bound['n_crop']
             self.vol_bound['input_vol'] = vol_bound['input_vol']
             self.vol_bound['query_vol'] = vol_bound['query_vol']
         
-        inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound_all['n_crop'], self.vol_bound_all['query_vol'])
-        latent_map = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid)
-        latent_map = self.remove_padding(latent_map.squeeze(0))
-        return latent_map, inputs_distributed
+        inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound['n_crop'], self.vol_bound['query_vol'])
+        
+        latent_map = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid).squeeze(0)
+        H, W, D = self.vol_bound['axis_n_crop'][0], self.vol_bound['axis_n_crop'][1], self.vol_bound['axis_n_crop'][2]
+
+        return latent_map.reshape(H, W, D, *latent_map.shape[1:]), inputs_distributed
     
     def remove_padding(self, tensor):
         is_latent = False
