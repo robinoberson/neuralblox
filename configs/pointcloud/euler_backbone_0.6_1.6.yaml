@@ -58,7 +58,7 @@ test:
   threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
-  model_file: aug_model_100000.pt
+  model_file: model.pt
 generation:
   vis_n_outputs: 2
   refine: false
