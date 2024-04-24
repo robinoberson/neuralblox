@@ -6,7 +6,7 @@ from src.common import (
 from src.training import BaseTrainer
 import numpy as np
 import pickle
-from torch.nn import functional as F
+from torch.nn.functional import binary_cross_entropy_with_logits
 
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -104,64 +104,64 @@ class Trainer(BaseTrainer):
             print(logits_gt.shape, logits_sampled.shape)
             raise ValueError
         
-        occ_gt = logits_gt.detach().cpu().numpy()
         threshold = 0.5
-        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-        values_gt[values_gt < threshold] = 0
-        values_gt[values_gt >= threshold] = 1
+        values_gt = torch.exp(logits_gt) / (1 + torch.exp(logits_gt))
+        values_gt[values_gt < threshold] = 0.
+        values_gt[values_gt >= threshold] = 1.
         
         # compute cost
-        loss = F.binary_cross_entropy_with_logits(logits_sampled, values_gt, reduction='none')
+        loss_i = binary_cross_entropy_with_logits(logits_sampled, values_gt, reduction='none')
+        loss = loss_i.sum(-1).mean()
         # loss = 1 * loss_logits(logits_sampled, logits_gt)
 
         loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
+        # self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
         
         return loss
     
-    def visualize_logits(self, logits_gt, logits_sampled, query_points):
-        import open3d as o3d
+    # def visualize_logits(self, logits_gt, logits_sampled, query_points):
+    #     import open3d as o3d
         
-        points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
-        points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+    #     points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+    #     points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
 
-        occ_gt = logits_gt.detach().cpu().numpy()
-        occ_sampled = logits_sampled.detach().cpu().numpy()
+    #     occ_gt = logits_gt.detach().cpu().numpy()
+    #     occ_sampled = logits_sampled.detach().cpu().numpy()
 
-        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-        values_gt = values_gt.reshape(-1)
-        values_sampled = values_sampled.reshape(-1)
+    #     values_gt = values_gt.reshape(-1)
+    #     values_sampled = values_sampled.reshape(-1)
 
-        threshold = 0.5
+    #     threshold = 0.5
 
-        values_gt[values_gt < threshold] = 0
-        values_gt[values_gt >= threshold] = 1
+    #     values_gt[values_gt < threshold] = 0
+    #     values_gt[values_gt >= threshold] = 1
 
-        values_sampled[values_sampled < threshold] = 0
-        values_sampled[values_sampled >= threshold] = 1
+    #     values_sampled[values_sampled < threshold] = 0
+    #     values_sampled[values_sampled >= threshold] = 1
 
-        pcd_occ_gt = o3d.geometry.PointCloud()
-        pcd_unoccc_gt = o3d.geometry.PointCloud()
-        pcd_occ_sampled = o3d.geometry.PointCloud()
-        pcd_unoccc_sampled = o3d.geometry.PointCloud()
+    #     pcd_occ_gt = o3d.geometry.PointCloud()
+    #     pcd_unoccc_gt = o3d.geometry.PointCloud()
+    #     pcd_occ_sampled = o3d.geometry.PointCloud()
+    #     pcd_unoccc_sampled = o3d.geometry.PointCloud()
 
-        pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
-        pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
+    #     pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
+    #     pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
 
-        pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
-        pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
+    #     pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
+    #     pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
 
-        pcd_occ_gt.paint_uniform_color([0, 1, 0])
-        pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
+    #     pcd_occ_gt.paint_uniform_color([0, 1, 0])
+    #     pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
 
-        pcd_occ_sampled.paint_uniform_color([1, 1, 0])
-        pcd_unoccc_sampled.paint_uniform_color([1, 1, 0])
+    #     pcd_occ_sampled.paint_uniform_color([1, 1, 0])
+    #     pcd_unoccc_sampled.paint_uniform_color([1, 1, 0])
 
-        o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
+    #     o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
         
     def remove_padding_single_dim(self, tensor):
         other_dims = tensor.shape[1:]
