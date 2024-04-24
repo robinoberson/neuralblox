@@ -3,7 +3,7 @@ data:
   return_category: true
   input_type: pointcloud_sequential
   classes: null
-  pointcloud_n: 20000
+  pointcloud_n: 25000
   # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
   path: /cluster/scratch/roberson/data/fusion_flat
   path_gt: /cluster/scratch/roberson/data/fusion_flat_gt
@@ -15,7 +15,7 @@ data:
   query_vol: 1.0
   return_category: true
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_flat
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_easy
   batch_size: 8
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_new/aug_model_100000.pt
   # backbone_file: /media/roberson/T7/data/backbone_data/window_size_1_6/model_best.pt
