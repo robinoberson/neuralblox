@@ -3,6 +3,7 @@ data:
   return_category: true
   input_type: pointcloud_sequential
   classes: null
+  pointcloud_n: 20000
   # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
   path: /cluster/scratch/roberson/data/fusion_flat
   path_gt: /cluster/scratch/roberson/data/fusion_flat_gt
