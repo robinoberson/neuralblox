@@ -1,5 +1,5 @@
-from comet_ml import Experiment
-from comet_ml.integration.pytorch import log_model
+# from comet_ml import Experiment
+# from comet_ml.integration.pytorch import log_model
 
 import torch
 import torch.optim as optim
@@ -22,11 +22,11 @@ import pstats
 import pynvml
 
 
-experiment = Experiment(
-  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
-  project_name="backbone-training",
-  workspace="robinoberson"
-)
+# experiment = Experiment(
+#   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+#   project_name="backbone-training",
+#   workspace="robinoberson"
+# )
 # Arguments
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.'
@@ -192,7 +192,7 @@ if monitor_gpu_usage:
         # Initialize handles for each GPU
         handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
     except Exception as e:
-        experiment.log_text(f"Error: {e}")
+        # experiment.log_text(f"Error: {e}")
         print(f"Error: {e}")
         monitor_gpu_usage = False        
 
@@ -203,7 +203,7 @@ while True:
         it += 1
                 
         loss = trainer.train_step(batch)
-        experiment.log_metric('train_loss', loss, step=it)
+        # experiment.log_metric('train_loss', loss, step=it)
         
         if monitor_gpu_usage:
             total_memory_used = 0
@@ -215,14 +215,14 @@ while True:
                 
                 # Print free and used memory for each GPU
                 # print(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB")
-                experiment.log_text(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB") 
-                experiment.log_metric(f"GPU_{i}_memory_used", memory_used / (1024**2), step=it)
+                # experiment.log_text(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB") 
+                # experiment.log_metric(f"GPU_{i}_memory_used", memory_used / (1024**2), step=it)
                 # Calculate total memory usage
                 total_memory_used += memory_used
             
             # Print total memory usage across all GPUs
             # print(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
-            experiment.log_text(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
+            # experiment.log_text(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
                 
         logger.add_scalar('train/loss', loss, it)
 
@@ -231,7 +231,7 @@ while True:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
-            experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
+            # experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
         # Visualize output
         if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
@@ -276,11 +276,11 @@ while True:
             loss_val /= len_val
             logger.add_scalar('val/loss', loss_val, it)
             print('Validation loss: %.4f' % (loss_val))
-            experiment.log_metric('val_loss', loss_val, step=it)
+            # experiment.log_metric('val_loss', loss_val, step=it)
             scheduler.step(loss_val)
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']
-                experiment.log_metric("learning_rate", lr, step=it)
+                # experiment.log_metric("learning_rate", lr, step=it)
 
 
 
@@ -306,7 +306,7 @@ while True:
 
             for k, v in eval_dict.items():
                 logger.add_scalar('val/%s' % k, v, it)
-                experiment.log_metric(f'val_{k}', v, step=it)
+                # experiment.log_metric(f'val_{k}', v, step=it)
 
             if model_selection_sign * (metric_val - metric_val_best) > 0:
                 metric_val_best = metric_val

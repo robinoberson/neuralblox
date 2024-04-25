@@ -370,18 +370,28 @@ def normalize_coord(p, vol_range, plane='xz'):
         vol_range (numpy array): volume boundary
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
+    # Extract coordinates and occupancy flag
+    coord = p[..., :3]
+    occ = p[..., 3:]
+
+    # Normalize coordinates
     for dim in range(3):
-        p[..., dim] = (p[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+        coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+
+    # Concatenate normalized coordinates and occupancy flag
+    p_normalized = np.concatenate((coord, occ), axis=-1)
 
     if plane == 'xz':
-        x = p[:, [0, 2]]
+        x = p_normalized[:, :, [0, 2]]
     elif plane =='xy':
-        x = p[:, [0, 1]]
+        x = p_normalized[:, :, [0, 1]]
     elif plane =='yz':
-        x = p[:, [1, 2]]
+        x = p_normalized[:, :, [1, 2]]
     else:
-        x = p    
+        x = p_normalized
+    
     return x
+
 
 def coordinate2index(x, reso, coord_type='2d'):
     ''' Normalize coordinate to [0, 1] for unit cube experiments.
@@ -411,21 +421,23 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
     # normalize to [0, 1]
-    x = normalize_coord(p, vol_range, plane=plane)
+    temp = normalize_coord(p, vol_range, plane=plane)
+    x = temp[..., :3]
     
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)
     else: #* pytorch tensor
         x = (x * reso).long()
-    if x.shape[-1] == 2:
-        index = x[:, 0] + reso * x[:, 1]
-        index[index > reso**2] = reso**2
-    elif x.shape[-1] == 3:
-        index = x[:, :, 0] + reso * (x[:, :, 1] + reso * x[:, :, 2])
+    
+    if x.shape[-1] != 4:
+        raise ValueError('Wrong shape of x')
+    
+    index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
         # #print the number of elements > reso**3
         # print('%d elements > reso**3'%(torch.sum(index > reso**3).detach().cpu().numpy()))
         # print(torch.min(index), torch.max(index))
-        index[index > reso**3] = reso**3
+    index[index > reso**3] = reso**3
+    index += + reso**3 * temp[:, :, 3]
     
     return index[:, None, :]
 
