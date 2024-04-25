@@ -180,8 +180,8 @@ class Trainer(BaseTrainer):
         occ = data.get('points.occ').to(device)
         inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device)
         
-        ones_tensor = torch.ones_like(p[..., :1])  # Create a tensor of ones with the same shape as p[..., :1]
-        p = torch.cat((p, ones_tensor), dim=-1)  # Concatenate along the last dimension
+        ones_tensor = torch.ones_like(inputs[..., :1])  # Create a tensor of ones with the same shape as p[..., :1]
+        inputs = torch.cat((inputs, ones_tensor), dim=-1)  # Concatenate along the last dimension
 
         if (DEGREES != 0):
             inputs, rotation = self.rotate_points(inputs, DEGREES=DEGREES)

@@ -372,14 +372,14 @@ def normalize_coord(p, vol_range, plane='xz'):
     '''
     # Extract coordinates and occupancy flag
     coord = p[..., :3]
-    occ = p[..., 3:]
+    occ = p[..., 3]
 
     # Normalize coordinates
     for dim in range(3):
         coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
 
     # Concatenate normalized coordinates and occupancy flag
-    p_normalized = np.concatenate((coord, occ), axis=-1)
+    p_normalized = torch.cat((coord, occ), dim=-1)
 
     if plane == 'xz':
         x = p_normalized[:, :, [0, 2]]
