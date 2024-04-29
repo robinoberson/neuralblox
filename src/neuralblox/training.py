@@ -201,7 +201,8 @@ class Trainer(BaseTrainer):
         index = {}
         ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.grid_reso, plane=fea)
         index[fea] = ind
-        input_cur = add_key(inputs, index, 'points', 'index', device=device)
+        inputs_3d = inputs.clone()[..., :3]
+        input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
 
         if self.unet == None:
             fea, self.unet = self.model.encode_inputs(input_cur)

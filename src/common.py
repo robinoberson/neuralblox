@@ -372,7 +372,7 @@ def normalize_coord(p, vol_range, plane='xz'):
     '''
     # Extract coordinates and occupancy flag
     coord = p[..., :3]
-    occ = p[..., 3]
+    occ = p[..., 3].unsqueeze(-1)
 
     # Normalize coordinates
     for dim in range(3):
@@ -429,15 +429,12 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
     else: #* pytorch tensor
         x = (x * reso).long()
     
-    if x.shape[-1] != 4:
-        raise ValueError('Wrong shape of x')
-    
     index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
         # #print the number of elements > reso**3
         # print('%d elements > reso**3'%(torch.sum(index > reso**3).detach().cpu().numpy()))
         # print(torch.min(index), torch.max(index))
     index[index > reso**3] = reso**3
-    index += + reso**3 * temp[:, :, 3]
+    index += reso**3 * temp[:, :, 3].long()
     
     return index[:, None, :]
 
