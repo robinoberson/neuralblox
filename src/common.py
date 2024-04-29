@@ -423,19 +423,18 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
     # normalize to [0, 1]
     temp = normalize_coord(p, vol_range, plane=plane)
     x = temp[..., :3]
+    occ = temp[..., 3]
     
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)
-    else: #* pytorch tensor
+    else:  # Assuming it's a torch tensor
         x = (x * reso).long()
     
     index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
-        # #print the number of elements > reso**3
-        # print('%d elements > reso**3'%(torch.sum(index > reso**3).detach().cpu().numpy()))
-        # print(torch.min(index), torch.max(index))
+
     index[index > reso**3] = reso**3
-    index += reso**3 * temp[:, :, 3].long()
-    
+    index += reso**3 * occ.long()
+
     return index[:, None, :]
 
 def update_reso(reso, depth):

@@ -6,7 +6,7 @@ from src.common import coordinate2index, normalize_3d_coordinate, \
     map2local, positional_encoding
 from src.encoder.unet3d_noskipconnection import UNet3D
 from src.encoder.unet3d_noskipconnection_latent import UNet3D_noskipconnection_latent
-
+import math
 class LocalPoolPointnet(nn.Module):
     ''' PointNet-based encoder network with ResNet blocks for each point.
         Number of input points are fixed.
@@ -189,14 +189,18 @@ class PatchLocalPoolPointnetLatent(nn.Module):
     def generate_grid_features(self, index, c):
         # scatter grid features from points
         c = c.permute(0, 2, 1)
-        if index.max() < self.reso_grid ** 3:
-            fea_grid = c.new_zeros(c.size(0), self.c_dim, self.reso_grid ** 3)
-            fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
-        else:
-            fea_grid = scatter_mean(c, index)  # B x c_dim x reso^3
-            if fea_grid.shape[-1] > self.reso_grid ** 3:  # deal with outliers
-                fea_grid = fea_grid[:, :, :-1]
-        fea_grid = fea_grid.reshape(c.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        fea_grid = c.new_zeros(c.size(0), self.c_dim, 2 * self.reso_grid ** 3)
+        fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
+        
+        # current: 
+        # fea_grid = fea_grid.reshape(c.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        #option 1: 
+        fea_grid = fea_grid.reshape(c.size(0), 2* self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        # option 2:
+        fea_grid = fea_grid.reshape(c.size(0), 2, self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        # option 3: 
+        new_reso = math.ceil(((self.reso_grid ** 3) * 2) ** (1/3))
+        fea_grid = fea_grid.reshape(c.size(0), self.c_dim, new_reso, new_reso, new_reso)
 
         return fea_grid
 
