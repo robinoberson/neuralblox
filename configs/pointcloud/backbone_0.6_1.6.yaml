@@ -4,7 +4,7 @@ data:
   # classes: ['2024-03-27_11-27-45', '2024-03-27_11-27-52', '2024-03-27_11-27-57', '2024-03-27_11-28-03', '2024-03-27_11-28-34', '2024-03-27_11-28-35', '2024-03-27_11-30-06', '2024-03-27_11-30-07', '2024-03-27_11-30-08', '2024-03-27_11-30-09', '2024-03-27_11-30-10', '2024-03-27_11-30-11', '2024-03-27_11-30-12', '2024-03-27_11-30-13', '2024-03-27_11-30-14']
   classes: null
   # classes: ['04530566']
-  path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_euler_backup
+  path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_gt_empty
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
@@ -28,8 +28,8 @@ model:
     unet3d_kwargs:
       num_levels: 3 # define the receptive field, 3 -> 32, 4 -> 64
       f_maps: 32
-      in_channels: 32
-      out_channels: 32
+      in_channels: 64
+      out_channels: 64
     pos_encoding: sin_cos
   decoder: simple_local_crop
   decoder_kwargs:
@@ -43,7 +43,7 @@ training:
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 1000
-  visualize_every: 10000
+  visualize_every: 400
   validate_loss_every: 1000
   validate_every: 10000
   checkpoint_every: 2000

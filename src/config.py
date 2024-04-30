@@ -215,7 +215,8 @@ def get_inputs_field(mode, cfg):
             data.PointcloudNoise(cfg['data']['pointcloud_noise'])
         ])
         inputs_field = data.PointCloudField(
-            cfg['data']['pointcloud_file'], transform,
+            cfg['data']['pointcloud_file'], transform=transform, 
+            unpackbits=cfg['data']['points_unpackbits'],
             multi_files= cfg['data']['multi_files']
         )
     elif input_type == 'partial_pointcloud':

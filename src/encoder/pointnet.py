@@ -189,18 +189,28 @@ class PatchLocalPoolPointnetLatent(nn.Module):
     def generate_grid_features(self, index, c):
         # scatter grid features from points
         c = c.permute(0, 2, 1)
-        fea_grid = c.new_zeros(c.size(0), self.c_dim, 2 * self.reso_grid ** 3)
-        fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
-        
+        # fea_grid = c.new_zeros(c.size(0), self.c_dim, 2 * self.reso_grid ** 3) # 27648
+        # test = scatter_mean(c, index) #27649
+        # fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
         # current: 
         # fea_grid = fea_grid.reshape(c.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
         #option 1: 
-        fea_grid = fea_grid.reshape(c.size(0), 2* self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        # fea_grid = fea_grid.reshape(c.size(0), 2* self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
         # option 2:
-        fea_grid = fea_grid.reshape(c.size(0), 2, self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
-        # option 3: 
-        new_reso = math.ceil(((self.reso_grid ** 3) * 2) ** (1/3))
-        fea_grid = fea_grid.reshape(c.size(0), self.c_dim, new_reso, new_reso, new_reso)
+        # fea_grid = fea_grid.reshape(c.size(0), 2, self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+        # # option 3: 
+        # new_reso = math.ceil(((self.reso_grid ** 3) * 2) ** (1/3))
+        # fea_grid = fea_grid.reshape(c.size(0), self.c_dim, new_reso, new_reso, new_reso)
+
+        if index.max() < 2*self.reso_grid ** 3:
+            fea_grid = c.new_zeros(c.size(0), self.c_dim, 2 * self.reso_grid ** 3)
+            fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
+        else:
+            fea_grid = scatter_mean(c, index)  # B x c_dim x reso^3
+            if fea_grid.shape[-1] > 2 * self.reso_grid ** 3:  # deal with outliers
+                fea_grid = fea_grid[:, :, :-1]
+        fea_grid = fea_grid.reshape(c.size(0), 2*self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
+
 
         return fea_grid
 

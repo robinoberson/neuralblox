@@ -1,5 +1,5 @@
-# from comet_ml import Experiment
-# from comet_ml.integration.pytorch import log_model
+from comet_ml import Experiment
+from comet_ml.integration.pytorch import log_model
 
 import torch
 import torch.optim as optim
@@ -22,11 +22,11 @@ import pstats
 import pynvml
 
 
-# experiment = Experiment(
-#   api_key="PhozpUD8pYftjTWYPEI2hbrnw",
-#   project_name="backbone-training",
-#   workspace="robinoberson"
-# )
+experiment = Experiment(
+  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+  project_name="backbone-training",
+  workspace="robinoberson"
+)
 # Arguments
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.'
@@ -203,7 +203,7 @@ while True:
         it += 1
                 
         loss = trainer.train_step(batch)
-        # experiment.log_metric('train_loss', loss, step=it)
+        experiment.log_metric('train_loss', loss, step=it)
         
         if monitor_gpu_usage:
             total_memory_used = 0
@@ -234,7 +234,7 @@ while True:
             # experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
+        if visualize_every > 0 and (it % visualize_every) == 0:# and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -276,7 +276,7 @@ while True:
             loss_val /= len_val
             logger.add_scalar('val/loss', loss_val, it)
             print('Validation loss: %.4f' % (loss_val))
-            # experiment.log_metric('val_loss', loss_val, step=it)
+            experiment.log_metric('val_loss', loss_val, step=it)
             scheduler.step(loss_val)
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']

@@ -371,27 +371,23 @@ def normalize_coord(p, vol_range, plane='xz'):
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
     # Extract coordinates and occupancy flag
-    coord = p[..., :3]
-    occ = p[..., 3].unsqueeze(-1)
-
+    if p.shape[-1] == 4:
+        coord = p[..., :3]
+        occ = p[..., 3].unsqueeze(-1)
+    else:
+        coord = p
+        
     # Normalize coordinates
     for dim in range(3):
         coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
 
-    # Concatenate normalized coordinates and occupancy flag
-    p_normalized = torch.cat((coord, occ), dim=-1)
-
-    if plane == 'xz':
-        x = p_normalized[:, :, [0, 2]]
-    elif plane =='xy':
-        x = p_normalized[:, :, [0, 1]]
-    elif plane =='yz':
-        x = p_normalized[:, :, [1, 2]]
+    if p.shape[-1] == 4:
+        # Concatenate normalized coordinates and occupancy flag
+        x = torch.cat((coord, occ), dim=-1)
     else:
-        x = p_normalized
+        x = coord
     
     return x
-
 
 def coordinate2index(x, reso, coord_type='2d'):
     ''' Normalize coordinate to [0, 1] for unit cube experiments.
@@ -423,7 +419,8 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
     # normalize to [0, 1]
     temp = normalize_coord(p, vol_range, plane=plane)
     x = temp[..., :3]
-    occ = temp[..., 3]
+    if p.shape[-1] == 4:
+        occ = temp[..., 3]
     
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)

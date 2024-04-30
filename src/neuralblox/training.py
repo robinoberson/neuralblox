@@ -99,6 +99,9 @@ class Trainer(BaseTrainer):
         occ = data.get('points.occ').to(device)
 
         inputs = data.get('inputs', torch.empty(points.size(0), 0)).to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        inputs = torch.cat((inputs, inputs_occ), dim=-1)  # Concatenate along the last dimension
+
         voxels_occ = data.get('voxels')
 
         points_iou = data.get('points_iou').to(device)
@@ -123,7 +126,8 @@ class Trainer(BaseTrainer):
             index = {}
             ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
             index[fea_type] = ind
-            input_cur = add_key(inputs, index, 'points', 'index', device=device)
+            inputs_3d = inputs.clone()[..., :3]
+            input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
             
             fea, self.unet = self.model.encode_inputs(input_cur)
             fea_du, _ = self.unet(fea) #downsample and upsample 
@@ -178,11 +182,22 @@ class Trainer(BaseTrainer):
         device = self.device
         p = data.get('points').to(device)
         occ = data.get('points.occ').to(device)
-        inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device)
+        inputs = data.get('inputs').to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
         
-        ones_tensor = torch.ones_like(inputs[..., :1])  # Create a tensor of ones with the same shape as p[..., :1]
-        inputs = torch.cat((inputs, ones_tensor), dim=-1)  # Concatenate along the last dimension
+        inputs = torch.cat((inputs, inputs_occ), dim=-1)  # Concatenate along the last dimension
 
+        # import open3d as o3d
+        # pcd_occ = o3d.geometry.PointCloud()
+        # pcd_unocc = o3d.geometry.PointCloud()
+        
+        # pcd_occ.points = o3d.utility.Vector3dVector(inputs[0, inputs_occ[0, :, 0] == 1, :3].cpu().numpy())
+        # pcd_unocc.points = o3d.utility.Vector3dVector(inputs[0, inputs_occ[0, :, 0] == 0, :3].cpu().numpy())
+        # pcd_occ.paint_uniform_color([1, 0, 0])
+        # pcd_unocc.paint_uniform_color([0, 1, 0])
+        
+        # o3d.visualization.draw_geometries([pcd_occ, pcd_unocc])
+        
         if (DEGREES != 0):
             inputs, rotation = self.rotate_points(inputs, DEGREES=DEGREES)
             p = self.rotate_points(p, use_rotation_tensor=True)
