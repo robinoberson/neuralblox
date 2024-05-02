@@ -103,7 +103,7 @@ def compute_iou(occ1, occ2):
     occ2 = (occ2 >= 0.5)
 
     # Compute IOU
-    area_union = (occ1 | occ2).astype(np.float32).sum(axis=-1)
+    area_union = np.maximum(1,(occ1 | occ2).astype(np.float32).sum(axis=-1))
     area_intersect = (occ1 & occ2).astype(np.float32).sum(axis=-1)
 
     iou = (area_intersect / area_union)
@@ -370,20 +370,23 @@ def normalize_coord(p, vol_range, plane='xz'):
         vol_range (numpy array): volume boundary
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
-    for dim in range(3):
-        p[..., dim] = (p[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
-
-    if torch.min(p) < -0.0001 or torch.max(p) > 1.0001:
-        print('normalize_coord out of range: ', torch.min(p), torch.max(p))
-        
-    if plane == 'xz':
-        x = p[:, [0, 2]]
-    elif plane =='xy':
-        x = p[:, [0, 1]]
-    elif plane =='yz':
-        x = p[:, [1, 2]]
+    # Extract coordinates and occupancy flag
+    if p.shape[-1] == 4:
+        coord = p[..., :3]
+        occ = p[..., 3].unsqueeze(-1)
     else:
-        x = p    
+        coord = p
+        
+    # Normalize coordinates
+    for dim in range(3):
+        coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+
+    if p.shape[-1] == 4:
+        # Concatenate normalized coordinates and occupancy flag
+        x = torch.cat((coord, occ), dim=-1)
+    else:
+        x = coord
+    
     return x
 
 def coordinate2index(x, reso, coord_type='2d'):
@@ -414,25 +417,21 @@ def coord2index(p, vol_range, reso=None, plane='xz'):
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
     # normalize to [0, 1]
-    x = normalize_coord(p, vol_range, plane=plane)
+    temp = normalize_coord(p, vol_range, plane=plane)
+    x = temp[..., :3]
+    if p.shape[-1] == 4:
+        occ = temp[..., 3]
     
-    # bbmin = torch.min(x, dim=1)[0].squeeze()
-    # bbmax = torch.max(x, dim=1)[0].squeeze()
-
     if isinstance(x, np.ndarray):
         x = np.floor(x * reso).astype(int)
-    else: #* pytorch tensor
+    else:  # Assuming it's a torch tensor
         x = (x * reso).long()
-    if x.shape[-1] == 2:
-        index = x[:, 0] + reso * x[:, 1]
-        index[index > reso**2] = reso**2
-    elif x.shape[-1] == 3:
-        index = x[:, :, 0] + reso * (x[:, :, 1] + reso * x[:, :, 2])
-        # #print the number of elements > reso**3
-        # print('%d elements > reso**3'%(torch.sum(index > reso**3).detach().cpu().numpy()))
-        # print(torch.min(index), torch.max(index))
-        index[index > reso**3] = reso**3
     
+    index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
+
+    index[index > reso**3] = reso**3
+    index += reso**3 * occ.long()
+
     return index[:, None, :]
 
 def update_reso(reso, depth):

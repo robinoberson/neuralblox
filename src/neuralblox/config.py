@@ -308,6 +308,7 @@ def get_data_fields(mode, cfg):
         cfg (dict): imported yaml config
     '''
     points_transform = data.SubsamplePoints(cfg['data']['points_subsample'])
+    points_transform_iou = data.SubsamplePoints(cfg['data']['points_iou_subsample'])
     
     input_type = cfg['data']['input_type']
     fields = {}
@@ -334,12 +335,14 @@ def get_data_fields(mode, cfg):
             if input_type == 'pointcloud_crop':
                 fields['points_iou'] = data.PatchPointsField(
                 points_iou_file,
+                transform=points_transform_iou,
                 unpackbits=cfg['data']['points_unpackbits'],
                 multi_files=cfg['data']['multi_files']
                 )
             else:
                 fields['points_iou'] = data.PointsField(
                     points_iou_file,
+                    transform=points_transform_iou,
                     unpackbits=cfg['data']['points_unpackbits'],
                     multi_files=cfg['data']['multi_files']
                 )

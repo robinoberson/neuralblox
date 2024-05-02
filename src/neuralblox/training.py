@@ -99,6 +99,9 @@ class Trainer(BaseTrainer):
         occ = data.get('points.occ').to(device)
 
         inputs = data.get('inputs', torch.empty(points.size(0), 0)).to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        inputs = torch.cat((inputs, inputs_occ), dim=-1)  # Concatenate along the last dimension
+
         voxels_occ = data.get('voxels')
 
         points_iou = data.get('points_iou').to(device)
@@ -123,7 +126,8 @@ class Trainer(BaseTrainer):
             index = {}
             ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
             index[fea_type] = ind
-            input_cur = add_key(inputs, index, 'points', 'index', device=device)
+            inputs_3d = inputs.clone()[..., :3]
+            input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
             
             fea, self.unet = self.model.encode_inputs(input_cur)
             fea_du, _ = self.unet(fea) #downsample and upsample 
@@ -143,31 +147,13 @@ class Trainer(BaseTrainer):
 
             p_out = self.model.decode(pi_in, c, **kwargs)
 
+        
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (p_out.probs >= threshold).cpu().numpy()
-
+        
         iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
-        eval_dict['iou'] = iou
 
-        # Estimate voxel iou
-        if voxels_occ is not None:
-            voxels_occ = voxels_occ.to(device)
-            points_voxels = make_3d_grid(
-                (-0.5 + 1/64,) * 3, (0.5 - 1/64,) * 3, voxels_occ.shape[1:])
-            points_voxels = points_voxels.expand(
-                batch_size, *points_voxels.size())
-            points_voxels = points_voxels.to(device)
-            with torch.no_grad():
-                p_out = self.model(points_voxels, inputs,
-                                   sample=self.eval_sample, **kwargs)
-
-            voxels_occ_np = (voxels_occ >= 0.5).cpu().numpy()
-            occ_hat_np = (p_out.probs >= threshold).cpu().numpy()
-            iou_voxels = compute_iou(voxels_occ_np, occ_hat_np).mean()
-
-            eval_dict['iou_voxels'] = iou_voxels
-
-        return eval_dict
+        return iou
 
     def compute_loss(self, data, DEGREES = 0):
         ''' Computes the loss.
@@ -178,8 +164,22 @@ class Trainer(BaseTrainer):
         device = self.device
         p = data.get('points').to(device)
         occ = data.get('points.occ').to(device)
-        inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device)
+        inputs = data.get('inputs').to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        
+        inputs = torch.cat((inputs, inputs_occ), dim=-1)  # Concatenate along the last dimension
 
+        # import open3d as o3d
+        # pcd_occ = o3d.geometry.PointCloud()
+        # pcd_unocc = o3d.geometry.PointCloud()
+        
+        # pcd_occ.points = o3d.utility.Vector3dVector(inputs[0, inputs_occ[0, :, 0] == 1, :3].cpu().numpy())
+        # pcd_unocc.points = o3d.utility.Vector3dVector(inputs[0, inputs_occ[0, :, 0] == 0, :3].cpu().numpy())
+        # pcd_occ.paint_uniform_color([1, 0, 0])
+        # pcd_unocc.paint_uniform_color([0, 1, 0])
+        
+        # o3d.visualization.draw_geometries([pcd_occ, pcd_unocc])
+        
         if (DEGREES != 0):
             inputs, rotation = self.rotate_points(inputs, DEGREES=DEGREES)
             p = self.rotate_points(p, use_rotation_tensor=True)
@@ -198,7 +198,8 @@ class Trainer(BaseTrainer):
         index = {}
         ind = coord2index(inputs.clone(), vol_bound['input_vol'], reso=self.grid_reso, plane=fea)
         index[fea] = ind
-        input_cur = add_key(inputs, index, 'points', 'index', device=device)
+        inputs_3d = inputs.clone()[..., :3]
+        input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
 
         if self.unet == None:
             fea, self.unet = self.model.encode_inputs(input_cur)

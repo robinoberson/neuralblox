@@ -109,12 +109,12 @@ class DecoderLatentToLogits(nn.Module):
                  hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear',
                  padding=0.1, pos_encoding="sin_cos", **kwargs):
         super().__init__()
-        self.c_dim = c_dim
+        self.c_dim = c_dim * 2
         self.n_blocks = n_blocks
 
-        if c_dim != 0:
+        if self.c_dim != 0:
             self.fc_c = nn.ModuleList([
-                nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
+                nn.Linear(self.c_dim, hidden_size) for i in range(n_blocks)
             ])
 
         if pos_encoding=="sin_cos":
@@ -210,12 +210,12 @@ class PatchLocalDecoder(nn.Module):
     def __init__(self, dim=3, c_dim=128,
                  hidden_size=256, leaky=False, n_blocks=5, sample_mode='bilinear', local_coord=False, pos_encoding='linear', unit_size=0.1, padding=0.1):
         super().__init__()
-        self.c_dim = c_dim
+        self.c_dim = c_dim * 2
         self.n_blocks = n_blocks
 
         if c_dim != 0:
             self.fc_c = nn.ModuleList([
-                nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
+                nn.Linear(self.c_dim, hidden_size) for i in range(n_blocks)
             ])
 
         self.fc_out = nn.Linear(hidden_size, 1)

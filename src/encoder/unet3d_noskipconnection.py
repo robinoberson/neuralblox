@@ -7,8 +7,10 @@ import torch.nn as nn
 from torch.nn import functional as F
 from functools import partial
 
-def number_of_features_per_level(init_channel_number, num_levels):
-    return [init_channel_number * 2 ** k for k in range(num_levels)]
+def number_of_features_per_level(init_channel_number_custom, init_channel_number, num_levels):
+    f_maps = [init_channel_number * 2 ** k for k in range(num_levels)]
+    f_maps[0] = init_channel_number_custom
+    return f_maps
 
 
 def conv3d(in_channels, out_channels, kernel_size, bias, padding=1):
@@ -449,7 +451,7 @@ class Abstract3DUNet(nn.Module):
         self.testing = testing
 
         if isinstance(f_maps, int):
-            f_maps = number_of_features_per_level(f_maps, num_levels=num_levels)
+            f_maps = number_of_features_per_level(f_maps*2, f_maps, num_levels=num_levels) # f_maps * 2 to account for occ/unocc points
 
         # create encoder path consisting of Encoder modules. Depth of the encoder is equal to `len(f_maps)`
         encoders = []

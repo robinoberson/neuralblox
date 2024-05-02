@@ -46,14 +46,51 @@ class SubsamplePointcloud(object):
         '''
         data_out = data.copy()
         points = data[None]
+        occ = data['occ']
         #normals = data['normals']
 
         indices = np.random.randint(points.shape[0], size=self.N)
         data_out[None] = points[indices, :]
+        data_out['occ'] = occ[indices]
         #data_out['normals'] = normals[indices, :]
 
         return data_out
 
+class SubsamplePointcloudValidation(object):
+    ''' Point cloud subsampling transformation class.
+
+    It subsamples the point cloud data.
+
+    Args:
+        N (int): number of points to be subsampled
+    '''
+    def __init__(self, N):
+        self.N = N
+
+    def __call__(self, data):
+        ''' Calls the transformation.
+
+        Args:
+            data (dict): data dictionary
+        '''
+        data_out = data.copy()
+        points = data['points']
+        occ = data['points.occ']
+        
+        inputs = data['inputs']
+        inputs_occ = data['inputs.occ']
+        #normals = data['normals']
+
+        indices_points = np.random.randint(points.shape[0], size=self.N)
+        indices_inputs = np.random.randint(inputs.shape[0], size=self.N)
+        
+        data_out['points'] = points[indices, :]
+        data_out['points.occ'] = occ[indices]
+        data_out['inputs'] = inputs[indices_inputs, :]
+        data_out['inputs.occ'] = inputs_occ[indices_inputs]
+        #data_out['normals'] = normals[indices, :]
+
+        return data_out
 
 class SubsamplePoints(object):
     ''' Points subsampling transformation class.

@@ -76,14 +76,17 @@ class Generator3D(object):
         device = self.device
         stats_dict = {}
 
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs_3D = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        inputs = torch.cat((inputs_3D, inputs_occ), dim=-1)  # Concatenate along the last dimension
+
         kwargs = {}
 
         t0 = time.time()
 
         # obtain features for all crops
         if self.vol_bound is not None:
-            self.get_crop_bound(inputs)
+            self.get_crop_bound(inputs_3D)
             c = self.encode_crop(inputs, device)
         else:  # input the entire volume
             
@@ -91,7 +94,7 @@ class Generator3D(object):
             index = {}
             ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
             index[fea_type] = ind
-            input_cur = add_key(inputs, index, 'points', 'index', device=device)
+            input_cur = add_key(inputs_3D, index, 'points', 'index', device=device)
             
             t0 = time.time()
             with torch.no_grad():
@@ -170,11 +173,14 @@ class Generator3D(object):
 
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
 
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs_3D = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        inputs = torch.cat((inputs_3D, inputs_occ), dim=-1)
+        
         kwargs = {}
 
         # acquire the boundary for every crops
-        self.get_crop_bound(inputs)
+        self.get_crop_bound(inputs_3D)
 
         nx = self.resolution0
         n_crop = self.vol_bound['n_crop']
@@ -271,27 +277,34 @@ class Generator3D(object):
         ''' Encode a crop to feature volumes
 
         Args:
-            inputs (dict): input point cloud
+            inputs_3D (dict): input point cloud
             device (device): pytorch device
             vol_bound (dict): volume boundary
         '''
         if vol_bound == None:
             vol_bound = self.vol_bound
+            
+        inputs_3D = inputs[..., :3]
+        occ = inputs[..., 3].unsqueeze(-1)
+        
 
         index = {}
         for fea in self.vol_bound['fea_type']:
             # crop the input point cloud
-            mask_x = (inputs[:, :, 0] >= vol_bound['input_vol'][0][0]) & \
-                     (inputs[:, :, 0] < vol_bound['input_vol'][1][0])
-            mask_y = (inputs[:, :, 1] >= vol_bound['input_vol'][0][1]) & \
-                     (inputs[:, :, 1] < vol_bound['input_vol'][1][1])
-            mask_z = (inputs[:, :, 2] >= vol_bound['input_vol'][0][2]) & \
-                     (inputs[:, :, 2] < vol_bound['input_vol'][1][2])
+            mask_x = (inputs_3D[:, :, 0] >= vol_bound['input_vol'][0][0]) & \
+                     (inputs_3D[:, :, 0] < vol_bound['input_vol'][1][0])
+            mask_y = (inputs_3D[:, :, 1] >= vol_bound['input_vol'][0][1]) & \
+                     (inputs_3D[:, :, 1] < vol_bound['input_vol'][1][1])
+            mask_z = (inputs_3D[:, :, 2] >= vol_bound['input_vol'][0][2]) & \
+                     (inputs_3D[:, :, 2] < vol_bound['input_vol'][1][2])
             mask = mask_x & mask_y & mask_z
 
-            p_input = inputs[mask]
+            p_input_3D = inputs_3D[mask]
+            p_occ = occ[mask]
+            p_input = torch.cat((p_input_3D, p_occ), dim=1)
+            
             if p_input.shape[0] == 0:  # no points in the current crop
-                p_input = inputs.squeeze()
+                p_input = inputs_3D.squeeze()
                 ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
                 if fea == 'grid':
                     ind[~mask] = self.vol_bound['reso'] ** 3
@@ -299,11 +312,12 @@ class Generator3D(object):
                     ind[~mask] = self.vol_bound['reso'] ** 2
             else:
                 ind = coord2index(p_input.clone().unsqueeze(0), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+            
             index[fea] = ind
-            input_cur = add_key(p_input.unsqueeze(0), index, 'points', 'index', device=device)
+            input_cur = add_key(p_input_3D.unsqueeze(0), index, 'points', 'index', device=device)
 
         with torch.no_grad():
-            c = self.model.encode_inputs(input_cur)
+            c = self.model.encode_inputs_3D(input_cur)
         return c
 
     def predict_crop_occ(self, pi, c, vol_bound=None, **kwargs):
