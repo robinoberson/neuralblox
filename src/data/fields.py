@@ -283,10 +283,11 @@ class PointCloudField(Field):
         transform (list): list of transformations applied to data points
         multi_files (callable): number of files
     '''
-    def __init__(self, file_name, transform=None, multi_files=None):
+    def __init__(self, file_name, transform=None, multi_files=None, unpackbits=True):
         self.file_name = file_name
         self.transform = transform
         self.multi_files = multi_files
+        self.unpackbits = unpackbits
 
     def load(self, model_path, idx, category):
         ''' Loads the data point.
@@ -305,11 +306,16 @@ class PointCloudField(Field):
         pointcloud_dict = np.load(file_path)
 
         points = pointcloud_dict['points'].astype(np.float32)
+        occupancies = pointcloud_dict['occupancies']
+        if self.unpackbits:
+            occupancies = np.unpackbits(occupancies)[:points.shape[0]]
+        
+        occupancies = occupancies.astype(np.float32)
         #normals = pointcloud_dict['normals'].astype(np.float32)
 
         data = {
             None: points,
-            #'normals': normals,
+            'occ': occupancies,
         }
 
         if self.transform is not None:

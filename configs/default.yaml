@@ -14,6 +14,7 @@ data:
   points_iou_file: points.npz
   multi_files: null
   points_subsample: 1024
+  points_iou_subsample: 6000
   points_unpackbits: true
   model_file: model.off
   watertight_file: model_watertight.off

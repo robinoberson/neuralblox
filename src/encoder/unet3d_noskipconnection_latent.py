@@ -8,7 +8,9 @@ from torch.nn import functional as F
 from functools import partial
 
 def number_of_features_per_level(init_channel_number, num_levels):
-    return [init_channel_number * 2 ** k for k in range(num_levels)]
+    f_maps = [init_channel_number * 2 ** k for k in range(num_levels)]
+    # f_maps[0] = init_channel_number*2
+    return f_maps
 
 
 def conv3d(in_channels, out_channels, kernel_size, bias, padding=1):

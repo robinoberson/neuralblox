@@ -86,7 +86,7 @@ train_loader = torch.utils.data.DataLoader(
     worker_init_fn=data.worker_init_fn)
 
 val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=1, num_workers=cfg['training']['n_workers_val'], shuffle=False,
+    val_dataset, batch_size=batch_size, num_workers=cfg['training']['n_workers'], shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
@@ -130,8 +130,8 @@ model = config.get_model(cfg, device=device, dataset=train_dataset)
 generator = config.get_generator(model, cfg, device=device)
 
 # Intialize training
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=20)
+optimizer = optim.Adam(model.parameters(), lr=1e-3)
+scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.80, patience=10)
 
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
@@ -192,7 +192,7 @@ if monitor_gpu_usage:
         # Initialize handles for each GPU
         handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
     except Exception as e:
-        experiment.log_text(f"Error: {e}")
+        # experiment.log_text(f"Error: {e}")
         print(f"Error: {e}")
         monitor_gpu_usage = False        
 
@@ -213,16 +213,7 @@ while True:
                 info = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 memory_used = info.used
                 
-                # Print free and used memory for each GPU
-                # print(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB")
-                experiment.log_text(f"GPU {i} Memory - Used: {memory_used / (1024**2):.2f} MB, Free: {info.free / (1024**2):.2f} MB") 
-                experiment.log_metric(f"GPU_{i}_memory_used", memory_used / (1024**2), step=it)
-                # Calculate total memory usage
                 total_memory_used += memory_used
-            
-            # Print total memory usage across all GPUs
-            # print(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
-            experiment.log_text(f"Total Memory Used Across all GPUs: {total_memory_used / (1024**2):.2f} MB")
                 
         logger.add_scalar('train/loss', loss, it)
 
@@ -231,10 +222,10 @@ while True:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
-            experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
+            # experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0 and it > 10:
+        if visualize_every > 0 and (it % visualize_every) == 0:# and it > 10:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -256,33 +247,39 @@ while True:
                 
         if validate_loss_every > 0 and (it % validate_loss_every) == 0:
             loss_val = 0
-            if reduce_size_testing:
-                len_val = 10
-            else:
-                len_val = len(val_loader) // 10
+            val_iou = 0
             
-            # Randomly sample 1/10 of the validation loader
-            sampled_indices = torch.randperm(len(val_loader))[:len_val]
+            if reduce_size_testing:
+                len_val = 1
+            else:
+                len_val = len(val_loader)
             
             total_iterations = len(val_loader)
             with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
                 for batch_val_idx, batch_val in enumerate(val_loader):
-                    if batch_val_idx not in sampled_indices:
-                        continue
+                    if batch_val_idx >= 1 and reduce_size_testing:
+                        break
                     
                     loss_val += trainer.validate_step(batch_val)
+                    val_iou += trainer.eval_step(batch_val)
                     pbar.update(1)  # Manually update the tqdm progress bar
             
             loss_val /= len_val
-            logger.add_scalar('val/loss', loss_val, it)
-            print('Validation loss: %.4f' % (loss_val))
+            val_iou /= len_val
+            
+            logger.add_scalar('valloss', loss_val, it)
+            logger.add_scalar('valiou', val_iou, it)
+            
+            print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
+            
             experiment.log_metric('val_loss', loss_val, step=it)
-            scheduler.step(loss_val)
+            experiment.log_metric('val_iou', val_iou, step=it)
+            
+            scheduler.step(val_iou)
+            
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']
                 experiment.log_metric("learning_rate", lr, step=it)
-
-
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
@@ -297,27 +294,8 @@ while True:
             checkpoint_io.save('aug_model_%d.pt' % it, epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
             # experiment.log_asset("aug_model_%d.pt" % it)
-        # Run validation
-        if (validate_every > 0 and (it % validate_every) == 0) or (it0 + 1 == it):
-            eval_dict = trainer.evaluate(val_loader, reduce_size_testing)
-            metric_val = eval_dict[model_selection_metric]
-            print('Validation metric (%s): %.4f'
-                  % (model_selection_metric, metric_val))
-
-            for k, v in eval_dict.items():
-                logger.add_scalar('val/%s' % k, v, it)
-                experiment.log_metric(f'val_{k}', v, step=it)
-
-            if model_selection_sign * (metric_val - metric_val_best) > 0:
-                metric_val_best = metric_val
-                print('New best model (loss %.4f)' % metric_val_best)
-                checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it,
-                                   loss_val_best=metric_val_best)
-                
-                # experiment.log_asset("model_best.pt")
             
-            
-            # Update the learning rate scheduler based on validation loss
+        
         # Exit if necessary
         if exit_after > 0 and (time.time() - t0) >= exit_after:
             print('Time limit reached. Exiting.')
