@@ -29,8 +29,8 @@ model:
     unet3d_kwargs:
       num_levels: 3 # define the receptive field, 3 -> 32, 4 -> 64
       f_maps: 32
-      in_channels: 32
-      out_channels: 32
+      in_channels: 64
+      out_channels: 64
     pos_encoding: sin_cos
   decoder: simple_local_crop
   decoder_kwargs:
