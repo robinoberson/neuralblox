@@ -8,6 +8,7 @@ data:
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
+  points_iou_subsample: 6000
   points_file: points.npz
   points_iou_file: points.npz
   # points_unpackbits: false

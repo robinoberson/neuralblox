@@ -103,7 +103,7 @@ def compute_iou(occ1, occ2):
     occ2 = (occ2 >= 0.5)
 
     # Compute IOU
-    area_union = (occ1 | occ2).astype(np.float32).sum(axis=-1)
+    area_union = np.maximum(1,(occ1 | occ2).astype(np.float32).sum(axis=-1))
     area_intersect = (occ1 & occ2).astype(np.float32).sum(axis=-1)
 
     iou = (area_intersect / area_union)

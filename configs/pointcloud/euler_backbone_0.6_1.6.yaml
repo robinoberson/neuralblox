@@ -8,6 +8,7 @@ data:
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
+  points_iou_subsample: 6000
   points_file: points.npz
   points_iou_file: points.npz
   # points_unpackbits: false
@@ -44,8 +45,7 @@ training:
   model_selection_mode: maximize
   print_every: 1000
   visualize_every: 10000
-  validate_every: 10000
-  validate_loss_every: 1000
+  validate_loss_every: 5000
   checkpoint_every: 2000
   backup_every: 10000
   n_workers: 8
