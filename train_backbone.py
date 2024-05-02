@@ -130,8 +130,8 @@ model = config.get_model(cfg, device=device, dataset=train_dataset)
 generator = config.get_generator(model, cfg, device=device)
 
 # Intialize training
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=10)
+optimizer = optim.Adam(model.parameters(), lr=1e-3)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=15)
 
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
@@ -259,7 +259,7 @@ while True:
             if reduce_size_testing:
                 len_val = 10
             else:
-                len_val = len(val_loader) // 10
+                len_val = len(val_loader)
             
             # Randomly sample 1/10 of the validation loader
             sampled_indices = torch.randperm(len(val_loader))[:len_val]
