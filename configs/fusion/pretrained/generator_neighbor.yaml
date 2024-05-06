@@ -1,14 +1,14 @@
 inherit_from: configs/fusion/generate_fusion.yaml
 data:
-  input_type: pointcloud_crop
+  input_type: pointcloud
   path: /scratch/roberson/data/sim_data/2024-03-15_14-15-57
   grid_resolution: 24
-  input_vol: 1.3 # in meter
+  input_vol: 1.2 # in meter
   query_vol: 1.0 # in meter
 test:
   threshold: 0.01
   # model_file: /home/roberson/MasterThesis/master_thesis/neuralblox/pretrained_models/backbone/shapenet_grid24_pe.pt
-  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_100000.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_30000.pt
   merging_model_file: /scratch2/roberson/neuralblox/out_fusion/neighbors/models/model_merging.pt
 
   out_dir: /scratch2/roberson/neuralblox/output

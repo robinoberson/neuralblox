@@ -153,14 +153,19 @@ while True:
             continue
         category = unique_cat[0]
         path_gt_points = os.path.join(cfg['data']['path_gt'], category, '000000', cfg['data']['gt_file_name'])
-        points_gt = np.load(path_gt_points)['points']
+        points_gt_npz = np.load(path_gt_points)
+        points_gt = points_gt_npz['points']
+        points_gt_occ = np.unpackbits(points_gt_npz['occupancies'])
         
         # pcd_gt = o3d.geometry.PointCloud()
         # pcd_gt.points = o3d.utility.Vector3dVector(points_gt)        
         # o3d.visualization.draw_geometries([pcd, pcd_gt, base_axis])
 
         points_gt = torch.from_numpy(points_gt).to(device).float()
-
+        points_gt_occ = torch.from_numpy(points_gt_occ).to(device).float().unsqueeze(-1)
+        
+        points_gt = torch.cat((points_gt, points_gt_occ), dim=-1)
+        
         loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso)
         init_it = False
         

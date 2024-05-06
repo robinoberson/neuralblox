@@ -39,7 +39,8 @@ model:
   pos_encoding: sin_cos
   c_dim: 32
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty
+  # out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty
+  out_dir: /scratch2/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6
   batch_size: 256
   model_selection_metric: iou
   model_selection_mode: maximize
@@ -58,7 +59,9 @@ test:
   threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
-  model_file: aug_model_100000.pt
+  # model_file: aug_model_100000.pt
+  model_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_30000.pt
+
 generation:
   vis_n_outputs: 2
   refine: false
