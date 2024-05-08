@@ -50,7 +50,7 @@ training:
   n_workers: 8
   n_workers_val: 1
   stack_latents: true
-  learning_rate: 0.001
+  learning_rate: 0.01
   limited_gpu: false
   log_comet: true
 test:

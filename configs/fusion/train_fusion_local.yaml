@@ -5,7 +5,7 @@ data:
 training:
   out_dir: /scratch2/roberson/neuralblox/out_fusion/test_easy
   backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_110000.pt
-  learning_rate: 0.001
+  learning_rate: 0.01
   limited_gpu: true
   checkpoint_every: 20
   log_comet: true 
