@@ -6,5 +6,5 @@ data:
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_easy
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty/aug_model_130000.pt
-  checkpoint_every: 200
+  checkpoint_every: 100
   limited_gpu: false

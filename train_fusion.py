@@ -134,7 +134,7 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=500, verbose=True)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=500)
 
 # pcd = o3d.geometry.PointCloud()
 # base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
@@ -193,8 +193,11 @@ while True:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
-            learning_rate = scheduler.get_last_lr()
-            if log_comet: experiment.log_metric('learning_rate', learning_rate, step=it)
+            
+            if log_comet: 
+                for param_group in optimizer.param_groups:
+                    lr = param_group['lr']
+                    experiment.log_metric("learning_rate", lr, step=it)
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
