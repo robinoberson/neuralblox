@@ -36,6 +36,8 @@ if log_comet:
 
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from tensorboardX import SummaryWriter
 
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
@@ -132,10 +134,10 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=500, verbose=True)
 
 # pcd = o3d.geometry.PointCloud()
 # base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
-init_it = True 
 
 while True:
     epoch_it += 1
@@ -176,7 +178,8 @@ while True:
         points_gt = torch.cat((points_gt, points_gt_occ), dim=-1)
         
         loss, losses = trainer.train_sequence_window(batch, points_gt, grid_reso)
-        init_it = False
+        
+        scheduler.step(loss)
         
         logger.add_scalar('train/loss', loss, it)
         if log_comet: 
@@ -184,15 +187,14 @@ while True:
             for idx_elem, elem in enumerate(losses):
                 experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
 
-        for param_group in optimizer.param_groups:
-            learning_rate = param_group['lr']
-            if log_comet: experiment.log_metric('learning_rate', learning_rate, step=it)
-
+        
         # Print output
         if print_every > 0 and (it % print_every) == 0:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
+            learning_rate = scheduler.get_last_lr()
+            if log_comet: experiment.log_metric('learning_rate', learning_rate, step=it)
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):

@@ -9,3 +9,4 @@ training:
   limited_gpu: true
   checkpoint_every: 20
   log_comet: true 
+  print_every: 3
