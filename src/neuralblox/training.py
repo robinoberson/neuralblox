@@ -226,7 +226,18 @@ class Trainer(BaseTrainer):
         loss_i = F.binary_cross_entropy_with_logits(
             logits, occ, reduction='none')
         loss = loss_i.sum(-1).mean()
-
+        
+        # export pi_in and input_cur as pickle 
+        pi_in['occ'] = occ
+        pi_in['logits'] = logits
+        input_cur['occ'] = inputs_occ
+        import pickle
+        with open('pi_in.pkl', 'wb') as f:
+            pickle.dump(pi_in, f)
+            
+        with open('input_cur.pkl', 'wb') as f:
+            pickle.dump(input_cur, f)
+        
         return loss
 
     def rotate_points(self, pointcloud_model, DEGREES=0, query_points=False, use_rotation_tensor=False,

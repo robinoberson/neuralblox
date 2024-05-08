@@ -4,19 +4,19 @@ data:
   input_type: pointcloud_sequential
   classes: null
   path: data/redwood_custom
-  pointcloud_n: 25000
+  pointcloud_n: 30000
   pointcloud_noise: 0.000
   points_subsample: 8192
   points_file: points.npz
   points_iou_file: points.npz
   gt_file_name: 'pointcloud.npz'
   grid_resolution: 24
-  # points_unpackbits: false
+  points_unpackbits: true
   voxels_file: null
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
   return_category: true
-  input_vol: 1.2
+  input_vol: 1.6
   query_vol: 1.0
 model:
   local_coord: True
@@ -43,18 +43,21 @@ training:
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
-  visualize_every: 100000000
-  validate_every: 1000000000
-  checkpoint_every: 500
-  backup_every: 10000
+  visualize_every: 1000
+  validate_every: 10000
+  checkpoint_every: 200
+  backup_every: 2000
   n_workers: 8
   n_workers_val: 1
-  stack_latents: false
+  stack_latents: true
+  learning_rate: 0.001
+  limited_gpu: false
+  log_comet: true
 test:
   threshold: 0.001
   eval_mesh: true
   eval_pointcloud: false
-  model_file: model_best.pt
+  model_file: model.pt
   
 generation:
   generation_dir: generation

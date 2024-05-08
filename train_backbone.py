@@ -225,7 +225,7 @@ while True:
             # experiment.log_text(f'[Epoch {epoch_it}] it={it}, loss={loss}')
 
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:# and it > 10:
+        if visualize_every > 0 and (it % visualize_every) == 0 and it > 0:
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
@@ -245,7 +245,7 @@ while True:
                 with open(export_name_data, 'wb') as f:
                     pickle.dump(data_vis['data'], f)
                 
-        if validate_loss_every > 0 and (it % validate_loss_every) == 0:
+        if validate_loss_every > 0 and (it % validate_loss_every) == 0 and it > 0:
             loss_val = 0
             val_iou = 0
             
@@ -282,14 +282,14 @@ while True:
                 experiment.log_metric("learning_rate", lr, step=it)
 
         # Save checkpoint
-        if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
+        if (checkpoint_every > 0 and (it % checkpoint_every) == 0 and it > 0):
             print('Saving checkpoint')
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
             # experiment.log_asset("model.pt")
 
         # Backup if necessary
-        if (backup_every > 0 and (it % backup_every) == 0):
+        if (backup_every > 0 and (it % backup_every) == 0) and it > 0:
             print('Backup checkpoint')
             checkpoint_io.save('aug_model_%d.pt' % it, epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)

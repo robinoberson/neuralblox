@@ -1,9 +1,4 @@
-from comet_ml import Experiment
-from comet_ml.integration.pytorch import log_model
 
-import torch
-import torch.optim as optim
-from tensorboardX import SummaryWriter
 import numpy as np
 import os
 import argparse
@@ -13,12 +8,6 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 import shutil
 from src import layers
-
-experiment = Experiment(
-  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
-  project_name="training-fusion",
-  workspace="robinoberson"
-)
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -30,8 +19,25 @@ parser.add_argument('--exit-after', type=int, default=-1,
                     help='Checkpoint and exit after specified number of seconds'
                          'with exit code 2.')
 
+
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
+
+log_comet = cfg['training']['log_comet']
+if log_comet:
+    from comet_ml import Experiment
+    from comet_ml.integration.pytorch import log_model
+    
+    experiment = Experiment(
+    api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+    project_name="training-fusion",
+    workspace="robinoberson"
+    )
+
+import torch
+import torch.optim as optim
+from tensorboardX import SummaryWriter
+
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 # Set t0
@@ -42,6 +48,8 @@ out_dir = cfg['training']['out_dir']
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
+learning_rate = cfg['training']['learning_rate']
+limited_gpu = cfg['training']['limited_gpu']
 exit_after = args.exit_after
 
 gt_query = cfg['training']['gt_query']
@@ -79,23 +87,24 @@ model_merging = layers.Conv3D_one_input().to(device)
 
 if model_merging is not None:
     # Freeze ConvONet parameters
+    print(f'Freezing {model.__class__.__name__} parameters...')
     for parameter in model.parameters():
         parameter.requires_grad = False
-    optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=1e-4)
+    optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=learning_rate)
     trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
 else:
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    trainer = config.get_trainer(model, optimizer, cfg, device=device)
+    raise ValueError('model_merging is None')
 
 checkpoint_io = CheckpointIO(out_dir, model=model)
 checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging, optimizer = optimizer)
 
 try:
     checkpoint_io.load(os.path.join(os.getcwd(), cfg['training']['backbone_file']))
-    # load_dict = checkpoint_io_merging.load('model_merging.pt')
-    load_dict = dict()
+    load_dict = checkpoint_io_merging.load('model_merging.pt')
+    # load_dict = dict()
 
-except FileExistsError:
+except FileExistsError as e:
+    print(f'No checkpoint file found! {e}')
     load_dict = dict()
 
 epoch_it = load_dict.get('epoch_it', 0)
@@ -166,15 +175,18 @@ while True:
         
         points_gt = torch.cat((points_gt, points_gt_occ), dim=-1)
         
-        loss = trainer.train_sequence_window(batch, points_gt, input_crop_size, query_crop_size, grid_reso)
+        loss, losses = trainer.train_sequence_window(batch, points_gt, grid_reso)
         init_it = False
         
         logger.add_scalar('train/loss', loss, it)
-        experiment.log_metric('train_loss', loss, step=it)
-        
+        if log_comet: 
+            experiment.log_metric('train_loss', loss, step=it)
+            for idx_elem, elem in enumerate(losses):
+                experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
+
         for param_group in optimizer.param_groups:
             learning_rate = param_group['lr']
-            experiment.log_metric('learning_rate', learning_rate, step=it)
+            if log_comet: experiment.log_metric('learning_rate', learning_rate, step=it)
 
         # Print output
         if print_every > 0 and (it % print_every) == 0:

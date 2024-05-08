@@ -25,13 +25,15 @@ class Trainer(BaseTrainer):
 
     '''
 
-    def __init__(self, model, model_merge, optimizer, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2):
+    def __init__(self, model, model_merge, optimizer, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
+                 vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2, limited_gpu = False):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
         self.device = device
         self.input_type = input_type
+        self.input_crop_size = input_crop_size
+        self.query_crop_size = query_crop_size
         self.vis_dir = vis_dir
         self.threshold = threshold
         self.eval_sample = eval_sample
@@ -41,10 +43,11 @@ class Trainer(BaseTrainer):
         self.factor = 2**unet_depth
         self.reso = None
         self.unet = None
+        self.limited_gpu = limited_gpu
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data_batch, points_gt, input_crop_size, query_crop_size, grid_reso):
+    def train_sequence_window(self, data_batch, points_gt, grid_reso):
         ''' Performs a training step.
 
         Args:
@@ -66,7 +69,7 @@ class Trainer(BaseTrainer):
     
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
-        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), input_crop_size, query_crop_size)
+        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
         
         inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
         # return inputs_distributed
@@ -79,43 +82,87 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         
-        # del latent_map_sampled, latent_map_sampled_stacked
-        # torch.cuda.empty_cache()
+        del latent_map_sampled, latent_map_sampled_stacked
+        torch.cuda.empty_cache()
         # Compute gt latent
-        latent_map_gt = self.get_latent_gt(points_gt)
-
-        # get logits
-        random_points = torch.rand(1, self.query_n, 3).to(self.device)
+        latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
         
-        # return latent_map_gt, latent_map_sampled_merged, random_points, input_crop_size, query_crop_size
-    
-        logits_sampled, query_points_sampled = self.get_logits(latent_map_sampled_merged, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
+        p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
+        logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         
-        logits_gt, query_points_gt = self.get_logits(latent_map_gt, occupied_voxels = torch.ones(latent_map_sampled_merged.shape[0], device = self.device, dtype = torch.bool), random_points=random_points, query_size = query_crop_size, input_size = input_crop_size)
+        logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
         
+        torch.cuda.empty_cache()
+
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
             raise ValueError
         
-        
         # compute cost
-        loss_logits = torch.nn.L1Loss(reduction='mean')
-        loss = 1 * loss_logits(logits_sampled, logits_gt)
-
+        loss, losses = self.compute_loss(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, query_points_sampled)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         
-        return loss
+        return loss, losses
     
-    # def visualize_logits(self, logits_gt, logits_sampled, query_points):
+    def compute_loss(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
+        
+        elevation_voxels = self.get_elevated_voxels(inputs_distributed)
+        
+        loss_logits_elevated = torch.nn.L1Loss(reduction='mean')
+        loss_logits_flat = torch.nn.L1Loss(reduction='mean')
+        loss_latents_elevated = torch.nn.L1Loss(reduction='mean')
+        loss_latents_flat = torch.nn.L1Loss(reduction='mean')
+        
+        loss_i = 5 * loss_logits_elevated(logits_sampled[elevation_voxels], logits_gt[elevation_voxels])
+        loss_ii = 2 * loss_latents_elevated(latent_map_sampled[elevation_voxels], latent_map_gt[elevation_voxels])
+        loss_iii = 1 * loss_logits_flat(logits_sampled[~elevation_voxels], logits_gt[~elevation_voxels])
+        loss_iv = 1 * loss_latents_flat(latent_map_sampled[~elevation_voxels], latent_map_gt[~elevation_voxels])
+        loss = loss_i + loss_ii + loss_iii + loss_iv
+        # print(f'loss_i: {loss_i}, loss_ii: {loss_ii}, loss_iii: {loss_iii}, loss_iv: {loss_iv}, loss: {loss}')
+        
+        return loss, [loss_i, loss_ii, loss_iii, loss_iv]
+
+    def get_elevated_voxels(self, inputs):
+        inputs_reshaped = inputs.reshape(-1, *inputs.shape[2:]).detach().cpu().numpy()
+        elevation_voxels = torch.zeros(inputs_reshaped.shape[0], dtype=torch.bool)
+
+        n_crit = 0
+        for i in range(inputs_reshaped.shape[0]):
+            points = inputs_reshaped[i][inputs_reshaped[i, ..., -1] == 1]
+            if points.shape[0] > 1:
+                bb_min = np.min(points, axis=0)
+                bb_max = np.max(points, axis=0)
+                y_diff = bb_max[1] - bb_min[1]
+                if y_diff > 0.1:
+                    n_crit += 1 
+                    elevation_voxels[i] = True 
+
+        return elevation_voxels
+    
+    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed):
     #     import open3d as o3d
         
-    #     points_gt_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
-    #     points_sampled_np = query_points['p'].detach().cpu().numpy().reshape(-1, 3)
+
+    #     p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+    #     # save query points, logits_gt, logits_sampled as pickle 
+    #     import pickle
+    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/query_points.pkl', 'wb') as f:
+    #         pickle.dump([p_stacked, p_n_stacked], f)
+    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
+    #         pickle.dump(logits_gt, f)
+    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
+    #         pickle.dump(logits_sampled, f)
+    #     # save self.vol_bound_all
+    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
+    #         pickle.dump(self.vol_bound_all, f)
+    #         #save inputs 
+    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/inputs.pkl', 'wb') as f:
+    #         pickle.dump(inputs_distributed, f)
 
     #     occ_gt = logits_gt.detach().cpu().numpy()
     #     occ_sampled = logits_sampled.detach().cpu().numpy()
@@ -134,25 +181,21 @@ class Trainer(BaseTrainer):
     #     values_sampled[values_sampled < threshold] = 0
     #     values_sampled[values_sampled >= threshold] = 1
 
-    #     pcd_occ_gt = o3d.geometry.PointCloud()
-    #     pcd_unoccc_gt = o3d.geometry.PointCloud()
-    #     pcd_occ_sampled = o3d.geometry.PointCloud()
-    #     pcd_unoccc_sampled = o3d.geometry.PointCloud()
+    #     both_occ = np.logical_and(values_gt, values_sampled)
+        
+    #     pcd = o3d.geometry.PointCloud()
+    #     colors = np.zeros((values_gt.shape[0], 3))
+    #     colors[values_gt == 1] = [1, 0, 0] # red
+    #     colors[values_sampled == 1] = [0, 0, 1] # blue
+    #     colors[both_occ == 1] = [0, 1, 0] # purple
+        
+    #     mask = np.any(colors != [0, 0, 0], axis=1)
+    #     print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+    #     colors = colors[mask]
+    #     pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+    #     pcd.colors = o3d.utility.Vector3dVector(colors)
+    #     o3d.visualization.draw_geometries([pcd])
 
-    #     pcd_occ_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 1])
-    #     pcd_unoccc_gt.points = o3d.utility.Vector3dVector(points_gt_np[values_gt == 0])
-
-    #     pcd_occ_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 1])
-    #     pcd_unoccc_sampled.points = o3d.utility.Vector3dVector(points_sampled_np[values_sampled == 0])
-
-    #     pcd_occ_gt.paint_uniform_color([0, 1, 0])
-    #     pcd_unoccc_gt.paint_uniform_color([1, 0, 0])
-
-    #     pcd_occ_sampled.paint_uniform_color([1, 0, 0])
-    #     pcd_unoccc_sampled.paint_uniform_color([1, 0, 0])
-
-    #     o3d.visualization.draw_geometries([pcd_occ_gt, pcd_occ_sampled])
-    
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
         p_in_occ = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
@@ -198,26 +241,53 @@ class Trainer(BaseTrainer):
         else:
             return tensor.reshape(n_in, H, W, D)
                 
-    def get_logits(self, latent_map_full, occupied_voxels, random_points, query_size, input_size):
-        
+    def get_logits(self, latent_map_full, p_stacked, p_n_stacked):
         n_crops_total = latent_map_full.shape[0]
-        n_crops_valid = occupied_voxels.sum().item()
-
-        query_points_stacked = self.get_query_points(random_points, occupied_voxels, query_size=query_size, input_size=input_size)
-
-        # Get latent codes of valid crops
-        kwargs = {}
-        fea = {}
-        fea['unet3d'] = self.unet
-        fea['latent'] = latent_map_full[occupied_voxels]
-
-        p_r = self.model.decode(query_points_stacked, fea, **kwargs)
-        logits_decoded = p_r.logits
-        logits = torch.full((n_crops_total, random_points.shape[1]), -100.).to(self.device)
-        logits[occupied_voxels] = logits_decoded
         
-        return logits, query_points_stacked
-    def get_query_points(self, random_points, occupied_voxels, query_size, input_size):
+        if self.limited_gpu:
+            n_batch_max = 30
+        else:
+            n_batch_max = 1000
+
+        n_batch = int(np.ceil(n_crops_total / n_batch_max))
+
+        logits_stacked = None  # Initialize logits directly
+
+        for i in range(n_batch):
+            start = i * n_batch_max
+            end = min((i + 1) * n_batch_max, n_crops_total)
+
+            p_stacked_batch = p_stacked[start:end]
+            p_n_stacked_batch = p_n_stacked[start:end]
+            latent_map_full_batch = latent_map_full[start:end]
+
+            p_n_dict = {'grid': p_n_stacked_batch}
+
+            pi_in = {'p': p_stacked_batch}
+            pi_in['p_n'] = p_n_dict
+            # Get latent codes of valid crops
+            kwargs = {}
+            fea = {}
+            fea['unet3d'] = self.unet
+            fea['latent'] = latent_map_full_batch
+
+            p_r = self.model.decode(pi_in, fea, **kwargs)
+            logits_decoded = p_r.logits
+
+            if logits_stacked is None:
+                logits_stacked = logits_decoded.clone()  # Initialize logits directly with the first batch
+            else:
+                logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
+
+
+        return logits_stacked
+    
+    def get_query_points(self, input_size, query_size_voxel = 1.0):
+        # Pay attention to wording #TODO change this 
+        # query_crop_size is used as the voxel size for distributing the inputs 
+        # query_size_voxel is used to determine the size of the query on a voxel latent 
+        random_points = torch.rand(1, self.query_n, 3).to(self.device)
+
         n_crops_unpadded = (self.vol_bound_all['axis_n_crop'][0] - 2) * (self.vol_bound_all['axis_n_crop'][1] - 2) * (self.vol_bound_all['axis_n_crop'][2] - 2)
         random_points_stacked = random_points.repeat(n_crops_unpadded, 1, 1)
 
@@ -225,23 +295,18 @@ class Trainer(BaseTrainer):
         centers = self.remove_padding_single_dim(centers).reshape(-1,3)
         centers = centers.unsqueeze(1)
         
-        p = (random_points_stacked.clone() + centers)[occupied_voxels]
-        p_n = ((random_points_stacked.clone() - 0.5) * query_size / input_size + 0.5)[occupied_voxels]
+        p = ((random_points_stacked.clone()-0.5) * input_size + 0.5 + centers)
+        # p_n = ((random_points_stacked.clone() - 0.5) * query_size_voxel / input_size + 0.5)[occupied_voxels]
+        p_n = random_points_stacked
 
-        p_n_dict = {'grid': p_n}
-                        
-        pi_in = {'p': p}
-        pi_in['p_n'] = p_n_dict
-        
-        return pi_in
+        return p, p_n
     
     def get_latent_gt(self, points_gt):
-        inputs_distributed_gt = self.distribute_inputs(points_gt.unsqueeze(1), self.vol_bound_all)
+        inputs_distributed_gt = self.distribute_inputs(points_gt.unsqueeze(1), self.vol_bound_all, remove_padding = True)
         
-        latent_map_gt = self.encode_latent_map(inputs_distributed_gt, self.vol_bound_all['input_vol']).squeeze(0)
-        latent_map_gt = self.remove_padding(latent_map_gt)
-        print(latent_map_gt.shape)
-        return latent_map_gt.reshape(-1, *tuple(latent_map_gt.shape[3:]))
+        latent_map_gt = self.encode_latent_map(inputs_distributed_gt, self.vol_bound_all['input_vol'], remove_padding = True).squeeze(0)
+        # print(latent_map_gt.shape)
+        return latent_map_gt, inputs_distributed_gt
     def merge_latent_map(self, latent_map):
         H, W, D, c, h, w, d = latent_map.size()
         latent_map = latent_map.reshape(-1, c, h, w, d)
@@ -271,77 +336,83 @@ class Trainer(BaseTrainer):
                         latent_map_neighbored[i-1, j-1, k-1, (idx_n_in)*c:(idx_n_in+1)*c] = stacked_vector
                         
         return latent_map_neighbored
-    
-    # def encode_latent_map(self, inputs_distributed, occupied_voxels, vol_bound_valid):
-    #     n_inputs = occupied_voxels.shape[0]
-    #     n_crop = occupied_voxels.shape[1]
-    #     d = self.reso//self.factor
-    #     latent_map = torch.zeros(n_inputs, n_crop, self.hdim*self.factor, d, d, d).to(self.device)
-    
-    #     for idx_pin in range(n_inputs):
-    #         n_valid_crops = torch.sum(occupied_voxels, dim=1)[idx_pin].item()
-    #         fea = torch.zeros(n_valid_crops, self.hdim, self.reso, self.reso, self.reso).to(self.device)
 
-    #         idx_input_valid = 0
-    #         for bool_valid in occupied_voxels[idx_pin]:
-    #             if bool_valid:
-    #                 fea[idx_input_valid], self.unet = self.encode_crop_sequential(inputs_distributed[idx_pin][idx_input_valid].unsqueeze(0).float(), self.device, vol_bound = vol_bound_valid[idx_pin][idx_input_valid])
-            
-    #                 idx_input_valid += 1
-            
-    #         _, latent_map[idx_pin, occupied_voxels[idx_pin]] = self.unet(fea) #down and upsample
-            
-
-        
-    #     return latent_map
     
-    def encode_latent_map(self, inputs_distributed, vol_bound):
-        
+    def encode_latent_map(self, inputs_distributed, vol_bound, remove_padding = False):
         n_inputs, n_crop, n_points, _ = inputs_distributed.shape
+
+        d = self.reso // self.factor
+        # Initialize latent_map to accumulate latent maps
+        latent_map = None  
+
+        if remove_padding: vol_bound = self.remove_padding_single_dim(vol_bound).reshape(-1, *vol_bound.shape[-2:])
+
+        inputs_distributed = inputs_distributed.reshape(n_inputs * n_crop, n_points, 4)
+        inputs_distributed_normalized = self.normalize_inputs(inputs_distributed, vol_bound, n_inputs)
+
+        if self.limited_gpu: n_voxels_max = 100
+        else: n_voxels_max = 1000
         
-        d = self.reso//self.factor
-        # print(inputs_distributed.shape, vol_bound.shape)
-        fea, self.unet = self.encode_crop(inputs_distributed, vol_bound)
-        # print(fea.shape)
-        _, latent_map = self.unet(fea) #down and upsample
-        
+        n_batch_voxels = int(np.ceil(inputs_distributed.shape[0] / n_voxels_max))
+
+        for i in range(n_batch_voxels):
+            start = i * n_voxels_max
+            end = min((i + 1) * n_voxels_max, inputs_distributed.shape[0])
+            inputs_distributed_batch = inputs_distributed[start:end]
+            inputs_distributed_normalized_batch = inputs_distributed_normalized[start:end]
+
+            # Call encode_crop to get features and unet
+            fea, self.unet = self.encode_crop(inputs_distributed_batch, inputs_distributed_normalized_batch)
+            # Downsample and upsample features using unet
+            _, latent_map_batch = self.unet(fea)
+
+            if latent_map is None:
+                latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch
+            else:
+                latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
+
+        # Reshape latent_map to match the original input shape
         latent_map_shape = latent_map.shape
         return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:])
 
-    def normalize_inputs(self, inputs, vol_bound):
+
+    def normalize_inputs(self, inputs, vol_bound, n_inputs):
         vol_bound = torch.from_numpy(vol_bound).to(self.device)
-        n_inputs, n_crops, n_max, _ = inputs.shape
-        inputs = inputs.reshape(n_inputs*n_crops, n_max, 4)
         
-        coords = inputs[:, :, :3]
-        occ = inputs[:, :, 3].unsqueeze(-1)
+        coords = inputs[..., :3]
+        occ = inputs[..., 3].unsqueeze(-1)
         
         bb_min = vol_bound[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
         bb_max = vol_bound[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
+        centers = (bb_min + bb_max) / 2.0
         
-        coords = (coords - bb_min) / bb_size
+        coords = (coords - centers) / bb_size + 0.5
         # bb_min_inputs = torch.min(coords, dim=1).values
         # bb_max_inputs = torch.max(coords, dim=1).values
-        # print("bb_min_inputs", bb_min_inputs)
+        # print("bb_min_inputs", bb_min_inputs, bb_size)
         # print("bb_max_inputs", bb_max_inputs)
         
         inputs = torch.cat([coords, occ], dim=-1)
-        inputs = inputs.reshape(n_inputs, n_crops, n_max, 4)
         
         return inputs
         
-    def distribute_inputs(self, distributed_inputs_raw, vol_bound):
+    def distribute_inputs(self, distributed_inputs_raw, vol_bound, remove_padding = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         n_inputs = distributed_inputs.shape[0]
         n_crops = vol_bound['n_crop']
         
+        if remove_padding: 
+            H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+            n_crops = (H-2) * (W-2) * (D-2)
+        
         distributed_inputs = distributed_inputs.repeat(1, n_crops, 1, 1)
 
         # Convert vol_bound['input_vol'] to a torch tensor
         vol_bound_tensor = torch.tensor(vol_bound['input_vol']).to(self.device)
-
+        if remove_padding: vol_bound_tensor = self.remove_padding_single_dim(vol_bound_tensor).reshape(-1, *vol_bound_tensor.shape[-2:])
+        
         # Permute dimensions
         distributed_inputs = distributed_inputs.permute(1, 0, 2, 3) #from n_inputs, n_crop, n_points, 4 to n_crop, n_inputs, n_points, 4
         distributed_inputs = distributed_inputs.reshape(distributed_inputs.shape[0], -1, 4)
@@ -376,11 +447,8 @@ class Trainer(BaseTrainer):
         # Create a mask for broadcasting
         mask = torch.arange(n_max).expand(n_inputs, n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
 
-        # Create a tensor to hold the shortened inputs
-        input_vol = torch.from_numpy(vol_bound['input_vol']).float() 
-
-        bb_min = input_vol[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
-        bb_max = input_vol[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
+        bb_min = vol_bound_tensor[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
+        bb_max = vol_bound_tensor[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
         
         random_points = torch.rand(n_inputs * n_crops, n_max, 3, device=self.device)  # Shape: (n_inputs, n_crops, n_max, 3)
@@ -395,23 +463,16 @@ class Trainer(BaseTrainer):
 
         return distributed_inputs_short
 
-    def encode_crop(self, inputs, vol_bound, fea = 'grid'):
-        n_inputs, n_crop, n_points, _ = inputs.shape
-        
-        inputs_normalized = self.normalize_inputs(inputs, vol_bound)
-        
-        inputs = inputs.reshape(n_inputs*n_crop, n_points, 4)
-        inputs_normalized = inputs_normalized.reshape(n_inputs*n_crop, n_points, 4)
+    def encode_crop(self, inputs, inputs_normalized, fea_type = 'grid'):      
         
         index = {}
         vol_bound_norm = torch.tensor([[0., 0., 0.], [1., 1., 1.]]).to(self.device)
-        ind = coord2index(inputs_normalized, vol_bound_norm, reso=self.reso, plane=fea, normalize_coords=False)
+        ind = coord2index(inputs_normalized, vol_bound_norm, reso=self.reso, plane=fea_type, normalize_coords=False)
         # print(f'ind shape: {ind.shape}')
-        index[fea] = ind
+        index[fea_type] = ind
         input_cur = add_key(inputs.clone()[...,:3], index, 'points', 'index', device=self.device)
         fea, unet = self.model.encode_inputs(input_cur)
         return fea, unet
-        
         
     def encode_crop_sequential(self, inputs, device, vol_bound, fea = 'grid'):
         ''' Encode a crop to feature volumes

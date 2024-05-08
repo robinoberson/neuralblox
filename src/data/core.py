@@ -172,11 +172,11 @@ class Shapes3dDataset(data.Dataset):
         for field_name, field in self.fields.items():
             try:
                 field_data = field.load(model_path, idx, info)
-            except Exception:
+            except Exception as e:
                 if self.no_except:
                     logger.warn(
-                        'Error occured when loading field %s of model %s'
-                        % (field_name, model)
+                        'Error occured when loading field %s of model %s, skipping. Error: %s'
+                        % (field_name, model, str(e))
                     )
                     return None
                 else:

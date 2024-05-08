@@ -69,7 +69,6 @@ class Generator3DNeighbors(object):
         self.unet_depth = unet_depth
 
         # for pointcloud_crop
-        self.vol_bound_all = None
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
         self.input_crop_size = vol_bound['input_crop_size']
@@ -88,7 +87,6 @@ class Generator3DNeighbors(object):
         inputs = data.get('inputs', [])
 
         full_points = torch.from_numpy(np.concatenate(inputs, axis=0)).to(self.device)
-        self.vol_bound_all = self.get_crop_bound(full_points.view(-1, 3), self.input_crop_size, self.query_crop_size)
         
         vol_bound = self.get_crop_bound(full_points.view(-1, 3), self.input_crop_size, self.query_crop_size, padding=False)
         if self.vol_bound is not None:
@@ -97,42 +95,46 @@ class Generator3DNeighbors(object):
             self.vol_bound['input_vol'] = vol_bound['input_vol']
             self.vol_bound['query_vol'] = vol_bound['query_vol']
         
-        inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound_all['n_crop'], self.vol_bound_all['query_vol'])
-        latent_map = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid)
-        latent_map_stacked = self.stack_latents(latent_map, self.vol_bound_all)
-        latent_map_merged = self.merge_latent_map(latent_map_stacked) 
+        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound)
+        latent_map = self.encode_latent_map(inputs_distributed, self.vol_bound['input_vol'])
+        latent_map_stacked = self.stack_latents(latent_map, self.vol_bound)
+        latent_map_merged = self.merge_latent_map(latent_map_stacked)
         
         H, W, D = self.vol_bound['axis_n_crop'][0], self.vol_bound['axis_n_crop'][1], self.vol_bound['axis_n_crop'][2]
         
         return latent_map_merged.reshape(H, W, D, *latent_map_merged.shape[1:])
 
-    def generate_latent_no_merge(self, data: torch.Tensor):
+    def generate_latent_no_merge(self, data: torch.Tensor, verbose: bool = False):
         ''' Generates voxels of latent codes from input point clouds.
             Adapt for real-world scale.
 
         Args:
             data (tensor): data tensor
         '''
-        inputs = data.get('inputs', [])
-                
-        vol_bound = self.get_crop_bound(inputs.view(-1, 3), self.input_crop_size, self.query_crop_size, padding=False)
+        inputs_3D = data.get('inputs', []).to(self.device)
+        inputs_occ = data.get('inputs.occ', []).to(self.device).unsqueeze(-1)
         
+        inputs = torch.cat((inputs_3D, inputs_occ), dim=-1)
+                
+        vol_bound = self.get_crop_bound(inputs_3D.view(-1, 3), self.input_crop_size, self.query_crop_size, padding=False)
+
         if self.vol_bound is not None:
             self.vol_bound['axis_n_crop'] = vol_bound['axis_n_crop']
             self.vol_bound['n_crop'] = vol_bound['n_crop']
             self.vol_bound['input_vol'] = vol_bound['input_vol']
             self.vol_bound['query_vol'] = vol_bound['query_vol']
         
-        inputs_distributed, occupied_voxels, vol_bound_valid = self.distribute_inputs(inputs, self.vol_bound['n_crop'], self.vol_bound['query_vol'])
-        
-        latent_map = self.encode_latent_map(inputs_distributed, occupied_voxels, vol_bound_valid).squeeze(0)
+        if verbose: print(f'Distributing inputs...')
+        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound)
+        if verbose: print(f'Encoding latent map... Inputs shape: {inputs_distributed.shape}')
+        latent_map = self.encode_latent_map(inputs_distributed, self.vol_bound['input_vol'])
         H, W, D = self.vol_bound['axis_n_crop'][0], self.vol_bound['axis_n_crop'][1], self.vol_bound['axis_n_crop'][2]
-
-        return latent_map.reshape(H, W, D, *latent_map.shape[1:]), inputs_distributed
+        if verbose: print(f'Latent_map shape: {latent_map.shape}')
+        return latent_map.reshape(H, W, D, *latent_map.shape[2:]), inputs_distributed
     
     def remove_padding(self, tensor):
         is_latent = False
-        H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+        H, W, D = self.vol_bound['axis_n_crop'][0], self.vol_bound['axis_n_crop'][1], self.vol_bound['axis_n_crop'][2]
 
         if len(tensor.shape) == 7:
             H, W, D, c, h, w, d = tensor.shape
@@ -186,45 +188,57 @@ class Generator3DNeighbors(object):
                         
         return latent_map_neighbored
     
-    def encode_crop_sequential(self, inputs, device, vol_bound, fea = 'grid'):
-        ''' Encode a crop to feature volumes
-
-        Args:
-            inputs (tensor): input point cloud
-            device (device): pytorch device
-            vol_bound (dict): volume boundary
-        '''
-
+    def encode_crop(self, inputs, vol_bound, fea = 'grid'):
+        n_inputs, n_crop, n_points, _ = inputs.shape
+        
+        inputs_normalized = self.normalize_inputs(inputs, vol_bound)
+        
+        inputs = inputs.reshape(n_inputs*n_crop, n_points, 4)
+        inputs_normalized = inputs_normalized.reshape(n_inputs*n_crop, n_points, 4)
+        
         index = {}
-        grid_reso = self.reso
-        ind = coord2index(inputs.clone(), vol_bound, reso=grid_reso, plane=fea)
+        vol_bound_norm = torch.tensor([[0., 0., 0.], [1., 1., 1.]]).to(self.device)
+        ind = coord2index(inputs_normalized, vol_bound_norm, reso=self.reso, plane=fea, normalize_coords=False)
+        # print(f'ind shape: {ind.shape}')
         index[fea] = ind
-        input_cur = add_key(inputs.clone(), index, 'points', 'index', device=device)
-
+        input_cur = add_key(inputs.clone()[...,:3], index, 'points', 'index', device=self.device)
         fea, unet = self.model.encode_inputs(input_cur)
-
         return fea, unet
     
-    def encode_latent_map(self, inputs_distributed, occupied_voxels, vol_bound_valid):
-        n_inputs = occupied_voxels.shape[0]
-        n_crop = occupied_voxels.shape[1]
-        d = self.reso//self.factor
-        latent_map = torch.zeros(n_inputs, n_crop, self.hdim*self.factor, d, d, d).to(self.device)
-    
-        for idx_pin in range(n_inputs):
-            n_valid_crops = torch.sum(occupied_voxels, dim=1)[idx_pin].item()
-            fea = torch.zeros(n_valid_crops, self.hdim, self.reso, self.reso, self.reso).to(self.device)
-
-            idx_input_valid = 0
-            for bool_valid in occupied_voxels[idx_pin]:
-                if bool_valid:
-                    fea[idx_input_valid], self.unet = self.encode_crop_sequential(inputs_distributed[idx_pin][idx_input_valid].unsqueeze(0).float(), self.device, vol_bound = vol_bound_valid[idx_pin][idx_input_valid])
-            
-                    idx_input_valid += 1
-            
-            _, latent_map[idx_pin, occupied_voxels[idx_pin]] = self.unet(fea) #down and upsample
+    def normalize_inputs(self, inputs, vol_bound):
+        vol_bound = torch.from_numpy(vol_bound).to(self.device)
+        n_inputs, n_crops, n_max, _ = inputs.shape
+        inputs = inputs.reshape(n_inputs*n_crops, n_max, 4)
         
-        return latent_map
+        coords = inputs[:, :, :3]
+        occ = inputs[:, :, 3].unsqueeze(-1)
+        
+        bb_min = vol_bound[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
+        bb_max = vol_bound[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
+        bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
+        
+        coords = (coords - bb_min) / bb_size
+        # bb_min_inputs = torch.min(coords, dim=1).values
+        # bb_max_inputs = torch.max(coords, dim=1).values
+        # print("bb_min_inputs", bb_min_inputs)
+        # print("bb_max_inputs", bb_max_inputs)
+        
+        inputs = torch.cat([coords, occ], dim=-1)
+        inputs = inputs.reshape(n_inputs, n_crops, n_max, 4)
+        
+        return inputs
+    def encode_latent_map(self, inputs_distributed, vol_bound):
+        
+        n_inputs, n_crop, n_points, _ = inputs_distributed.shape
+        
+        d = self.reso//self.factor
+        # print(inputs_distributed.shape, vol_bound.shape)
+        fea, self.unet = self.encode_crop(inputs_distributed, vol_bound)
+        # print(fea.shape)
+        _, latent_map = self.unet(fea) #down and upsample
+        
+        latent_map_shape = latent_map.shape
+        return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:])
     def get_input_crop(self, p_input, vol_bound):
         
         mask_x = (p_input[..., 0] >= vol_bound[0][0]) & \
@@ -237,24 +251,69 @@ class Generator3DNeighbors(object):
         
         return p_input[mask]
     
-    def distribute_inputs(self, p_input, n_crop, vol_bound_all):
-        n_inputs = len(p_input)
-        occpied_voxels = torch.zeros(n_inputs, n_crop, dtype=torch.bool).to(self.device)
-        inputs_croped_list = [[] for i in range(n_inputs)]
-        vol_bound_valid = [[] for i in range(n_inputs)]
+    def distribute_inputs(self, distributed_inputs_raw, vol_bound):
+        # Clone the input tensor
+        distributed_inputs = distributed_inputs_raw.clone()
+        n_inputs = distributed_inputs.shape[0]
+        n_crops = vol_bound['n_crop']
         
-        for idx_pin in range(n_inputs):
-            for i in range(n_crop):
-                inputs_crop = self.get_input_crop(p_input[idx_pin], vol_bound_all[i])
-                
-                if inputs_crop.shape[0] > 0:
-                    if isinstance(inputs_crop, np.ndarray):
-                        inputs_crop = torch.from_numpy(inputs_crop).to(self.device)
-                    inputs_croped_list[idx_pin].append(inputs_crop)
-                    vol_bound_valid[idx_pin].append(vol_bound_all[i])
-                    occpied_voxels[idx_pin, i] = True
-                    
-        return inputs_croped_list, occpied_voxels, vol_bound_valid
+        distributed_inputs = distributed_inputs.repeat(1, n_crops, 1, 1)
+
+        # Convert vol_bound['input_vol'] to a torch tensor
+        vol_bound_tensor = torch.tensor(vol_bound['input_vol']).to(self.device)
+
+        # Permute dimensions
+        distributed_inputs = distributed_inputs.permute(1, 0, 2, 3) #from n_inputs, n_crop, n_points, 4 to n_crop, n_inputs, n_points, 4
+        distributed_inputs = distributed_inputs.reshape(distributed_inputs.shape[0], -1, 4)
+
+        # Create masks for each condition
+        mask_1 = distributed_inputs[:, :, 0] < vol_bound_tensor[:, 0, 0].unsqueeze(1)
+        mask_2 = distributed_inputs[:, :, 0] > vol_bound_tensor[:, 1, 0].unsqueeze(1)
+        mask_3 = distributed_inputs[:, :, 1] < vol_bound_tensor[:, 0, 1].unsqueeze(1)
+        mask_4 = distributed_inputs[:, :, 1] > vol_bound_tensor[:, 1, 1].unsqueeze(1)
+        mask_5 = distributed_inputs[:, :, 2] < vol_bound_tensor[:, 0, 2].unsqueeze(1)
+        mask_6 = distributed_inputs[:, :, 2] > vol_bound_tensor[:, 1, 2].unsqueeze(1)
+
+        # Combine masks
+        final_mask = mask_1 | mask_2 | mask_3 | mask_4 | mask_5 | mask_6
+
+        # Set values to 0 where conditions are met
+        distributed_inputs[:, :, 3][final_mask] = 0
+
+        # Reshape back to original shape
+        distributed_inputs = distributed_inputs.reshape(n_crops, n_inputs, -1, 4)
+        distributed_inputs = distributed_inputs.permute(1, 0, 2, 3)
+        
+        # Calculate n_max
+        n_max = int(distributed_inputs[..., 3].sum(dim=2).max().item())
+
+        # Create a mask for selecting points with label 1
+        indexes_keep = distributed_inputs[..., 3] == 1
+
+        # Calculate the number of points to keep for each input and crop
+        n_points = distributed_inputs[..., 3].sum(dim=2).int()
+
+        # Create a mask for broadcasting
+        mask = torch.arange(n_max).expand(n_inputs, n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
+
+        # Create a tensor to hold the shortened inputs
+        input_vol = torch.from_numpy(vol_bound['input_vol']).float().to(self.device)
+
+        bb_min = input_vol[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
+        bb_max = input_vol[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
+        bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
+        
+        random_points = torch.rand(n_inputs * n_crops, n_max, 3, device=self.device)  # Shape: (n_inputs, n_crops, n_max, 3)
+        random_points *= bb_size  # Scale points to fit inside each bounding box
+        random_points += bb_min  # Translate points to be within each bounding box
+        
+        distributed_inputs_short = torch.zeros(n_inputs, n_crops, n_max, 4, device=self.device)
+        distributed_inputs_short[:, :, :, :3] = random_points.reshape(n_inputs, n_crops, n_max, 3)
+        
+        # Assign values to the shortened tensor using advanced indexing and broadcasting
+        distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
+
+        return distributed_inputs_short
     
     def get_crop_bound(self, inputs, input_crop_size, query_crop_size, padding = True):
         ''' Divide a scene into crops, get boundary for each crop
@@ -271,7 +330,10 @@ class Generator3DNeighbors(object):
         else:
             lb = torch.min(inputs, dim=0).values.cpu().numpy() - 0.01 
             ub = torch.max(inputs, dim=0).values.cpu().numpy() + 0.01  
-            
+        
+        # print(lb[0]:ub[0]:query_crop_size)
+        print(lb[0], ub[0], query_crop_size)
+        
         lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,
                             lb[1]:ub[1]:query_crop_size,
                             lb[2]:ub[2]:query_crop_size].reshape(3, -1).T
@@ -306,7 +368,7 @@ class Generator3DNeighbors(object):
         p_n = {}
         for key in self.vol_bound['fea_type']:
             # projected coordinates normalized to the range of [0, 1]
-            p_n[key] = normalize_coord(pi.clone(), vol_bound['query_vol'], plane=key).unsqueeze(0).to(self.device)
+            p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).unsqueeze(0).to(self.device)
         pi_in['p_n'] = p_n
         
         min_vals, _ = torch.min(p_n['grid'], dim=1)
@@ -338,7 +400,7 @@ class Generator3DNeighbors(object):
     # @profile
     def generate_mesh_from_neural_map(self, latent_all, return_stats=True):
         occ_values_x = self.generate_occupancy(latent_all)
-        
+        # return occ_values_x
         return self.generate_mesh_from_occ(occ_values_x, return_stats=return_stats)
 
     # @profile
@@ -460,7 +522,7 @@ class Generator3DNeighbors(object):
         with torch.no_grad():
             for depth in range(len(decoder_unet)):
                 up = (depth + 1) * 2
-                dummy_shape_tensor = torch.zeros(1, 1, h * up, w * up, d * up)
+                dummy_shape_tensor = torch.zeros(1, 1, h * up, w * up, d * up).to(self.device)
                 z = decoder_unet[depth].upsampling(dummy_shape_tensor, z)
                 z = decoder_unet[depth].basic_module(z)
 

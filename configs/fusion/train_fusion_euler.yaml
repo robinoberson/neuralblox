@@ -1,17 +1,10 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
-  # path: /media/roberson/T7/data/fusion_high_res_clusterized_aligned_new
-  # path: /media/roberson/T7/data/fusion_easy_data_temp
-  # path_gt: /media/roberson/T7/data/fusion_easy_data_gt_temp
   path: /cluster/scratch/roberson/data/fusion/fusion_easy_data_temp
   path_gt: /cluster/scratch/roberson/data/fusion/fusion_easy_data_gt_temp
 
-  points_unpackbits: true
-  input_vol: 1.6
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_easy
-  # out_dir: /scratch2/roberson/neuralblox/out_fusion/test_easy
-  batch_size: 8
-  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty/aug_model_30000.pt
-  # backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_30000.pt
-  stack_latents: true
+  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty/aug_model_130000.pt
+  checkpoint_every: 200
+  limited_gpu: false

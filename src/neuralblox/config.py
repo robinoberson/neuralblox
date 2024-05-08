@@ -156,6 +156,7 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
     unet_depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] - 1
+    limited_gpu = cfg['training']['limited_gpu']
 
     trainer = training_fusion.Trainer(
         model, model_merge, optimizer, 
@@ -164,7 +165,8 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
         eval_sample=cfg['training']['eval_sample'],
         query_n = query_n,
         unet_hdim = unet_hdim,
-        unet_depth = unet_depth
+        unet_depth = unet_depth,
+        limited_gpu = limited_gpu
     )
 
     return trainer
