@@ -82,7 +82,7 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         
-        del latent_map_sampled, latent_map_sampled_stacked
+        del latent_map_sampled, latent_map_sampled_stacked, inputs_distributed
         torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
@@ -144,7 +144,7 @@ class Trainer(BaseTrainer):
 
         return elevation_voxels
     
-    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed):
+    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
     #     import open3d as o3d
         
 
@@ -245,7 +245,7 @@ class Trainer(BaseTrainer):
         n_crops_total = latent_map_full.shape[0]
         
         if self.limited_gpu:
-            n_batch_max = 30
+            n_batch_max = 20
         else:
             n_batch_max = 1000
 
