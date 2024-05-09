@@ -105,7 +105,7 @@ class Trainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         
         return loss, losses
     
@@ -123,7 +123,7 @@ class Trainer(BaseTrainer):
         loss_iii = 1 * loss_logits_flat(logits_sampled[~elevation_voxels], logits_gt[~elevation_voxels])
         loss_iv = 1 * loss_latents_flat(latent_map_sampled[~elevation_voxels], latent_map_gt[~elevation_voxels])
         loss = loss_i + loss_ii + loss_iii + loss_iv
-        # print(f'loss_i: {loss_i}, loss_ii: {loss_ii}, loss_iii: {loss_iii}, loss_iv: {loss_iv}, loss: {loss}')
+        print(f'loss_i: {loss_i}, loss_ii: {loss_ii}, loss_iii: {loss_iii}, loss_iv: {loss_iv}, loss: {loss}')
         
         return loss, [loss_i, loss_ii, loss_iii, loss_iv]
 
@@ -144,57 +144,60 @@ class Trainer(BaseTrainer):
 
         return elevation_voxels
     
-    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
-    #     import open3d as o3d
+    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
+        import open3d as o3d
         
 
-    #     p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
-    #     # save query points, logits_gt, logits_sampled as pickle 
-    #     import pickle
-    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/query_points.pkl', 'wb') as f:
-    #         pickle.dump([p_stacked, p_n_stacked], f)
-    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
-    #         pickle.dump(logits_gt, f)
-    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
-    #         pickle.dump(logits_sampled, f)
-    #     # save self.vol_bound_all
-    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
-    #         pickle.dump(self.vol_bound_all, f)
-    #         #save inputs 
-    #     with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/inputs.pkl', 'wb') as f:
-    #         pickle.dump(inputs_distributed, f)
+        p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+        # save query points, logits_gt, logits_sampled as pickle 
+        import pickle
+        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/query_points.pkl', 'wb') as f:
+            pickle.dump([p_stacked, p_n_stacked], f)
+        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
+            pickle.dump(logits_gt, f)
+        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
+            pickle.dump(logits_sampled, f)
+        # save self.vol_bound_all
+        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
+            pickle.dump(self.vol_bound_all, f)
+            #save inputs 
+        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/inputs.pkl', 'wb') as f:
+            pickle.dump(inputs_distributed, f)
 
-    #     occ_gt = logits_gt.detach().cpu().numpy()
-    #     occ_sampled = logits_sampled.detach().cpu().numpy()
+        occ_gt = logits_gt.detach().cpu().numpy()
+        occ_sampled = logits_sampled.detach().cpu().numpy()
 
-    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-    #     values_gt = values_gt.reshape(-1)
-    #     values_sampled = values_sampled.reshape(-1)
+        values_gt = values_gt.reshape(-1)
+        values_sampled = values_sampled.reshape(-1)
 
-    #     threshold = 0.5
+        threshold = 0.5
 
-    #     values_gt[values_gt < threshold] = 0
-    #     values_gt[values_gt >= threshold] = 1
+        values_gt[values_gt < threshold] = 0
+        values_gt[values_gt >= threshold] = 1
 
-    #     values_sampled[values_sampled < threshold] = 0
-    #     values_sampled[values_sampled >= threshold] = 1
+        values_sampled[values_sampled < threshold] = 0
+        values_sampled[values_sampled >= threshold] = 1
 
-    #     both_occ = np.logical_and(values_gt, values_sampled)
+        both_occ = np.logical_and(values_gt, values_sampled)
         
-    #     pcd = o3d.geometry.PointCloud()
-    #     colors = np.zeros((values_gt.shape[0], 3))
-    #     colors[values_gt == 1] = [1, 0, 0] # red
-    #     colors[values_sampled == 1] = [0, 0, 1] # blue
-    #     colors[both_occ == 1] = [0, 1, 0] # purple
+        pcd = o3d.geometry.PointCloud()
+        colors = np.zeros((values_gt.shape[0], 3))
+        colors[values_gt == 1] = [1, 0, 0] # red
+        colors[values_sampled == 1] = [0, 0, 1] # blue
+        colors[both_occ == 1] = [0, 1, 0] # purple
         
-    #     mask = np.any(colors != [0, 0, 0], axis=1)
-    #     print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
-    #     colors = colors[mask]
-    #     pcd.points = o3d.utility.Vector3dVector(p_full[mask])
-    #     pcd.colors = o3d.utility.Vector3dVector(colors)
-    #     o3d.visualization.draw_geometries([pcd])
+        mask = np.any(colors != [0, 0, 0], axis=1)
+        print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+        colors = colors[mask]
+        pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        # o3d.visualization.draw_geometries([pcd])
+        #save point cloud
+        o3d.io.write_point_cloud('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/pcd.ply', pcd)
+        print('pcd saved')
 
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
