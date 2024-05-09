@@ -1,6 +1,7 @@
 try:
     from setuptools import setup
 except ImportError:
+    
     from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
@@ -89,6 +90,6 @@ ext_modules = [
 setup(
     ext_modules=cythonize(ext_modules),
     cmdclass={
-        'build_ext': BuildExtension.with_options(use_ninja=False)
+        'build_ext': BuildExtension
     }
 )
