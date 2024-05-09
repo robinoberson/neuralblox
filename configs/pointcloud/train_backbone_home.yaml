@@ -1,0 +1,17 @@
+inherit_from: configs/pointcloud/train_backbone.yaml
+data:
+  classes: null
+  path: /home/robin/Dev/MasterThesis/data
+training:
+  out_dir: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone
+  batch_size: 64
+  print_every: 1000
+  visualize_every: 10000
+  validate_loss_every: 500000
+  checkpoint_every: 2000
+  starting_model: aug_model_130000.pt
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false
+  model_file: aug_model_130000.pt

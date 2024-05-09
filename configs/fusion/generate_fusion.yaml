@@ -1,8 +1,8 @@
 method: neuralblox
 data:
   dataset: Scenes3D
-  input_type: pointcloud_crop
-  classes: ['']
+  input_type: pointcloud_sequential
+  classes: null
   path: demo/redwood_apartment_13k
   pointcloud_n: 10000
   pointcloud_noise: 0.005
@@ -15,10 +15,15 @@ data:
   multi_files: 10
   unit_size: 0.02
   query_vol_size: 25
+  grid_resolution: 24
+  input_vol: 1.6 # in meter
+  query_vol: 1.0 # in meter
+
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
   encoder_kwargs:
+    grid_resolution: 24
     hidden_dim: 32
     plane_type: ['grid']
     unet3d: True
@@ -47,15 +52,15 @@ training:
   n_workers: 8
   n_workers_val: 4
 test:
-  threshold: 0.005
+  threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
   model_file: model_best.pt
 generation:
   generation_dir: generation
-  generator_type: standard # standard / neighbors
+  generator_type: neighbors
   vis_n_outputs: 2
   sliding_window: True
-  resolution_0: 64
-  upsampling_steps: 0
+  resolution_0: 20 # resolution for each crop
   max_byte_size: 20480000
+  voxel_threshold: 0.001

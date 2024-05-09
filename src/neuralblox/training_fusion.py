@@ -151,17 +151,17 @@ class Trainer(BaseTrainer):
         p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
         # save query points, logits_gt, logits_sampled as pickle 
         import pickle
-        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/query_points.pkl', 'wb') as f:
+        with open('../Playground/FusionEmpty/query_points.pkl', 'wb') as f:
             pickle.dump([p_stacked, p_n_stacked], f)
-        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
+        with open('../Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
             pickle.dump(logits_gt, f)
-        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
+        with open('../Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
             pickle.dump(logits_sampled, f)
         # save self.vol_bound_all
-        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
+        with open('../Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
             pickle.dump(self.vol_bound_all, f)
             #save inputs 
-        with open('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/inputs.pkl', 'wb') as f:
+        with open('../Playground/FusionEmpty/inputs.pkl', 'wb') as f:
             pickle.dump(inputs_distributed, f)
 
         occ_gt = logits_gt.detach().cpu().numpy()
@@ -194,10 +194,9 @@ class Trainer(BaseTrainer):
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
         pcd.colors = o3d.utility.Vector3dVector(colors)
-        # o3d.visualization.draw_geometries([pcd])
+        o3d.visualization.draw_geometries([pcd])
         #save point cloud
-        o3d.io.write_point_cloud('/home/roberson/MasterThesis/master_thesis/Playground/FusionEmpty/pcd.ply', pcd)
-        print('pcd saved')
+        # o3d.io.write_point_cloud('../Playground/FusionEmpty/pcd.ply', pcd)
 
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)

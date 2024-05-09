@@ -1,0 +1,19 @@
+inherit_from: configs/fusion/train_fusion.yaml
+data:
+  # path: /home/robin/Dev/MasterThesis/data/fusion/fusion_easy_data_temp
+  # path_gt: /home/robin/Dev/MasterThesis/data/fusion/fusion_easy_data_gt_temp
+  # path: /home/robin/Dev/MasterThesis/data/fusion
+  # path_gt: /home/robin/Dev/MasterThesis/data/fusion_gt
+  path: '/home/robin/Dev/MasterThesis/data/fusion'
+  path_gt: '/home/robin/Dev/MasterThesis/data/fusion_gt'
+  
+training:
+  out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/reduced_scenes
+  # out_dir: /scratch/roberson/neuralblox/out_fusion/easy_data
+  backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_130000.pt
+  # backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_130000.pt
+  learning_rate: 0.01
+  limited_gpu: true
+  checkpoint_every: 20
+  log_comet: false 
+  print_every: 3

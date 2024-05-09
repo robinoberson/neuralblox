@@ -1,0 +1,9 @@
+inherit_from: configs/fusion/generate_fusion.yaml
+data:
+  path: /scratch/roberson/data/sim_data/2024-03-15_14-15-57
+test:
+  model_file: aug_model_130000.pt
+  model_file_dir: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone
+  merging_model_file: /scratch2/roberson/neuralblox/out_fusion/neighbors/models/model_merging.pt
+  out_dir: /scratch2/roberson/neuralblox/output
+  out_name: anymal-22-03-2024

@@ -258,7 +258,6 @@ dependencies:
       - threadpoolctl==3.3.0
       - tomli==2.0.1
       - torch==2.2.1
-      - torch-scatter==2.1.2+pt22cu121
       - torchaudio==2.2.1
       - torchvision==0.17.1
       - tqdm==4.66.2

@@ -66,3 +66,4 @@ generation:
   n_x: 128
   n_z: 1
   max_byte_size: 600000000
+  resolution_0: 20
