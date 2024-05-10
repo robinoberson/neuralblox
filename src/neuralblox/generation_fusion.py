@@ -34,7 +34,7 @@ class Generator3D(object):
         boundary_interpolation (bool): whether boundary interpolation is performed
     '''
 
-    def __init__(self, model, model_merge, sample_points, max_byte_size, points_batch_size=3000000,
+    def __init__(self, model, model_merge, sample_points, points_batch_size=3000000,
                  threshold=0.05, refinement_step=0, device=None,
                  resolution0=16, upsampling_steps=3,
                  padding=0.1,
@@ -74,7 +74,6 @@ class Generator3D(object):
         # for pointcloud_crop
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
-        self.max_byte_size = max_byte_size
 
         if vol_info is not None:
             self.input_vol, _, _ = vol_info
@@ -434,10 +433,7 @@ class Generator3D(object):
 
         n_crop_axis = self.vol_bound['axis_n_crop']
         max_x, max_y, max_z = n_crop_axis[0], n_crop_axis[1], n_crop_axis[2]
-                
-        denominator = max_x * max_y * max_z * 8
-        n = int(np.floor(np.power(self.max_byte_size / denominator, 1/3)))
-        n = np.min([n, self.resolution0]) # number of points per voxel along each axis
+
         self.resolution0 = n # number of points per voxel along each axis
 
         print(f'max_x: {max_x}, max_y: {max_y}, max_z: {max_z}, new resolution: {n}')

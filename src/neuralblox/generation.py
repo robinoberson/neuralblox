@@ -45,7 +45,7 @@ class Generator3D(object):
                  vol_bound=None,
                  simplify_nfaces=None,
                  grid_reso=24,
-                 max_byte_size=100000000):
+                 vol_range=None):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
         self.refinement_step = refinement_step
@@ -58,7 +58,7 @@ class Generator3D(object):
         self.padding = padding
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
-        self.vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+        self.vol_range = vol_range
         self.grid_reso = grid_reso
         # for pointcloud_crop
         self.vol_bound = vol_bound

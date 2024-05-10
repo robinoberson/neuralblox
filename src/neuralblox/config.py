@@ -102,7 +102,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     )
 
     if cfg['data']['input_type'] == 'pointcloud_sequential':
-        return model, input_vol_size, query_vol_size, grid_reso
+        return model
     else:
         return model
 
@@ -157,6 +157,8 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
     unet_depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] - 1
     limited_gpu = cfg['training']['limited_gpu']
+    input_crop_size = cfg['data']['input_vol']
+    query_crop_size = cfg['data']['query_vol']
 
     trainer = training_fusion.Trainer(
         model, model_merge, optimizer, 
@@ -166,7 +168,9 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
         query_n = query_n,
         unet_hdim = unet_hdim,
         unet_depth = unet_depth,
-        limited_gpu = limited_gpu
+        limited_gpu = limited_gpu,
+        input_crop_size = input_crop_size,
+        query_crop_size = query_crop_size
     )
 
     return trainer
@@ -221,7 +225,7 @@ def get_generator(model, cfg, device, **kwargs):
         padding=cfg['data']['padding'],
         vol_info=vol_info,
         vol_bound=vol_bound,
-        max_byte_size=cfg['generation']['max_byte_size']
+        vol_range = cfg['data']['vol_range'],
     )
     return generator
 
@@ -297,7 +301,7 @@ def get_generator_fusion(model, model_merge, cfg, device, sample_points=None, **
             boundary_interpolation=boundary_interpolation,
             unet_hdim = unet_hdim,
             unet_depth = unet_depth,
-            max_byte_size=cfg['generation']['max_byte_size']
+    
         )
         
     return generator

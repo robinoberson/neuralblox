@@ -52,6 +52,7 @@ backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 learning_rate = cfg['training']['learning_rate']
 limited_gpu = cfg['training']['limited_gpu']
+grid_reso = cfg['data']['grid_resolution']
 exit_after = args.exit_after
 
 gt_query = cfg['training']['gt_query']
@@ -82,7 +83,7 @@ train_loader = torch.utils.data.DataLoader(
     batch_sampler=batch_sampler,
     worker_init_fn=data.worker_init_fn)
 # Model
-model, input_crop_size, query_crop_size, grid_reso = config.get_model(cfg, device=device, dataset=train_dataset)
+model = config.get_model(cfg, device=device, dataset=train_dataset)
 
 # Model for merging
 model_merging = layers.Conv3D_one_input().to(device)
@@ -177,7 +178,7 @@ while True:
         
         points_gt = torch.cat((points_gt, points_gt_occ), dim=-1)
         
-        loss, losses = trainer.train_sequence_window(batch, points_gt, grid_reso)
+        loss, losses = trainer.train_sequence_window(batch, points_gt)
         
         scheduler.step(loss)
         

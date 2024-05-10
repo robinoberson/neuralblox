@@ -18,6 +18,8 @@ data:
   grid_resolution: 24
   input_vol: 1.6 # in meter
   query_vol: 1.0 # in meter
+  # vol_range: [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+  vol_range: [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
 
 model:
   local_coord: True
@@ -62,5 +64,4 @@ generation:
   vis_n_outputs: 2
   sliding_window: True
   resolution_0: 20 # resolution for each crop
-  max_byte_size: 20480000
   voxel_threshold: 0.001

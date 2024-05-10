@@ -18,6 +18,8 @@ data:
   grid_resolution: 24
   input_vol: 1.2
   query_vol: 1.0
+  vol_range: [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+  # vol_range: [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
@@ -65,5 +67,4 @@ generation:
   refine: false
   n_x: 128
   n_z: 1
-  max_byte_size: 600000000
   resolution_0: 20

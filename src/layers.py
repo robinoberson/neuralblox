@@ -70,3 +70,35 @@ class Conv3D_one_input(nn.Module):
             z = self.activation(z)
 
         return z
+    
+    
+# class Conv3D_one_input(nn.Module):
+#     ''' Single fully connected layer network.
+
+#     Args:
+#         input_size (int): input size
+#         output_size (int): output size
+#         output_shape (tuple): shape of the output tensor
+#     '''
+
+#     def __init__(self, num_channels=None):
+#         input_size = 256 * 8 * 8 * 8  # Example input size, calculated from the input tensor shape
+#         output_size = 128 * 6 * 6 * 6  # Example output size, calculated from the desired output tensor shape
+#         output_shape = (128, 6, 6, 6) 
+        
+#         super(Conv3D_one_input, self).__init__()
+#         self.input_size = input_size
+#         self.output_size = output_size
+#         self.pool = nn.MaxPool3d(kernel_size=3, stride=2)  # Max pooling with kernel size 3 and stride 3
+#         self.fc = nn.Linear(input_size, output_size)
+#         self.activation = nn.ReLU()
+#         self.output_shape = output_shape
+
+#     def forward(self, fea):
+#         x = fea['latent']
+#         x = self.pool(x)  # Max pooling to reduce spatial dimensions
+#         x = x.view(x.size(0), -1)  # Flatten the pooled input tensor
+#         x = self.fc(x)
+#         x = self.activation(x)
+#         x = x.view(x.size(0), *self.output_shape)  # Reshape the output tensor
+#         return x

@@ -41,4 +41,3 @@ generation:
   resolution_0: 100 # resolution for each crop
   voxel_threshold: 0.001
   boundary_interpolation: False
-  max_byte_size: 8096000000

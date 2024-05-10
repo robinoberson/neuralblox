@@ -6,6 +6,7 @@ from src.common import (
 from src.training import BaseTrainer
 import numpy as np
 import pickle
+import time
 
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -26,7 +27,7 @@ class Trainer(BaseTrainer):
     '''
 
     def __init__(self, model, model_merge, optimizer, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2, limited_gpu = False):
+                 vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
@@ -44,15 +45,18 @@ class Trainer(BaseTrainer):
         self.reso = None
         self.unet = None
         self.limited_gpu = limited_gpu
+        self.reso = grid_reso
+
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data_batch, points_gt, grid_reso):
+    def train_sequence_window(self, data_batch, points_gt):
         ''' Performs a training step.
 
         Args:
             data (dict): data dictionary
         '''
+        t0 = time.time()
         
         n_inputs = 2
         
@@ -61,9 +65,6 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.model_merge.train()
         self.optimizer.zero_grad()
-
-        self.reso = grid_reso
-        d = self.reso//self.factor
         
         p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
     
@@ -72,7 +73,6 @@ class Trainer(BaseTrainer):
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
         
         inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
-        # return inputs_distributed
         # Encode latents 
         latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
         # return latent_map_sampled
@@ -82,12 +82,14 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         
-        del latent_map_sampled, latent_map_sampled_stacked, inputs_distributed
+        del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
         
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
+        
+        # return p_stacked, p_n_stacked, inputs_distributed
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
         torch.cuda.empty_cache()
@@ -101,14 +103,22 @@ class Trainer(BaseTrainer):
             raise ValueError
         
         # compute cost
-        loss, losses = self.compute_loss(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
+        # loss, losses = self.compute_loss(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
+        loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
         loss.backward()
         self.optimizer.step()
         
+        print(f'Loss: {loss:.4f}, logits: {losses[0]:.4f}, latents: {losses[1]:.4f}, elapsed time: {time.time() - t0}')
         self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         
         return loss, losses
-    
+    def compute_loss_easy(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
+        loss_fc = torch.nn.L1Loss(reduction='mean')
+        loss_i = loss_fc(logits_sampled, logits_gt)
+        loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
+        loss = loss_i + loss_ii
+        
+        return loss, [loss_i, loss_ii]
     def compute_loss(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
         
         elevation_voxels = self.get_elevated_voxels(inputs_distributed)
@@ -190,11 +200,15 @@ class Trainer(BaseTrainer):
         colors[both_occ == 1] = [0, 1, 0] # purple
         
         mask = np.any(colors != [0, 0, 0], axis=1)
-        print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+        # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+        bb_min_points = np.min(p_full[mask], axis=0)
+        bb_max_points = np.max(p_full[mask], axis=0)
+        print(bb_min_points, bb_max_points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
-        o3d.visualization.draw_geometries([pcd])
+        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        o3d.visualization.draw_geometries([pcd, base_axis])
         #save point cloud
         # o3d.io.write_point_cloud('../Playground/FusionEmpty/pcd.ply', pcd)
 
@@ -284,22 +298,24 @@ class Trainer(BaseTrainer):
 
         return logits_stacked
     
-    def get_query_points(self, input_size, query_size_voxel = 1.0):
+    def get_query_points(self, input_size, query_size_voxel = 1.0, unpadding = True):
         # Pay attention to wording #TODO change this 
         # query_crop_size is used as the voxel size for distributing the inputs 
         # query_size_voxel is used to determine the size of the query on a voxel latent 
-        random_points = torch.rand(1, self.query_n, 3).to(self.device)
+        random_points = torch.rand(1, self.query_n, 3).to(self.device) - 0.5
 
-        n_crops_unpadded = (self.vol_bound_all['axis_n_crop'][0] - 2) * (self.vol_bound_all['axis_n_crop'][1] - 2) * (self.vol_bound_all['axis_n_crop'][2] - 2)
-        random_points_stacked = random_points.repeat(n_crops_unpadded, 1, 1)
+        if unpadding: n_crops = (self.vol_bound_all['axis_n_crop'][0] - 2) * (self.vol_bound_all['axis_n_crop'][1] - 2) * (self.vol_bound_all['axis_n_crop'][2] - 2)
+        else: n_crops = (self.vol_bound_all['axis_n_crop'][0]) * (self.vol_bound_all['axis_n_crop'][1]) * (self.vol_bound_all['axis_n_crop'][2])
+        
+        random_points_stacked = random_points.repeat(n_crops, 1, 1)
 
         centers = torch.from_numpy((self.vol_bound_all['input_vol'][:,1] - self.vol_bound_all['input_vol'][:,0])/2.0 + self.vol_bound_all['input_vol'][:,0]).to(self.device) #shape [n_crops, 3]
-        centers = self.remove_padding_single_dim(centers).reshape(-1,3)
+        if unpadding: centers = self.remove_padding_single_dim(centers).reshape(-1,3)
         centers = centers.unsqueeze(1)
         
-        p = ((random_points_stacked.clone()-0.5) * input_size + 0.5 + centers)
+        p = ((random_points_stacked.clone()) * input_size + centers)
         # p_n = ((random_points_stacked.clone() - 0.5) * query_size_voxel / input_size + 0.5)[occupied_voxels]
-        p_n = random_points_stacked
+        p_n = random_points_stacked + 0.5
 
         return p, p_n
     
@@ -486,8 +502,7 @@ class Trainer(BaseTrainer):
         '''
 
         index = {}
-        grid_reso = self.reso
-        ind = coord2index(inputs.clone(), vol_bound, reso=grid_reso, plane=fea)
+        ind = coord2index(inputs.clone(), vol_bound, reso=self.grid_reso, plane=fea)
         index[fea] = ind
         input_cur = add_key(inputs.clone()[...,:3], index, 'points', 'index', device=device)
 
@@ -515,8 +530,8 @@ class Trainer(BaseTrainer):
             
         vol_bound = {}
 
-        lb = torch.min(inputs, dim=0).values.cpu().numpy() - 0.01 - query_crop_size #Padded once
-        ub = torch.max(inputs, dim=0).values.cpu().numpy() + 0.01 + query_crop_size #Padded once
+        lb = torch.min(inputs, dim=0).values.cpu().numpy() - query_crop_size #Padded once
+        ub = torch.max(inputs, dim=0).values.cpu().numpy() + query_crop_size #Padded once
         
         lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,
                             lb[1]:ub[1]:query_crop_size,

@@ -76,7 +76,7 @@ class Generator3DNeighbors(object):
         self.reso = vol_bound['reso']
         self.factor = 2**unet_depth
         self.hdim = unet_hdim
-        
+                
     def generate_latent(self, data):
         ''' Generates voxels of latent codes from input point clouds.
             Adapt for real-world scale.
