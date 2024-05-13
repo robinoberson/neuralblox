@@ -135,7 +135,7 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=500)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=150)
 
 # pcd = o3d.geometry.PointCloud()
 # base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
