@@ -116,6 +116,38 @@ class Trainer(BaseTrainer):
         # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         self.iteration += 1
         return loss, losses
+    
+    def save_data_visualization(self, data_batch, points_gt):
+        n_inputs = 2
+        
+        torch.cuda.empty_cache()
+        
+        self.model.eval()
+        self.model_merge.eval()
+        
+        p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
+    
+        #Step 1 get the bounding box of the scene
+        inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
+        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
+        
+        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
+        # Encode latents 
+        latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
+        # Stack latents 
+        latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
+        # Merge latents
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # Compute gt latent
+        latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
+        
+        p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
+        
+        logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
+        
+        logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
+        
+        return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     def compute_loss_easy(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
         loss_fc = torch.nn.L1Loss(reduction='mean')
         loss_i = loss_fc(logits_sampled, logits_gt)
@@ -170,20 +202,6 @@ class Trainer(BaseTrainer):
     #         return
 
     #     p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
-    #     # save query points, logits_gt, logits_sampled as pickle 
-    #     # import pickle
-    #     # with open('../Playground/FusionEmpty/query_points.pkl', 'wb') as f:
-    #     #     pickle.dump([p_stacked, p_n_stacked], f)
-    #     # with open('../Playground/FusionEmpty/logits_gt.pkl', 'wb') as f:
-    #     #     pickle.dump(logits_gt, f)
-    #     # with open('../Playground/FusionEmpty/logits_sampled.pkl', 'wb') as f:
-    #     #     pickle.dump(logits_sampled, f)
-    #     # # save self.vol_bound_all
-    #     # with open('../Playground/FusionEmpty/vol_bound_all.pkl', 'wb') as f:
-    #     #     pickle.dump(self.vol_bound_all, f)
-    #     #     #save inputs 
-    #     # with open('../Playground/FusionEmpty/inputs.pkl', 'wb') as f:
-    #     #     pickle.dump(inputs_distributed, f)
 
     #     occ_gt = logits_gt.detach().cpu().numpy()
     #     occ_sampled = logits_sampled.detach().cpu().numpy()
@@ -220,8 +238,6 @@ class Trainer(BaseTrainer):
     #     pcd.colors = o3d.utility.Vector3dVector(colors)
     #     base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
     #     o3d.visualization.draw_geometries([pcd, base_axis])
-        #save point cloud
-        # o3d.io.write_point_cloud('../Playground/FusionEmpty/pcd.ply', pcd)
 
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)

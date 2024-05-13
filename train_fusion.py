@@ -8,6 +8,7 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 import shutil
 from src import layers
+import pickle
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -205,12 +206,23 @@ while True:
             print('Saving checkpoint')
             checkpoint_io_merging.save('model_merging.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
+            print('Saving data for visualizing')
+            latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed = trainer.save_data_visualization(batch, points_gt)
+            
+            #dump all files 
+            path = os.path.join(out_dir, 'data_viz')
+            if not os.path.exists(path):
+                os.makedirs(path)
+            
+            with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
+                pickle.dump([latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed], f)
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
             checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
+        
 
         # Exit if necessary
         if exit_after > 0 and (time.time() - t0) >= exit_after:
