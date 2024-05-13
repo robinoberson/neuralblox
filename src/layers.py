@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.init as init
 
 class ResnetBlockFC(nn.Module):
     ''' Fully connected ResNet Block class.
@@ -59,6 +60,9 @@ class Conv3D_one_input(nn.Module):
         self.conv3d2 = nn.Conv3d(num_channels[2], num_channels[3], kernel_size=3, padding=0)
         self.conv3d3 = nn.Conv3d(num_channels[3], num_channels[4], kernel_size=3, padding=1)
         
+        for conv_layer in [self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3]:
+            init.xavier_uniform_(conv_layer.weight)
+            
         self.conv_layers = nn.ModuleList([self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3])
         self.activation = nn.ReLU()
 

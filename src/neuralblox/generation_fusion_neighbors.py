@@ -188,6 +188,25 @@ class Generator3DNeighbors(object):
                         
         return latent_map_neighbored
     
+    def stack_latens_safe(self, latent_map, vol_bound):
+        n_in, n_crops, c, h, w, d = latent_map.shape
+        H, W, D = vol_bound['axis_n_crop'][0], vol_bound['axis_n_crop'][1], vol_bound['axis_n_crop'][2]
+
+        latent_map = torch.reshape(latent_map, (n_in, H, W, D, c, h, w, d))
+
+        latent_map_neighbored = torch.zeros(H-2, W-2, D-2, c*n_in, h*3, w*3, d*3).to(self.device) #take padding off
+
+        for idx_n_in in range(n_in):
+            for i in range(1, H - 1):
+                for j in range(1, W - 1):
+                    for k in range(1, D - 1):
+                        center = torch.tensor([i, j, k]).to(self.device)
+                        for l in range(3):
+                            for m in range(3):
+                                for n in range(3):
+                                    index = torch.tensor([l-1, m-1, n-1]).to(self.device) + center
+                                    latent_map_neighbored[i-1, j-1, k-1, (idx_n_in)*c:(idx_n_in+1)*c, l*h:(l+1)*h, m*w:(m+1)*w, n*d:(n+1)*d] = latent_map[idx_n_in, index[0], index[1], index[2]]
+    
     def encode_crop(self, inputs, vol_bound, fea = 'grid'):
         n_inputs, n_crop, n_points, _ = inputs.shape
         

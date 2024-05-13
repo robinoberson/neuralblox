@@ -7,6 +7,7 @@ from src.training import BaseTrainer
 import numpy as np
 import pickle
 import time
+import yaml
 
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -46,6 +47,7 @@ class Trainer(BaseTrainer):
         self.unet = None
         self.limited_gpu = limited_gpu
         self.reso = grid_reso
+        self.iteration = 0
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -77,12 +79,14 @@ class Trainer(BaseTrainer):
         latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
         # return latent_map_sampled
         # Stack latents 
-        latent_map_sampled_stacked = self.stack_latents(latent_map_sampled, self.vol_bound_all)
-
+        latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
+        
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,128:, 6:12, 6:12, 6:12]
         
-        del latent_map_sampled, latent_map_sampled_stacked
+        # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
@@ -110,7 +114,7 @@ class Trainer(BaseTrainer):
         
         print(f'Loss: {loss:.4f}, logits: {losses[0]:.4f}, latents: {losses[1]:.4f}, elapsed time: {time.time() - t0}')
         self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
-        
+        self.iteration += 1
         return loss, losses
     def compute_loss_easy(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
         loss_fc = torch.nn.L1Loss(reduction='mean')
@@ -157,6 +161,13 @@ class Trainer(BaseTrainer):
     def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
         import open3d as o3d
         
+        file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
+
+        with open(file_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if not config['visualization']: 
+            return
 
         p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
         # save query points, logits_gt, logits_sampled as pickle 
@@ -355,7 +366,26 @@ class Trainer(BaseTrainer):
                         
         return latent_map_neighbored
 
-    
+    def stack_latents_safe(self, latent_map, vol_bound):
+        n_in, n_crops, c, h, w, d = latent_map.shape
+        H, W, D = vol_bound['axis_n_crop'][0], vol_bound['axis_n_crop'][1], vol_bound['axis_n_crop'][2]
+
+        latent_map = torch.reshape(latent_map, (n_in, H, W, D, c, h, w, d))
+
+        latent_map_neighbored = torch.zeros(H-2, W-2, D-2, c*n_in, h*3, w*3, d*3).to(self.device) #take padding off
+
+        for idx_n_in in range(n_in):
+            for i in range(1, H - 1):
+                for j in range(1, W - 1):
+                    for k in range(1, D - 1):
+                        center = torch.tensor([i, j, k]).to(self.device)
+                        for l in range(3):
+                            for m in range(3):
+                                for n in range(3):
+                                    index = torch.tensor([l-1, m-1, n-1]).to(self.device) + center
+                                    latent_map_neighbored[i-1, j-1, k-1, (idx_n_in)*c:(idx_n_in+1)*c, l*h:(l+1)*h, m*w:(m+1)*w, n*d:(n+1)*d] = latent_map[idx_n_in, index[0], index[1], index[2]]
+        
+        return latent_map_neighbored
     def encode_latent_map(self, inputs_distributed, vol_bound, remove_padding = False):
         n_inputs, n_crop, n_points, _ = inputs_distributed.shape
 
