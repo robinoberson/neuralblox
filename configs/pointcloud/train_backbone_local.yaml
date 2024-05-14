@@ -6,11 +6,11 @@ training:
   out_dir: /scratch2/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6
   batch_size: 64
   print_every: 100
-  visualize_every: 10000
+  visualize_every: 100
   validate_loss_every: 500000
   checkpoint_every: 2000
-  starting_model: aug_model_200000.pt
-  log_comet: true
+  starting_model: model.pt
+  log_comet: false
   lr: 0.01
 
 test:
@@ -18,6 +18,4 @@ test:
   eval_mesh: true
   eval_pointcloud: false
   model_file: aug_model_40000.pt
-model:
-  encoder_kwargs:
-    grid_resolution: 12
+

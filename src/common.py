@@ -383,7 +383,7 @@ def normalize_coord(p, vol_range, plane='xz'):
         coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
     
     if torch.max(coord) > 1.0 or torch.min(coord) < 0.0:
-        print(f'coord out of range: {torch.max(coord)}, {torch.min(coord)}, clamping it')
+        # print(f'coord out of range: {torch.max(coord)}, {torch.min(coord)}, clamping it')
         coord.clamp_(0.0, 1.0) #make sure no outliers lie inside
 
     if p.shape[-1] == 4:

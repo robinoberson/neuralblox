@@ -226,6 +226,7 @@ def get_generator(model, cfg, device, **kwargs):
         vol_info=vol_info,
         vol_bound=vol_bound,
         vol_range = cfg['data']['vol_range'],
+        grid_reso=cfg['model']['encoder_kwargs']['grid_resolution'],
     )
     return generator
 
