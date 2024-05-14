@@ -7,10 +7,10 @@ training:
   batch_size: 64
   print_every: 100
   visualize_every: 100
-  validate_loss_every: 500000
+  validate_loss_every: 5000
   checkpoint_every: 500
   starting_model: model.pt
-  log_comet: true
+  log_comet: false
   lr: 0.01
 test:
   threshold: 0.2

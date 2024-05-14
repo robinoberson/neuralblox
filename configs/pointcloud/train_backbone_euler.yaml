@@ -7,7 +7,7 @@ training:
   batch_size: 256
   print_every: 1000
   visualize_every: 500
-  validate_loss_every: 5000
+  validate_loss_every: 50
   checkpoint_every: 500
   starting_model: model.pt
 test:

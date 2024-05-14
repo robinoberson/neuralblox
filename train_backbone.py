@@ -56,6 +56,8 @@ t0 = time.time()
 # Shorthands
 out_dir = cfg['training']['out_dir']
 batch_size = cfg['training']['batch_size']
+batch_size_val = cfg['training']['batch_size']
+
 backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 exit_after = args.exit_after
@@ -216,7 +218,7 @@ while True:
             if current_lr != prev_lr:
                 print("Learning rate changed to:", current_lr)
                 prev_lr = current_lr
-                experiment.log_metric('lr', current_lr, step=it)
+                if log_comet: experiment.log_metric('lr', current_lr, step=it)
 
         
         if monitor_gpu_usage:
@@ -240,6 +242,7 @@ while True:
 
         # Visualize output
         if visualize_every > 0 and (it % visualize_every) == 0 and it > 0:
+            torch.cuda.empty_cache()
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:

@@ -11,7 +11,7 @@ data:
     shift_vertical: 0.9
     is_flip: True
   pointcloud_sampling: 0.1
-  pointcloud_n: 30000
+  pointcloud_n: 55000
   pointcloud_noise: 0.000
   grid_resolution: 24
   input_vol: 1.3 # in meter
