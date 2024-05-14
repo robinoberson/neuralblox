@@ -1,5 +1,6 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
+  points_subsample: 1000
   path: /scratch2/roberson/data/fusion_easy_data_temp
   path_gt: /scratch2/roberson/data/fusion_easy_data_gt_temp
   # path: /media/roberson/T7/data/fusion_debug/waves
@@ -16,4 +17,4 @@ training:
   checkpoint_every: 50
   log_comet: false 
   # print_every: 3
-visualization: false
+visualization: true
