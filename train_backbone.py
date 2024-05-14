@@ -134,7 +134,7 @@ generator = config.get_generator(model, cfg, device=device)
 # Intialize training
 
 optimizer = optim.Adam(model.parameters(), lr=cfg['training']['lr'])
-scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.80, patience=10)
+scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=cfg['training']['lr_reduce_factor'], patience=cfg['training']['lr_patience'])
 
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
@@ -199,6 +199,8 @@ if monitor_gpu_usage:
         print(f"Error: {e}")
         monitor_gpu_usage = False        
 
+prev_lr = -1
+
 while True:
     epoch_it += 1
 
@@ -207,6 +209,15 @@ while True:
                 
         loss = trainer.train_step(batch)
         if log_comet: experiment.log_metric('train_loss', loss, step=it)
+        
+        scheduler.step(loss)
+        for param_group in optimizer.param_groups:
+            current_lr = param_group['lr']
+            if current_lr != prev_lr:
+                print("Learning rate changed to:", current_lr)
+                prev_lr = current_lr
+                experiment.log_metric('lr', current_lr, step=it)
+
         
         if monitor_gpu_usage:
             total_memory_used = 0
@@ -278,7 +289,6 @@ while True:
             if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
             if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
             
-            scheduler.step(val_iou)
             
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']

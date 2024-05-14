@@ -8,11 +8,10 @@ training:
   print_every: 100
   visualize_every: 100
   validate_loss_every: 500000
-  checkpoint_every: 2000
+  checkpoint_every: 500
   starting_model: model.pt
-  log_comet: false
+  log_comet: true
   lr: 0.01
-
 test:
   threshold: 0.2
   eval_mesh: true

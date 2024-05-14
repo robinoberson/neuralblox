@@ -57,6 +57,8 @@ training:
   monitor_gpu_usage: false 
   log_comet: true
   lr: 0.01
+  lr_reduce_factor: 0.8
+  lr_patience: 5000
   # starting_model: model.pt
 test:
   threshold: 0.2
