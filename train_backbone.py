@@ -203,6 +203,8 @@ if monitor_gpu_usage:
 
 prev_lr = -1
 
+it_script = 0
+
 while True:
     epoch_it += 1
 
@@ -262,41 +264,6 @@ while True:
                 with open(export_name_data, 'wb') as f:
                     pickle.dump(data_vis['data'], f)
                 
-        if validate_loss_every > 0 and (it % validate_loss_every) == 0 and it > 0:
-            loss_val = 0
-            val_iou = 0
-            
-            if reduce_size_testing:
-                len_val = 1
-            else:
-                len_val = len(val_loader)
-            
-            total_iterations = len(val_loader)
-            with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
-                for batch_val_idx, batch_val in enumerate(val_loader):
-                    if batch_val_idx >= 1 and reduce_size_testing:
-                        break
-                    
-                    loss_val += trainer.validate_step(batch_val)
-                    val_iou += trainer.eval_step(batch_val)
-                    pbar.update(1)  # Manually update the tqdm progress bar
-            
-            loss_val /= len_val
-            val_iou /= len_val
-            
-            logger.add_scalar('valloss', loss_val, it)
-            logger.add_scalar('valiou', val_iou, it)
-            
-            print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
-            
-            if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
-            if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
-            
-            
-            for param_group in optimizer.param_groups:
-                lr = param_group['lr']
-                if log_comet: experiment.log_metric("learning_rate", lr, step=it)
-
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0 and it > 0):
             print('Saving checkpoint')
@@ -318,5 +285,39 @@ while True:
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
             # experiment.log_asset("model.pt")
-
             exit(3)
+        
+        if it_script >= 5:
+            break
+        it_script += 1
+        
+    torch.cuda.empty_cache()
+    print('Finished epoch %d, running validation' % (epoch_it))
+    loss_val = 0
+    val_iou = 0
+    
+    if reduce_size_testing:
+        len_val = 1
+    else:
+        len_val = len(val_loader)
+    
+    total_iterations = len(val_loader)
+    with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
+        for batch_val_idx, batch_val in enumerate(val_loader):
+            if batch_val_idx >= 1 and reduce_size_testing:
+                break
+            
+            loss_val += trainer.validate_step(batch_val)
+            val_iou += trainer.eval_step(batch_val)
+            pbar.update(1)  # Manually update the tqdm progress bar
+    
+    loss_val /= len_val
+    val_iou /= len_val
+    
+    logger.add_scalar('valloss', loss_val, it)
+    logger.add_scalar('valiou', val_iou, it)
+    
+    print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
+    
+    if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
+    if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
