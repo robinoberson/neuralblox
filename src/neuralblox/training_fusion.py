@@ -112,8 +112,7 @@ class Trainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()
         
-        # print(f'Loss: {loss:.4f}, logits: {losses[0]:.4f}, latents: {losses[1]:.4f}, elapsed time: {time.time() - t0}')
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         self.iteration += 1
         return loss, losses
     
@@ -328,7 +327,7 @@ class Trainer(BaseTrainer):
         n_crops_total = latent_map_full.shape[0]
         
         if self.limited_gpu:
-            n_batch_max = 20
+            n_batch_max = 10
         else:
             n_batch_max = 1000
 

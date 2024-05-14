@@ -4,9 +4,9 @@ data:
   input_type: pointcloud_sequential
   classes: null
   path: data/redwood_custom
-  pointcloud_n: 80000
+  pointcloud_n: 30000
   pointcloud_noise: 0.000
-  points_subsample: 8192
+  points_subsample: 16384
   points_file: points.npz
   points_iou_file: points.npz
   gt_file_name: 'pointcloud.npz'

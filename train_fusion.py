@@ -190,7 +190,6 @@ while True:
             for idx_elem, elem in enumerate(losses):
                 experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
 
-        
         # Print output
         if print_every > 0 and (it % print_every) == 0:
             t = datetime.datetime.now()
