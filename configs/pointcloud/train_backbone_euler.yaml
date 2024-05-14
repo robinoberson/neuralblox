@@ -1,4 +1,4 @@
-inherit_from: configs/fusion/train_backbone.yaml
+inherit_from: configs/pointcloud/train_backbone.yaml
 data:
   classes: null
   path: /cluster/scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full
