@@ -90,7 +90,7 @@ train_loader = torch.utils.data.DataLoader(
     worker_init_fn=data.worker_init_fn)
 
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size_val, num_workers=cfg['training']['n_workers'], shuffle=False,
+    val_dataset, batch_size=1, num_workers=cfg['training']['n_workers'], shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
@@ -302,7 +302,7 @@ while True:
     #     len_val = 1
     # else:
     len_val = len(val_loader)
-    
+    print(len_val)
     total_iterations = len(val_loader)
     with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
         for batch_val_idx, batch_val in enumerate(val_loader):
