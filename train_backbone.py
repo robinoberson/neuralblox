@@ -90,7 +90,7 @@ train_loader = torch.utils.data.DataLoader(
     worker_init_fn=data.worker_init_fn)
 
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, num_workers=cfg['training']['n_workers'], shuffle=False,
+    val_dataset, batch_size=batch_size_val, num_workers=cfg['training']['n_workers'], shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
@@ -292,6 +292,7 @@ while True:
         # it_script += 1
         
     torch.cuda.empty_cache()
+    
     print('Finished epoch %d, running validation' % (epoch_it))
     loss_val = 0
     val_iou = 0
