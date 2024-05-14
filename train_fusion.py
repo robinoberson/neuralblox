@@ -153,13 +153,7 @@ while True:
         if batch_size < cfg['training']['batch_size']:
             print('Batch size too small, skipping batch')
             continue
-            
-        # full_points = batch['inputs'].view(-1, 3)
-        # #convert to numpy
-        # full_points = full_points.detach().cpu().numpy()
-        
-        # pcd.points = o3d.utility.Vector3dVector(full_points)
-        
+
         categories = batch.get('category')
         unique_cat = np.unique(categories)
         if len(unique_cat) > 1:
@@ -167,18 +161,19 @@ while True:
             continue
         category = unique_cat[0]
         path_gt_points = os.path.join(cfg['data']['path_gt'], category, '000000', cfg['data']['gt_file_name'])
-        points_gt_npz = np.load(path_gt_points)
-        points_gt = points_gt_npz['points']
-        points_gt_occ = np.unpackbits(points_gt_npz['occupancies'])
         
-        # pcd_gt = o3d.geometry.PointCloud()
-        # pcd_gt.points = o3d.utility.Vector3dVector(points_gt)        
-        # o3d.visualization.draw_geometries([pcd, pcd_gt, base_axis])
+        points_gt_npz = np.load(path_gt_points)
+        points_gt_3D = points_gt_npz['points']
+        points_gt_3D = torch.from_numpy(points_gt_3D).to(device).float()
 
-        points_gt = torch.from_numpy(points_gt).to(device).float()
+        points_gt_occ = np.unpackbits(points_gt_npz['occupancies'])
         points_gt_occ = torch.from_numpy(points_gt_occ).to(device).float().unsqueeze(-1)
         
-        points_gt = torch.cat((points_gt, points_gt_occ), dim=-1)
+        random_indices = np.random.choice(points_gt_3D.shape[0], size=T, replace=False)
+        points_gt_3D = points_gt_3D[random_indices]
+        points_gt_occ = points_gt_occ[random_indices]
+        
+        points_gt = torch.cat((points_gt_3D, points_gt_occ), dim=-1)
         
         loss, losses = trainer.train_sequence_window(batch, points_gt)
         

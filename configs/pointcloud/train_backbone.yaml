@@ -43,7 +43,7 @@ model:
 training:
   out_dir: null
   batch_size: 256
-  batch_size_val: 32
+  batch_size_val: 16
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 1000

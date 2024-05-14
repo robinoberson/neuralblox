@@ -291,16 +291,17 @@ while True:
             break
         it_script += 1
         
+    del batch 
     torch.cuda.empty_cache()
     
     print('Finished epoch %d, running validation' % (epoch_it))
     loss_val = 0
     val_iou = 0
     
-    if reduce_size_testing:
-        len_val = 1
-    else:
-        len_val = len(val_loader)
+    # if reduce_size_testing:
+    #     len_val = 1
+    # else:
+    len_val = len(val_loader)
     
     total_iterations = len(val_loader)
     with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
