@@ -112,50 +112,58 @@ class Trainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()
         
-        print(f'Loss: {loss:.4f}, logits: {losses[0]:.4f}, latents: {losses[1]:.4f}, elapsed time: {time.time() - t0}')
+        # print(f'Loss: {loss:.4f}, logits: {losses[0]:.4f}, latents: {losses[1]:.4f}, elapsed time: {time.time() - t0}')
         # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         self.iteration += 1
         return loss, losses
     
-    def save_data_visualization(self, data_batch, points_gt):
-        n_inputs = 2
-        
-        torch.cuda.empty_cache()
-        
-        self.model.eval()
-        self.model_merge.eval()
-        
-        p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
     
-        #Step 1 get the bounding box of the scene
-        inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
-        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
-        
-        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
-        # Encode latents 
-        latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
-        # Stack latents 
-        latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
-        # Merge latents
-        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        # Compute gt latent
-        latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
-        
-        p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
-        
-        logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
-        
-        logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
-        
-        return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     def compute_loss_easy(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
         loss_fc = torch.nn.L1Loss(reduction='mean')
         loss_i = loss_fc(logits_sampled, logits_gt)
         loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
         loss = loss_i + loss_ii
+        # loss = loss_i
+        print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
+        return loss, [loss_i, loss_ii]
+    
+    def compute_loss_prob(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
+        loss_fc = torch.nn.BCEWithLogitsLoss(reduction='mean')
+
+        # Compute sigmoid activation for logits
+        values_gt = torch.sigmoid(logits_gt)
+        values_sampled = torch.sigmoid(logits_sampled)
+
+        # Compute binary cross-entropy loss
+        loss_i = loss_fc(logits_sampled, logits_gt)
+        loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
+        loss = loss_i + loss_ii
+        
+        print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
+
         
         return loss, [loss_i, loss_ii]
-    def compute_loss(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
+    
+    def compute_loss_combined(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
+        # Define loss functions
+        loss_fc_mse = torch.nn.MSELoss(reduction='mean')
+        loss_fc_l1 = torch.nn.L1Loss(reduction='mean')
+        # Compute MSE loss for logits and latent maps
+        loss_i_mse = loss_fc_mse(logits_sampled, logits_gt)
+        loss_ii_mse = loss_fc_mse(latent_map_sampled, latent_map_gt)
+
+        # Compute L1 loss for logits and latent maps
+        loss_i_l1 = loss_fc_l1(logits_sampled, logits_gt)
+        loss_ii_l1 = loss_fc_l1(latent_map_sampled, latent_map_gt)
+        # Combine the three loss terms with weights
+        alpha = 0.2  # Weight for MSE loss
+
+        combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
+        # combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
+        print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
+
+        return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]
+    def compute_loss_old(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
         
         elevation_voxels = self.get_elevated_voxels(inputs_distributed)
         
@@ -189,6 +197,38 @@ class Trainer(BaseTrainer):
                     elevation_voxels[i] = True 
 
         return elevation_voxels
+    
+    def save_data_visualization(self, data_batch, points_gt):
+        n_inputs = 2
+        
+        torch.cuda.empty_cache()
+        
+        self.model.eval()
+        self.model_merge.eval()
+        
+        p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
+    
+        #Step 1 get the bounding box of the scene
+        inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
+        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
+        
+        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
+        # Encode latents 
+        latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
+        # Stack latents 
+        latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
+        # Merge latents
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # Compute gt latent
+        latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
+        
+        p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
+        
+        logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
+        
+        logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
+        
+        return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
     # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
     #     import open3d as o3d

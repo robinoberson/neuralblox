@@ -52,18 +52,20 @@ class Conv3D_one_input(nn.Module):
         num_channels (list of int): number of channels for each layer
     '''
 
-    def __init__(self, num_channels=[256, 224, 192, 160, 128]):
+    def __init__(self, num_channels=[256, 512, 256, 192, 192, 128]):
         super(Conv3D_one_input, self).__init__()
         
         self.conv3d0 = nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0)
         self.conv3d1 = nn.Conv3d(num_channels[1], num_channels[2], kernel_size=3, padding=1, stride=2)
         self.conv3d2 = nn.Conv3d(num_channels[2], num_channels[3], kernel_size=3, padding=0)
         self.conv3d3 = nn.Conv3d(num_channels[3], num_channels[4], kernel_size=3, padding=1)
+        self.conv3d4 = nn.Conv3d(num_channels[4], num_channels[5], kernel_size=3, padding=1)
+        self.conv3d5 = nn.Conv3d(num_channels[5], num_channels[5], kernel_size=3, padding=1)
         
-        for conv_layer in [self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3]:
+        for conv_layer in [self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3, self.conv3d4, self.conv3d5]:
             init.xavier_uniform_(conv_layer.weight)
             
-        self.conv_layers = nn.ModuleList([self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3])
+        self.conv_layers = nn.ModuleList([self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3, self.conv3d4, self.conv3d5])
         self.activation = nn.ReLU()
 
     def forward(self, fea):
@@ -75,6 +77,32 @@ class Conv3D_one_input(nn.Module):
 
         return z
     
+# class Conv3D_one_input(nn.Module):
+#     ''' 2-layer 3D convolutional networks.
+
+#     Args:
+#         num_channels (list of int): number of channels for each layer
+#     '''
+
+#     def __init__(self, num_channels=[256, 224, 192, 160, 128]):
+#         super(Conv3D_one_input, self).__init__()
+        
+#         self.conv3d0 = nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0)
+#         self.conv3d1 = nn.Conv3d(num_channels[1], num_channels[2], kernel_size=3, padding=1, stride=2)
+#         self.conv3d2 = nn.Conv3d(num_channels[2], num_channels[3], kernel_size=3, padding=0)
+#         self.conv3d3 = nn.Conv3d(num_channels[3], num_channels[4], kernel_size=3, padding=1)
+        
+#         self.conv_layers = nn.ModuleList([self.conv3d0, self.conv3d1, self.conv3d2, self.conv3d3])
+#         self.activation = nn.ReLU()
+
+#     def forward(self, fea):
+#         z = fea['latent']
+        
+#         for conv_layer in self.conv_layers:
+#             z = conv_layer(z)
+#             z = self.activation(z)
+
+#         return z
     
 # class Conv3D_one_input(nn.Module):
 #     ''' Single fully connected layer network.

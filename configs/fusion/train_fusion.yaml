@@ -56,6 +56,8 @@ training:
   learning_rate: 0.01
   limited_gpu: false
   log_comet: true
+  save_data_viz: false
+
 test:
   threshold: 0.001
   eval_mesh: true

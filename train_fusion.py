@@ -136,10 +136,11 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=150)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=150)
 
 # pcd = o3d.geometry.PointCloud()
 # base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+prev_lr = -1
 
 while True:
     epoch_it += 1
@@ -182,6 +183,11 @@ while True:
         loss, losses = trainer.train_sequence_window(batch, points_gt)
         
         scheduler.step(loss)
+        for param_group in optimizer.param_groups:
+            current_lr = param_group['lr']
+            if current_lr != prev_lr:
+                print("Learning rate changed to:", current_lr)
+                prev_lr = current_lr
         
         logger.add_scalar('train/loss', loss, it)
         if log_comet: 
@@ -206,16 +212,17 @@ while True:
             print('Saving checkpoint')
             checkpoint_io_merging.save('model_merging.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
-            print('Saving data for visualizing')
-            latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed = trainer.save_data_visualization(batch, points_gt)
+            if cfg['training']['save_data_viz']: 
+                print('Saving data for visualizing')
+                latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed = trainer.save_data_visualization(batch, points_gt)
             
-            #dump all files 
-            path = os.path.join(out_dir, 'data_viz')
-            if not os.path.exists(path):
-                os.makedirs(path)
-            
-            with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
-                pickle.dump([latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed], f)
+                #dump all files 
+                path = os.path.join(out_dir, 'data_viz')
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                
+                with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
+                    pickle.dump([latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed], f)
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
