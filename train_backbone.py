@@ -287,9 +287,9 @@ while True:
             # experiment.log_asset("model.pt")
             exit(3)
         
-        # if it_script >= 5:
-        #     break
-        # it_script += 1
+        if it_script >= 5:
+            break
+        it_script += 1
         
     torch.cuda.empty_cache()
     
