@@ -16,4 +16,4 @@ training:
   checkpoint_every: 20
   log_comet: false 
   # print_every: 3
-visualization: false
+visualization: true

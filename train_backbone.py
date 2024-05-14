@@ -21,12 +21,6 @@ import cProfile
 import pstats
 import pynvml
 
-
-experiment = Experiment(
-  api_key="PhozpUD8pYftjTWYPEI2hbrnw",
-  project_name="backbone-training",
-  workspace="robinoberson"
-)
 # Arguments
 parser = argparse.ArgumentParser(
     description='Train a 3D reconstruction model.'
@@ -48,6 +42,14 @@ reduce_size_testing = args.fast_testing
 if args.fast_testing:
     print('Fast testing mode enabled. Dividing dataset by %d' % reduce_size_testing)
     
+log_comet = cfg['training']['log_comet']
+
+if log_comet:
+    experiment = Experiment(
+    api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+    project_name="backbone-training",
+    workspace="robinoberson"
+    )
 # Set t0
 t0 = time.time()
 
@@ -130,7 +132,8 @@ model = config.get_model(cfg, device=device, dataset=train_dataset)
 generator = config.get_generator(model, cfg, device=device)
 
 # Intialize training
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+optimizer = optim.Adam(model.parameters(), lr=cfg['training']['lr'])
 scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.80, patience=10)
 
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
@@ -203,7 +206,7 @@ while True:
         it += 1
                 
         loss = trainer.train_step(batch)
-        experiment.log_metric('train_loss', loss, step=it)
+        if log_comet: experiment.log_metric('train_loss', loss, step=it)
         
         if monitor_gpu_usage:
             total_memory_used = 0
@@ -272,14 +275,14 @@ while True:
             
             print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
             
-            experiment.log_metric('val_loss', loss_val, step=it)
-            experiment.log_metric('val_iou', val_iou, step=it)
+            if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
+            if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
             
             scheduler.step(val_iou)
             
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']
-                experiment.log_metric("learning_rate", lr, step=it)
+                if log_comet: experiment.log_metric("learning_rate", lr, step=it)
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0 and it > 0):

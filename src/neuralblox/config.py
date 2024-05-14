@@ -119,7 +119,7 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
     threshold = cfg['test']['threshold']
     out_dir = cfg['training']['out_dir']
     vis_dir = os.path.join(out_dir, 'vis')
-    grid_reso = cfg['data']['grid_resolution']
+    grid_reso = cfg['model']['encoder_kwargs']['grid_resolution']
     input_vol_size = cfg['data']['input_vol']
     query_vol_size = cfg['data']['query_vol']
     input_type = cfg['data']['input_type']
