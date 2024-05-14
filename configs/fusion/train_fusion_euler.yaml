@@ -1,9 +1,9 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
-  # path: /cluster/scratch/roberson/data/fusion/fusion_easy_data_temp
-  # path_gt: /cluster/scratch/roberson/data/fusion/fusion_easy_data_gt_temp
-  path: /cluster/scratch/roberson/data/fusion/fusion_wave
-  path_gt: /cluster/scratch/roberson/data/fusion/fusion_wave_gt
+  path: /cluster/scratch/roberson/data/fusion/fusion_easy_data_temp
+  path_gt: /cluster/scratch/roberson/data/fusion/fusion_easy_data_gt_temp
+  # path: /cluster/scratch/roberson/data/fusion/fusion_wave
+  # path_gt: /cluster/scratch/roberson/data/fusion/fusion_wave_gt
 
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_wave_3
