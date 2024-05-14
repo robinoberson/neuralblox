@@ -122,8 +122,8 @@ class Trainer(BaseTrainer):
         loss_fc = torch.nn.L1Loss(reduction='mean')
         loss_i = loss_fc(logits_sampled, logits_gt)
         loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
-        loss = loss_i + loss_ii
-        # loss = loss_i
+        # loss = loss_i + loss_ii
+        loss = loss_i
         print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
         return loss, [loss_i, loss_ii]
     

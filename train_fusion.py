@@ -223,7 +223,8 @@ while True:
                 
                 with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
                     pickle.dump([latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed], f)
-
+                del latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
+                torch.cuda.empty_cache()
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
