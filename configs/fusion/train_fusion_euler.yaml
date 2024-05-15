@@ -6,7 +6,7 @@ data:
   # path_gt: /cluster/scratch/roberson/data/fusion/fusion_wave_gt
 
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_scene_easy
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_scene_easy_logitsonly
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty/aug_model_200000.pt
   checkpoint_every: 200
   limited_gpu: false

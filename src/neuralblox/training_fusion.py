@@ -164,8 +164,8 @@ class Trainer(BaseTrainer):
         loss_ii = 2 * loss_latents_elevated(latent_map_sampled[elevation_voxels], latent_map_gt[elevation_voxels])
         loss_iii = 1 * loss_logits_flat(logits_sampled[~elevation_voxels], logits_gt[~elevation_voxels])
         loss_iv = 1 * loss_latents_flat(latent_map_sampled[~elevation_voxels], latent_map_gt[~elevation_voxels])
-        loss = loss_i + loss_ii + loss_iii + loss_iv
-        # loss = loss_i + loss_iii
+        # loss = loss_i + loss_ii + loss_iii + loss_iv
+        loss = loss_i + loss_iii
         if self.iteration%10 == 0: print(f'loss_i: {loss_i}, loss_ii: {loss_ii}, loss_iii: {loss_iii}, loss_iv: {loss_iv}, loss: {loss}')
         
         return loss, [loss_i, loss_ii, loss_iii, loss_iv]
