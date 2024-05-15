@@ -72,8 +72,8 @@ class Trainer(BaseTrainer):
         self.optimizer.zero_grad()
         
         p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
-        p_in[1] = p_in[0]
-        points_gt = p_in[0].unsqueeze(0)
+        # p_in[1] = p_in[0]
+        # points_gt = p_in[0].unsqueeze(0)
         
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
