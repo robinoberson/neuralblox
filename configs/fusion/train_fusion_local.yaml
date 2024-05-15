@@ -1,15 +1,19 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
   # points_subsample: 1000
-  path: /scratch2/roberson/data/fusion_easy_data_temp
-  path_gt: /scratch2/roberson/data/fusion_easy_data_gt_temp
+  # path: /scratch2/roberson/data/fusion_easy_data_temp
+  # path_gt: /scratch2/roberson/data/fusion_easy_data_gt_temp
+  # path: '/scratch2/roberson/data/fusion_robot_temp'
+  # path_gt: '/scratch2/roberson/data/fusion_gt_temp'
+
+  
   # path: /media/roberson/T7/data/fusion_debug/waves
   # path_gt: /media/roberson/T7/data/fusion_debug/waves_gt
   # path: /media/roberson/T7/data/fusion_debug/single_box
   # path_gt: /media/roberson/T7/data/fusion_debug/single_box_gt
 training:
   # out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/reduced_scenes
-  out_dir: /scratch/roberson/neuralblox/out_fusion/test_easy_data_temp
+  out_dir: /scratch/roberson/neuralblox/out_fusion/test_robot_temp
   # backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_130000.pt
   backbone_file: /scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6/aug_model_200000.pt
   learning_rate: 0.01
