@@ -9,6 +9,8 @@ import pickle
 import time
 import yaml
 
+torch.manual_seed(42)
+
 class Trainer(BaseTrainer):
     ''' Trainer object for fusion network.
 
@@ -48,6 +50,7 @@ class Trainer(BaseTrainer):
         self.limited_gpu = limited_gpu
         self.reso = grid_reso
         self.iteration = 0
+        self.rand_points_inputs = torch.rand(20000, 3)
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -69,7 +72,10 @@ class Trainer(BaseTrainer):
         self.optimizer.zero_grad()
         
         p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
-    
+        p_in[1] = p_in[0]
+        points_gt = p_in[0].unsqueeze(0)
+        
+        print(p_in.shape, points_gt.shape)
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
@@ -84,7 +90,7 @@ class Trainer(BaseTrainer):
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,128:, 6:12, 6:12, 6:12]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
@@ -105,10 +111,10 @@ class Trainer(BaseTrainer):
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
             raise ValueError
-        
+        # return latent_map_sampled, latent_map_gt, inputs_distributed, inputs_distributed_gt
         # compute cost
-        # loss, losses = self.compute_loss(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
-        loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
+        loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
+        # loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
         loss.backward()
         self.optimizer.step()
         
@@ -124,23 +130,6 @@ class Trainer(BaseTrainer):
         # loss = loss_i + loss_ii
         loss = loss_i
         print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
-        return loss, [loss_i, loss_ii]
-    
-    def compute_loss_prob(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
-        loss_fc = torch.nn.BCEWithLogitsLoss(reduction='mean')
-
-        # Compute sigmoid activation for logits
-        values_gt = torch.sigmoid(logits_gt)
-        values_sampled = torch.sigmoid(logits_sampled)
-
-        # Compute binary cross-entropy loss
-        loss_i = loss_fc(logits_sampled, logits_gt)
-        loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
-        loss = loss_i + loss_ii
-        
-        print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
-
-        
         return loss, [loss_i, loss_ii]
     
     def compute_loss_combined(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
@@ -162,6 +151,7 @@ class Trainer(BaseTrainer):
         print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
 
         return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]
+    
     def compute_loss_old(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
         
         elevation_voxels = self.get_elevated_voxels(inputs_distributed)
@@ -540,7 +530,7 @@ class Trainer(BaseTrainer):
         
         # Calculate n_max
         n_max = int(distributed_inputs[..., 3].sum(dim=2).max().item())
-
+        print(f'Distributing inputs with n_max = {n_max}')
         # Create a mask for selecting points with label 1
         indexes_keep = distributed_inputs[..., 3] == 1
 
@@ -554,7 +544,8 @@ class Trainer(BaseTrainer):
         bb_max = vol_bound_tensor[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
         
-        random_points = torch.rand(n_inputs * n_crops, n_max, 3, device=self.device)  # Shape: (n_inputs, n_crops, n_max, 3)
+        random_points_sel = self.rand_points_inputs[:n_max]
+        random_points = random_points_sel.repeat(n_inputs*n_crops,1, 1).to(device=self.device)
         random_points *= bb_size  # Scale points to fit inside each bounding box
         random_points += bb_min  # Translate points to be within each bounding box
         
@@ -596,8 +587,8 @@ class Trainer(BaseTrainer):
         return fea, unet
         
     def concat_points(self, p_in, p_gt, n_in):
-        random_indices = torch.randint(0, p_in.size(0), (n_in,))
-        selected_p_in = p_in[random_indices]
+        # random_indices = torch.randint(0, p_in.size(0), (n_in,))
+        selected_p_in = p_in[:n_in]
         
         return selected_p_in, torch.cat([selected_p_in, p_gt], dim=0)
 
