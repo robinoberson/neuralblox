@@ -75,7 +75,6 @@ class Trainer(BaseTrainer):
         p_in[1] = p_in[0]
         points_gt = p_in[0].unsqueeze(0)
         
-        print(p_in.shape, points_gt.shape)
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
@@ -530,7 +529,7 @@ class Trainer(BaseTrainer):
         
         # Calculate n_max
         n_max = int(distributed_inputs[..., 3].sum(dim=2).max().item())
-        print(f'Distributing inputs with n_max = {n_max}')
+        # print(f'Distributing inputs with n_max = {n_max}')
         # Create a mask for selecting points with label 1
         indexes_keep = distributed_inputs[..., 3] == 1
 
