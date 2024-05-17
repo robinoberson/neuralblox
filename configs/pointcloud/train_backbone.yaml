@@ -15,7 +15,7 @@ data:
   voxels_file: null
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
-  grid_resolution: 12
+  grid_resolution: 24
   input_vol: 1.2
   query_vol: 1.0
   vol_range: [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
@@ -24,7 +24,7 @@ model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
   encoder_kwargs:
-    grid_resolution: 12
+    grid_resolution: 24
     hidden_dim: 32
     plane_type: ['grid']
     unet3d: True
