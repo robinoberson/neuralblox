@@ -289,42 +289,42 @@ while True:
         # if it_script >= 5:
         #     break
         # it_script += 1
+    if epoch_it % 15 == 0:
+        del batch 
+        torch.cuda.empty_cache()
         
-    del batch 
-    torch.cuda.empty_cache()
-    
-    print('Finished epoch %d, running validation' % (epoch_it))
-    loss_val = 0
-    val_iou = 0
-    
-    # if reduce_size_testing:
-    #     len_val = 1
-    # else:
-    len_val = len(val_loader)
-    # print(len_val)
-    total_iterations = len(val_loader)
-    n_val_valid = 0
-    with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
-        for batch_val_idx, batch_val in enumerate(val_loader):
-            pbar.update(1)  # Manually update the tqdm progress bar
+        print('Finished epoch %d, running validation' % (epoch_it))
+        loss_val = 0
+        val_iou = 0
+        
+        # if reduce_size_testing:
+        #     len_val = 1
+        # else:
+        len_val = len(val_loader)
+        # print(len_val)
+        total_iterations = len(val_loader)
+        n_val_valid = 0
+        with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
+            for batch_val_idx, batch_val in enumerate(val_loader):
+                pbar.update(1)  # Manually update the tqdm progress bar
 
-            # if batch_val_idx >= 1 and reduce_size_testing:
-            #     break
-            
-            loss_val += trainer.validate_step(batch_val)
-            iou_val = trainer.eval_step(batch_val)
-            if iou_val < 0:
-                continue
-            n_val_valid += 1
-            val_iou += iou_val
-    
-    loss_val /= len_val
-    val_iou /= len_val
-    
-    logger.add_scalar('valloss', loss_val, it)
-    logger.add_scalar('valiou', val_iou, it)
-    
-    print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
-    
-    if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
-    if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
+                # if batch_val_idx >= 1 and reduce_size_testing:
+                #     break
+                
+                loss_val += trainer.validate_step(batch_val)
+                iou_val = trainer.eval_step(batch_val)
+                if iou_val < 0:
+                    continue
+                n_val_valid += 1
+                val_iou += iou_val
+        
+        loss_val /= len_val
+        val_iou /= len_val
+        
+        logger.add_scalar('valloss', loss_val, it)
+        logger.add_scalar('valiou', val_iou, it)
+        
+        print('Validation loss: %.4f' % (loss_val), 'Validation iou: %.4f' % (val_iou))
+        
+        if log_comet: experiment.log_metric('val_loss', loss_val, step=it)
+        if log_comet: experiment.log_metric('val_iou', val_iou, step=it)
