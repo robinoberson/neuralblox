@@ -231,12 +231,12 @@ class Trainer(BaseTrainer):
         pi_in['occ'] = occ
         pi_in['logits'] = logits
         input_cur['occ'] = inputs_occ
-        import pickle
-        with open('pi_in.pkl', 'wb') as f:
-            pickle.dump(pi_in, f)
+        # import pickle
+        # with open('pi_in.pkl', 'wb') as f:
+        #     pickle.dump(pi_in, f)
             
-        with open('input_cur.pkl', 'wb') as f:
-            pickle.dump(input_cur, f)
+        # with open('input_cur.pkl', 'wb') as f:
+        #     pickle.dump(input_cur, f)
         
         return loss
 

@@ -93,6 +93,14 @@ def compute_iou(occ1, occ2):
 
     # Put all data in second dimension
     # Also works for 1-dimensional data
+    
+    mask_zeros = np.sum(occ1, axis=-1) > 0
+    occ1 = occ1[mask_zeros]
+    occ2 = occ2[mask_zeros]
+    if occ1.shape[0] == 0:
+        # print("occ1 is empty")
+        return np.array([-1])
+    
     if occ1.ndim >= 2:
         occ1 = occ1.reshape(occ1.shape[0], -1)
     if occ2.ndim >= 2:
@@ -103,7 +111,7 @@ def compute_iou(occ1, occ2):
     occ2 = (occ2 >= 0.5)
 
     # Compute IOU
-    area_union = np.maximum(1,(occ1 | occ2).astype(np.float32).sum(axis=-1))
+    area_union = np.maximum(1, (occ1 | occ2).astype(np.float32).sum(axis=-1))
     area_intersect = (occ1 & occ2).astype(np.float32).sum(axis=-1)
 
     iou = (area_intersect / area_union)

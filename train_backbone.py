@@ -301,16 +301,22 @@ while True:
     #     len_val = 1
     # else:
     len_val = len(val_loader)
-    print(len_val)
+    # print(len_val)
     total_iterations = len(val_loader)
+    n_val_valid = 0
     with tqdm(total=total_iterations, desc='Validation Loss') as pbar:
         for batch_val_idx, batch_val in enumerate(val_loader):
-            if batch_val_idx >= 1 and reduce_size_testing:
-                break
+            pbar.update(1)  # Manually update the tqdm progress bar
+
+            # if batch_val_idx >= 1 and reduce_size_testing:
+            #     break
             
             loss_val += trainer.validate_step(batch_val)
-            val_iou += trainer.eval_step(batch_val)
-            pbar.update(1)  # Manually update the tqdm progress bar
+            iou_val = trainer.eval_step(batch_val)
+            if iou_val < 0:
+                continue
+            n_val_valid += 1
+            val_iou += iou_val
     
     loss_val /= len_val
     val_iou /= len_val
