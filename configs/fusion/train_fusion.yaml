@@ -4,7 +4,7 @@ data:
   input_type: pointcloud_sequential
   classes: null
   path: data/redwood_custom
-  pointcloud_n: 30000
+  pointcloud_n: 50000
   pointcloud_noise: 0.000
   points_subsample: 16384
   points_file: points.npz
@@ -20,7 +20,7 @@ data:
   input_vol: 1.0
   query_vol: 1.0
   vol_range: [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
-
+  dim: 3
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
@@ -59,7 +59,7 @@ training:
   save_data_viz: false
 
 test:
-  threshold: 0.001
+  threshold: 0.01
   eval_mesh: true
   eval_pointcloud: false
   model_file: model_merging.pt
@@ -69,5 +69,5 @@ generation:
   generator_type: neighbors
   vis_n_outputs: 2
   sliding_window: True
-  resolution_0: 20
+  resolution_0: 30
   voxel_threshold: 0.001

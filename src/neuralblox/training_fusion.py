@@ -443,7 +443,7 @@ class Trainer(BaseTrainer):
         inputs_distributed = inputs_distributed.reshape(n_inputs * n_crop, n_points, 4)
         inputs_distributed_normalized = self.normalize_inputs(inputs_distributed, vol_bound, n_inputs)
 
-        if self.limited_gpu: n_voxels_max = 100
+        if self.limited_gpu: n_voxels_max = 20
         else: n_voxels_max = 1000
         
         n_batch_voxels = int(np.ceil(inputs_distributed.shape[0] / n_voxels_max))
@@ -459,12 +459,15 @@ class Trainer(BaseTrainer):
             # Downsample and upsample features using unet
             _, latent_map_batch = self.unet(fea)
 
+            
             if latent_map is None:
                 latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch
             else:
                 latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
-
-        # Reshape latent_map to match the original input shape
+            # if self.limited_gpu:
+            #     del fea, latent_map_batch
+            #     torch.cuda.empty_cache()
+                # Reshape latent_map to match the original input shape
         latent_map_shape = latent_map.shape
         return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:])
 
@@ -606,7 +609,7 @@ class Trainer(BaseTrainer):
             
         vol_bound = {}
 
-        lb = torch.min(inputs, dim=0).values.cpu().numpy() - query_crop_size #Padded once
+        lb = torch.min(inputs, dim=0).values.cpu().numpy() - query_crop_size  - np.array([0, 0.2, 0]) #Padded once
         ub = torch.max(inputs, dim=0).values.cpu().numpy() + query_crop_size #Padded once
         
         lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,

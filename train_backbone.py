@@ -176,7 +176,6 @@ print_every = cfg['training']['print_every']
 checkpoint_every = cfg['training']['checkpoint_every']
 validate_every = cfg['training']['validate_every']
 visualize_every = cfg['training']['visualize_every']
-validate_loss_every = cfg['training']['validate_loss_every']
 
 # Print model
 nparameters = sum(p.numel() for p in model.parameters())

@@ -41,7 +41,7 @@ class Trainer(BaseTrainer):
     '''
 
     def __init__(self, model, optimizer, vol_bound = None, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, eval_sample=False):
+                 vis_dir=None, threshold=0.5, eval_sample=False, vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]):
         self.model = model
         self.optimizer = optimizer
         self.device = device
@@ -52,7 +52,7 @@ class Trainer(BaseTrainer):
         self.vol_bound = vol_bound
         self.grid_reso = vol_bound['reso']
         self.unet = None
-        self.vol_range = [[-0.55, -0.55, -0.55], [0.55, 0.55, 0.55]]
+        self.vol_range = vol_range
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)

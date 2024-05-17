@@ -207,7 +207,7 @@ while True:
             checkpoint_io_merging.save('model_merging.pt', epoch_it=epoch_it, it=it,
                                loss_val_best=metric_val_best)
             if cfg['training']['save_data_viz']: 
-                print('Saving data for visualizing')
+                print('Saving data for visualizing in %s' % out_dir)
                 latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed = trainer.save_data_visualization(batch, points_gt)
             
                 #dump all files 

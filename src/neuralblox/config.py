@@ -128,13 +128,14 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
                      'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
                      'reso': grid_reso
                     }
-
+    vol_range = cfg['data']['vol_range']
     trainer = training.Trainer(
         model, optimizer,
         vol_bound=vol_bound,
         device=device, input_type=input_type,
         vis_dir=vis_dir, threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],
+        vol_range=vol_range
     )
 
     return trainer
@@ -231,7 +232,7 @@ def get_generator(model, cfg, device, **kwargs):
     return generator
 
 
-def get_generator_fusion(model, model_merge, cfg, device, sample_points=None, **kwargs):
+def get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points=None, **kwargs):
     ''' Returns the generator object.
 
     Args:
@@ -275,6 +276,7 @@ def get_generator_fusion(model, model_merge, cfg, device, sample_points=None, **
         generator = generation_fusion_neighbors.Generator3DNeighbors(
             model,
             model_merge,
+            trainer,
             threshold=cfg['test']['threshold'],
             device=device,
             resolution0=cfg['generation']['resolution_0'],
