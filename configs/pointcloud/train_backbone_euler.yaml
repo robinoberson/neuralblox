@@ -3,12 +3,12 @@ data:
   classes: null
   path: /cluster/scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty
+  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new
   batch_size: 256
   print_every: 1000
   visualize_every: 1000
   checkpoint_every: 1000
-  starting_model: aug_model_200000.pt
+  starting_model: model.pt
 test:
   threshold: 0.2
   eval_mesh: true
