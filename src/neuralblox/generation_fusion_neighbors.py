@@ -203,6 +203,8 @@ class Generator3DNeighbors(object):
             # print(pp.shape)
             # print(bb_max - bb_min)
             pp = pp.reshape(3, -1).T
+            
+            pp = np.random.random((n**3, 3)) * (bb_max - bb_min) + bb_min
 
             bb_size = bb_max - bb_min
             pp_n = (pp-centers) / bb_size + 0.5
@@ -211,7 +213,7 @@ class Generator3DNeighbors(object):
             pp_n_full[i] = pp_n
             
         if self.limited_gpu:
-            n_batch_max = 10
+            n_batch_max = 5
         else:
             n_batch_max = 1000
                 
@@ -242,6 +244,8 @@ class Generator3DNeighbors(object):
                 logits_stacked = logits_decoded.clone()  # Initialize logits directly with the first batch
             else:
                 logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
+                
+        return pp_full, logits_stacked
 
         values = logits_stacked.detach().cpu().numpy().reshape(-1, n, n, n)
         values = np.exp(values) / (1 + np.exp(values))

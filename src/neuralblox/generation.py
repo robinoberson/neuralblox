@@ -64,7 +64,37 @@ class Generator3D(object):
         self.vol_bound = vol_bound
         if vol_info is not None:
             self.input_vol, _, _ = vol_info
+            
+    def return_logits(self, data, test_points):
+        self.model.eval()
+        device = self.device
+        inputs_3D = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs_occ = data.get('inputs.occ').to(device).unsqueeze(-1)
+        inputs = torch.cat((inputs_3D, inputs_occ), dim=-1)  # Concatenate along the last dimension
 
+        kwargs = {}
+
+
+        # obtain features for all crops
+        if self.vol_bound is not None:
+            self.get_crop_bound(inputs_3D)
+            c = self.encode_crop(inputs, device)
+        else:  # input the entire volume
+            
+            fea_type = 'grid'
+            index = {}
+            ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
+            index[fea_type] = ind
+            input_cur = add_key(inputs_3D, index, 'points', 'index', device=device)
+            
+            with torch.no_grad():
+                
+                fea, unet = self.model.encode_inputs(input_cur)
+                c, _ = unet(fea)
+        
+        values = self.eval_points(test_points, c, **kwargs).cpu().numpy()
+        
+        return values
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
 
