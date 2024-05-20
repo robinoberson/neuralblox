@@ -72,4 +72,4 @@ generation:
   refine: false
   n_x: 128
   n_z: 1
-  resolution_0: 20
+  resolution_0: 100

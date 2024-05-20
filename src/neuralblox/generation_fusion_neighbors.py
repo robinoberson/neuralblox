@@ -184,7 +184,7 @@ class Generator3DNeighbors(object):
         vol_bound = self.vol_bound['query_vol'].copy()
         vol_bound_inner = self.trainer.remove_padding_single_dim(vol_bound)
         vol_bound_inner_reshaped = vol_bound_inner.reshape(-1, *vol_bound_inner.shape[3:])
-                
+        
         n = self.resolution0
         
         pp_full = np.zeros((vol_bound_inner_reshaped.shape[0], n**3, 3))
@@ -345,10 +345,14 @@ class Generator3DNeighbors(object):
 
         if self.vol_bound is not None:
             # Scale the mesh back to its original metric
-            bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
-            bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
+            vol_bound = self.trainer.remove_padding_single_dim(self.vol_bound['query_vol'].copy()).reshape(-1, 2, 3)
+            bb_min = vol_bound[:, 0].min(axis=0)
+            bb_max = vol_bound[:, 1].max(axis=0)
+            # bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
+            # bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
+            axis_n_crop = self.vol_bound['axis_n_crop'] - np.array([2, 2, 2])
             mc_unit = max(bb_max - bb_min) / (
-                        self.vol_bound['axis_n_crop'].max() * self.resolution0 * 2 ** self.upsampling_steps)
+                        axis_n_crop.max() * self.resolution0 * 2 ** self.upsampling_steps)
             vertices = vertices * mc_unit + bb_min
         else:
             # Normalize to bounding box

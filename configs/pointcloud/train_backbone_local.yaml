@@ -2,8 +2,8 @@ inherit_from: configs/pointcloud/train_backbone.yaml
 data:
   classes: null
   path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full_test
-training:
-  out_dir: /scratch2/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6
+training: 
+  out_dir: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models
   batch_size: 64
   print_every: 100
   visualize_every: 100
@@ -16,5 +16,5 @@ test:
   threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
-  model_file: aug_model_40000.pt
+  model_file: aug_model_570000.pt
 
