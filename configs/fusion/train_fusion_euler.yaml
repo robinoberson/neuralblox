@@ -9,7 +9,7 @@ data:
 
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_gt_logits_only
-  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24/aug_model_570000.pt
+  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24/aug_model_10000.pt
   checkpoint_every: 200
   limited_gpu: false
   save_data_viz: true
