@@ -213,6 +213,11 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         p = inputs['points']
         index = inputs['index']
         
+        # bb_min_p = torch.min(p.reshape(-1, 3), dim=0).values
+        # bb_max_p = torch.max(p.reshape(-1, 3), dim=0).values
+        
+        # print(bb_min_p, bb_max_p)
+        
         # dir = 'training_output'
         dir = 'generator_output'
         

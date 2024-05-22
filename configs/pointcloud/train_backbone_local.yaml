@@ -1,7 +1,8 @@
 inherit_from: configs/pointcloud/train_backbone.yaml
 data:
   classes: null
-  path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_only_test
+  # path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_only_test
+  path: /scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full_test
 training: 
   out_dir: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models
   batch_size: 64

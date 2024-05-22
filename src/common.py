@@ -389,10 +389,21 @@ def normalize_coord(p, vol_range, plane='xz'):
 
     for dim in range(3):
         coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+
+    # bb_min_coord = torch.min(coord, dim=-2)[0]
+    # bb_max_coord = torch.max(coord, dim=-2)[0]
     
     if torch.max(coord) > 1.0 or torch.min(coord) < 0.0:
-        # print(f'coord out of range: {torch.max(coord)}, {torch.min(coord)}, clamping it')
-        coord.clamp_(0.0, 1.0) #make sure no outliers lie inside
+        # a_reshaped = coord.reshape(-1, 3)
+        # mask_bigger = torch.sum(a_reshaped > 1.0, 1)
+        # mask_smaller = torch.sum(a_reshaped < 0.0, 1)
+
+        # mask = (mask_bigger + mask_smaller) > 0
+        # print(mask.sum())
+        
+        coord[coord > 1.0] = 1.0 - 10e-6
+        coord[coord < 0.0] = 0.0
+        
 
     if p.shape[-1] == 4:
         # Concatenate normalized coordinates and occupancy flag
@@ -434,7 +445,7 @@ def coord2index(p, vol_range, reso=None, plane='grid', normalize_coords = True):
         temp = normalize_coord(p, vol_range, plane=plane)
     else:
         temp = p
-        
+    
     x = temp[..., :3]
     if p.shape[-1] == 4:
         occ = temp[..., 3]
@@ -445,8 +456,13 @@ def coord2index(p, vol_range, reso=None, plane='grid', normalize_coords = True):
         x = (x * reso).long()
     
     index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
-    sum_idxes = torch.sum(index > reso**3, dim=-1)
-    index[index > reso**3] = reso**3
+    
+    if index.max() > reso**3:
+        # sum_idxes = torch.sum(index.reshape(-1) > reso**3, dim=-1)
+        index[index > reso**3] = reso**3
+    if index.min() < 0:
+        # sum_idxes = torch.sum(index.reshape(-1) < 0, dim=-1)
+        index[index < 0] = 0
     index += reso**3 * occ.long()
 
     return index[:, None, :]

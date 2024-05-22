@@ -199,7 +199,6 @@ class Trainer(BaseTrainer):
         index[fea] = ind
         inputs_3d = inputs.clone()[..., :3]
         input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
-        
 
         if self.unet == None:
             fea, self.unet = self.model.encode_inputs(input_cur)
@@ -249,9 +248,9 @@ class Trainer(BaseTrainer):
         loss = loss_i.sum(-1).mean()
         
         # export pi_in and input_cur as pickle 
-        pi_in['occ'] = occ
-        pi_in['logits'] = logits
-        input_cur['occ'] = inputs_occ
+        # pi_in['occ'] = occ
+        # pi_in['logits'] = logits
+        # input_cur['occ'] = inputs_occ
         # import pickle
         # with open('pi_in.pkl', 'wb') as f:
         #     pickle.dump(pi_in, f)

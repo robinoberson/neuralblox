@@ -5,6 +5,7 @@ data:
   # path_gt: /scratch2/roberson/data/fusion_easy_data_gt_temp
   # path: '/scratch2/roberson/data/fusion_easy_data_temp'
   # path_gt: '/scratch2/roberson/data/fusion_easy_data_gt_temp'
+  classes: [2024-03-27_11-27-52]
   path: '/scratch2/roberson/data/fusion_2batches_robot'
   path_gt: '/scratch2/roberson/data/fusion_2batches_gt'
   
@@ -16,7 +17,7 @@ training:
   # out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/reduced_scenes
   out_dir: /scratch/roberson/neuralblox/out_fusion/temp
   # backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_130000.pt
-  backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_570000.pt
+  backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_100000.pt
   learning_rate: 0.01
   limited_gpu: true
   checkpoint_every: 30

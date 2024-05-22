@@ -50,7 +50,8 @@ class Trainer(BaseTrainer):
         self.limited_gpu = limited_gpu
         self.reso = grid_reso
         self.iteration = 0
-        self.rand_points_inputs = torch.rand(20000, 3)
+        self.rand_points_inputs = (torch.load('pretrained_models/fusion/empty_inputs.pt').to(self.device) + 0.56) / 1.12
+        # self.rand_points_inputs = torch.rand(20000, 3) 
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -88,8 +89,8 @@ class Trainer(BaseTrainer):
         
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
@@ -114,7 +115,7 @@ class Trainer(BaseTrainer):
         # compute cost
         loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         # loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        loss.backward()
+        # loss.backward()
         self.optimizer.step()
         
         self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
@@ -264,7 +265,7 @@ class Trainer(BaseTrainer):
         pcd_inputs = o3d.geometry.PointCloud()
         inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
         pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-        pcd_inputs.paint_uniform_color([1.0, 0., 1]) # purple
+        pcd_inputs.paint_uniform_color([1., 0., 1]) # purple
         
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
@@ -554,6 +555,9 @@ class Trainer(BaseTrainer):
         bb_max = vol_bound_tensor[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
         
+        if self.rand_points_inputs.shape[0] < n_max:
+            n_repeat = np.ceil(n_max / self.rand_points_inputs.shape[0])
+            self.rand_points_inputs = self.rand_points_inputs.repeat(n_repeat, 1)
         random_points_sel = self.rand_points_inputs[:n_max]
         random_points = random_points_sel.repeat(n_inputs*n_crops,1, 1).to(device=self.device)
         random_points *= bb_size  # Scale points to fit inside each bounding box
