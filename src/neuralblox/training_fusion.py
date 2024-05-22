@@ -259,6 +259,13 @@ class Trainer(BaseTrainer):
         
         mask = np.any(colors != [0, 0, 0], axis=1)
         # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+        
+        points_second = inputs_distributed
+        pcd_inputs = o3d.geometry.PointCloud()
+        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+        pcd_inputs.paint_uniform_color([1.0, 0., 1]) # purple
+        
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
         bb_min_points = np.min(p_full[mask], axis=0)
@@ -266,7 +273,7 @@ class Trainer(BaseTrainer):
         print(bb_min_points, bb_max_points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
         base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
-        o3d.visualization.draw_geometries([pcd, base_axis])
+        o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
 
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)

@@ -212,7 +212,10 @@ class PatchLocalPoolPointnetLatent(nn.Module):
     def forward(self, inputs):
         p = inputs['points']
         index = inputs['index']
-
+        
+        # dir = 'training_output'
+        dir = 'generator_output'
+        
         fea = {}
 
         if self.map2local:
@@ -220,15 +223,26 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             net = self.fc_pos(pp)
         else:
             net = self.fc_pos(p)
-
+            
+        #save p and index
+        # torch.save(p, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/p.pt')
+        # torch.save(index, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/index.pt')
+        
+        # torch.save(net, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/net.pt')
+        # torch.save(pp, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/pp.pt')
+        
         net = self.blocks[0](net)
-        for block in self.blocks[1:]:
+        for idx_block, block in enumerate(self.blocks[1:]):
             pooled = self.pool_local(index, net)
             net = torch.cat([net, pooled], dim=2)
             net = block(net)
+            # torch.save(net, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/net_{idx_block}.pt')
+            
 
         c = self.fc_c(net)
-
+        
+        # torch.save(c, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/c.pt')
+        
         if 'grid' in self.plane_type:
             fea['grid'] = self.generate_grid_features(index['grid'], c)
 

@@ -91,7 +91,7 @@ class Generator3D(object):
                 
                 fea, unet = self.model.encode_inputs(input_cur)
                 c, _ = unet(fea)
-        
+        # return c
         values = self.eval_points(test_points, c, **kwargs).cpu().numpy()
         
         return values
@@ -317,7 +317,6 @@ class Generator3D(object):
         inputs_3D = inputs[..., :3]
         occ = inputs[..., 3].unsqueeze(-1)
         
-
         index = {}
         for fea in self.vol_bound['fea_type']:
             # crop the input point cloud
@@ -329,6 +328,7 @@ class Generator3D(object):
                      (inputs_3D[:, :, 2] < vol_bound['input_vol'][1][2])
             mask = mask_x & mask_y & mask_z
 
+            print('mask shape: ', mask.shape, torch.sum(mask))
             p_input_3D = inputs_3D[mask]
             p_occ = occ[mask]
             p_input = torch.cat((p_input_3D, p_occ), dim=1)

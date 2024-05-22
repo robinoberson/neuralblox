@@ -251,6 +251,15 @@ class PatchLocalDecoder(nn.Module):
         p_n = p['p_n']
         p = p['p']
 
+        # bb_min_p = torch.min(p_n['grid'].reshape(-1, 3), dim=0).values
+        # bb_max_p = torch.max(p_n['grid'].reshape(-1, 3), dim=0).values
+        
+        # bb_min_p_n = torch.min(p.reshape(-1, 3), dim=0).values
+        # bb_max_p_n = torch.max(p.reshape(-1, 3), dim=0).values
+        
+        # print(bb_min_p, bb_max_p, bb_min_p_n, bb_max_p_n)
+        
+        
         if self.c_dim != 0:
             plane_type = list(c_plane.keys())
             c = 0

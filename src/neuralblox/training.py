@@ -138,7 +138,6 @@ class Trainer(BaseTrainer):
             pi_in = {'p': pi_in}
             p_n = {}
             
-
             p_n[fea_type] = normalize_coord(points_iou.clone(), self.vol_range, plane=fea_type).to(self.device)
             pi_in['p_n'] = p_n
             
@@ -200,6 +199,7 @@ class Trainer(BaseTrainer):
         index[fea] = ind
         inputs_3d = inputs.clone()[..., :3]
         input_cur = add_key(inputs_3d, index, 'points', 'index', device=device)
+        
 
         if self.unet == None:
             fea, self.unet = self.model.encode_inputs(input_cur)
@@ -207,7 +207,11 @@ class Trainer(BaseTrainer):
             fea, _ = self.model.encode_inputs(input_cur)
         
         fea_du, _ = self.unet(fea) #downsample and upsample 
-         
+        
+        #save fea_du
+        # torch.save(fea_du, '/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/fea_du.pt')
+        # torch.save(inputs_3d, '/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/inputs.pt')
+
         kwargs = {}
         # General points
         pi_in = p
@@ -222,6 +226,23 @@ class Trainer(BaseTrainer):
         c['grid'] = fea_du
 
         logits = self.model.decode(pi_in, c, **kwargs).logits
+            
+        # occ_hat = logits.detach().cpu().numpy()[0]
+        # values = np.exp(occ_hat) / (1 + np.exp(occ_hat))
+        
+        # points_occ = p[0, values >= 0.5, :3].cpu().numpy()
+        # points_unocc = p[0, values < 0.5, :3].cpu().numpy()
+        
+        # bb_min = np.min(points_unocc, axis=0)
+        # bb_max = np.max(points_unocc, axis=0)
+        
+        # print(f'len points occ {len(points_occ)}')
+        
+        # import open3d as o3d
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(points_occ)
+        # pcd.paint_uniform_color([1, 0, 0])
+        # o3d.visualization.draw_geometries([pcd])
         
         loss_i = F.binary_cross_entropy_with_logits(
             logits, occ, reduction='none')

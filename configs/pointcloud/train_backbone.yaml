@@ -5,7 +5,7 @@ data:
   classes: null
   # classes: ['04530566']
   path: null
-  pointcloud_n: 4096
+  pointcloud_n: 2048
   pointcloud_noise: 0.005
   points_subsample: 4096
   points_iou_subsample: 5000
