@@ -89,17 +89,24 @@ class Trainer(BaseTrainer):
         
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
-        
+        # return latent_map_gt, inputs_distributed_gt
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
         
+        occupied_voxels = torch.sum(inputs_distributed_gt.squeeze(0)[:, :, 3], dim=1).to(dtype=torch.bool)
         # return p_stacked, p_n_stacked, inputs_distributed
+        latent_map_gt = latent_map_gt[occupied_voxels]
+        latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
+        p_stacked = p_stacked[occupied_voxels]
+        p_n_stacked = p_n_stacked[occupied_voxels]
+        inputs_distributed_gt = inputs_distributed_gt[:, inputs_distributed_gt]
+        
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
         torch.cuda.empty_cache()
@@ -115,7 +122,7 @@ class Trainer(BaseTrainer):
         # compute cost
         loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         # loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        # loss.backward()
+        loss.backward()
         self.optimizer.step()
         
         self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)

@@ -1,6 +1,3 @@
-from comet_ml import Experiment
-from comet_ml.integration.pytorch import log_model
-
 import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -45,6 +42,9 @@ if args.fast_testing:
 log_comet = cfg['training']['log_comet']
 
 if log_comet:
+    from comet_ml import Experiment
+    from comet_ml.integration.pytorch import log_model
+    
     experiment = Experiment(
     api_key="PhozpUD8pYftjTWYPEI2hbrnw",
     project_name="backbone-training",
@@ -212,7 +212,7 @@ while True:
                 
         loss = trainer.train_step(batch)
         if log_comet: experiment.log_metric('train_loss', loss, step=it)
-        
+        # print('Loss: %.4f' % loss)
         scheduler.step(loss)
         for param_group in optimizer.param_groups:
             current_lr = param_group['lr']
@@ -231,7 +231,7 @@ while True:
                 memory_used = info.used
                 
                 total_memory_used += memory_used
-                
+        
         logger.add_scalar('train/loss', loss, it)
 
         # Print output
