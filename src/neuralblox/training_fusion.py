@@ -121,11 +121,11 @@ class Trainer(BaseTrainer):
         # return latent_map_sampled, latent_map_gt, inputs_distributed, inputs_distributed_gt
         # compute cost
         # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
-        loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
+        loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
         loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -272,7 +272,7 @@ class Trainer(BaseTrainer):
         pcd_inputs = o3d.geometry.PointCloud()
         inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
         pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-        pcd_inputs.paint_uniform_color([1., 0., 1]) # purple
+        pcd_inputs.paint_uniform_color([0.2, 0.5, 1]) # blue
         
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])

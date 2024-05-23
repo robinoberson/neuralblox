@@ -2,8 +2,12 @@ inherit_from: configs/pointcloud/train_backbone.yaml
 data:
   classes: null
   path: /cluster/scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full
+  grid_resolution: 12
+model:
+  encoder_kwargs:
+    grid_resolution: 12
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23
+  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso12_may23
   batch_size: 256
   print_every: 3000
   visualize_every: 3000
@@ -14,3 +18,4 @@ test:
   eval_mesh: true
   eval_pointcloud: false
   model_file: model.pt
+
