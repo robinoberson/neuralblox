@@ -105,7 +105,7 @@ class Trainer(BaseTrainer):
         latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
         p_stacked = p_stacked[occupied_voxels]
         p_n_stacked = p_n_stacked[occupied_voxels]
-        inputs_distributed_gt = inputs_distributed_gt[:, inputs_distributed_gt]
+        inputs_distributed_gt = inputs_distributed_gt[:, occupied_voxels]
         
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
@@ -120,12 +120,12 @@ class Trainer(BaseTrainer):
             raise ValueError
         # return latent_map_sampled, latent_map_gt, inputs_distributed, inputs_distributed_gt
         # compute cost
-        loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
-        # loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
+        # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
+        loss, losses = self.compute_loss_easy(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
         loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed_gt)
         self.iteration += 1
         return loss, losses
     
@@ -153,8 +153,8 @@ class Trainer(BaseTrainer):
         # Combine the three loss terms with weights
         alpha = 0.2  # Weight for MSE loss
 
-        combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
-        # combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
+        # combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
+        combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
         print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
 
         return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]

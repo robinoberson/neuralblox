@@ -3,7 +3,7 @@ data:
   classes: null
   path: /cluster/scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24
+  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23
   batch_size: 256
   print_every: 3000
   visualize_every: 3000
