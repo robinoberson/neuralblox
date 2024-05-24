@@ -226,22 +226,22 @@ class Trainer(BaseTrainer):
 
         logits = self.model.decode(pi_in, c, **kwargs).logits
             
-        # occ_hat = logits.detach().cpu().numpy()[0]
-        # values = np.exp(occ_hat) / (1 + np.exp(occ_hat))
+        occ_hat = logits.detach().cpu().numpy()[0]
+        values = np.exp(occ_hat) / (1 + np.exp(occ_hat))
         
-        # points_occ = p[0, values >= 0.5, :3].cpu().numpy()
-        # points_unocc = p[0, values < 0.5, :3].cpu().numpy()
+        points_occ = p[0, values >= 0.5, :3].cpu().numpy()
+        points_unocc = p[0, values < 0.5, :3].cpu().numpy()
         
-        # bb_min = np.min(points_unocc, axis=0)
-        # bb_max = np.max(points_unocc, axis=0)
+        bb_min = np.min(points_unocc, axis=0)
+        bb_max = np.max(points_unocc, axis=0)
         
-        # print(f'len points occ {len(points_occ)}')
+        print(f'len points occ {len(points_occ)}')
         
-        # import open3d as o3d
-        # pcd = o3d.geometry.PointCloud()
-        # pcd.points = o3d.utility.Vector3dVector(points_occ)
-        # pcd.paint_uniform_color([1, 0, 0])
-        # o3d.visualization.draw_geometries([pcd])
+        import open3d as o3d
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points_occ)
+        pcd.paint_uniform_color([1, 0, 0])
+        o3d.visualization.draw_geometries([pcd])
         
         loss_i = F.binary_cross_entropy_with_logits(
             logits, occ, reduction='none')

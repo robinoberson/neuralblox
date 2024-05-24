@@ -82,30 +82,37 @@ class Trainer(BaseTrainer):
         
         inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
         # Encode latents 
-        latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
-        # return latent_map_sampled
+        latent_map_sampled, latent_map_sampled_decoded = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
+        # return latent_map_sampled, latent_map_sampled_decoded, inputs_distributed
         # Stack latents 
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
         
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
-        # return latent_map_gt, inputs_distributed_gt
+        # return latent_map_gt, latent_map_gt_decoded, inputs_distributed_gt
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
         
         occupied_voxels = torch.sum(inputs_distributed_gt.squeeze(0)[:, :, 3], dim=1).to(dtype=torch.bool)
+
         # return p_stacked, p_n_stacked, inputs_distributed
-        latent_map_gt = latent_map_gt[occupied_voxels]
-        latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
-        p_stacked = p_stacked[occupied_voxels]
-        p_n_stacked = p_n_stacked[occupied_voxels]
-        inputs_distributed_gt = inputs_distributed_gt[:, occupied_voxels]
+        # latent_map_gt = latent_map_gt[occupied_voxels]
+        # latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
+        # p_stacked = p_stacked[occupied_voxels]
+        # p_n_stacked = p_n_stacked[occupied_voxels]
+        # inputs_distributed_gt = inputs_distributed_gt[:, occupied_voxels]
+        
+        # latent_map_gt = latent_map_gt
+        # latent_map_sampled_merged = latent_map_sampled_merged
+        # p_stacked = p_stacked
+        # p_n_stacked = p_n_stacked
+        # inputs_distributed_gt = inputs_distributed_gt
         
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
@@ -122,10 +129,10 @@ class Trainer(BaseTrainer):
         # compute cost
         # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        loss.backward()
+        # loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -263,7 +270,7 @@ class Trainer(BaseTrainer):
         colors = np.zeros((values_gt.shape[0], 3))
         colors[values_gt == 1] = [1, 0, 0] # red
         colors[values_sampled == 1] = [0, 0, 1] # blue
-        colors[both_occ == 1] = [0, 1, 0] # purple
+        colors[both_occ == 1] = [0, 1, 0] # green
         
         mask = np.any(colors != [0, 0, 0], axis=1)
         # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
@@ -283,6 +290,8 @@ class Trainer(BaseTrainer):
         base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
         o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
 
+        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
+        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
         p_in_occ = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
@@ -300,6 +309,13 @@ class Trainer(BaseTrainer):
         H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
         tensor = tensor.reshape(H, W, D, *other_dims)
         return tensor[1:-1, 1:-1, 1:-1]
+    
+    def remove_padding_single_dim_batch(self, tensor):
+        other_dims = tensor.shape[2:]
+        n_batch = tensor.shape[0]
+        H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+        tensor = tensor.reshape(n_batch, H, W, D, *other_dims)
+        return tensor[:, 1:-1, 1:-1, 1:-1]
     
     def remove_padding(self, tensor):
         is_latent = False
@@ -331,6 +347,7 @@ class Trainer(BaseTrainer):
     def get_logits(self, latent_map_full, p_stacked, p_n_stacked):
         n_crops_total = latent_map_full.shape[0]
         
+        fea_type = 'grid'
         if self.limited_gpu:
             n_batch_max = 10
         else:
@@ -348,24 +365,22 @@ class Trainer(BaseTrainer):
             p_n_stacked_batch = p_n_stacked[start:end]
             latent_map_full_batch = latent_map_full[start:end]
 
-            p_n_dict = {'grid': p_n_stacked_batch}
-
-            pi_in = {'p': p_stacked_batch}
-            pi_in['p_n'] = p_n_dict
-            # Get latent codes of valid crops
             kwargs = {}
-            fea = {}
-            fea['unet3d'] = self.unet
-            fea['latent'] = latent_map_full_batch
-
-            p_r = self.model.decode(pi_in, fea, **kwargs)
-            logits_decoded = p_r.logits
-
+            pi_in = p_stacked_batch[..., :3].clone()
+            pi_in = {'p': pi_in}
+            p_n = {}
+            p_n[fea_type] = p_n_stacked_batch.clone()
+            pi_in['p_n'] = p_n
+            c = {}
+            latent_map_full_batch_decoded = self.unet.decode(latent_map_full_batch, self.features_shapes)
+            
+            c['grid'] = latent_map_full_batch_decoded.clone()
+            logits_decoded = self.model.decode(pi_in, c, **kwargs).logits
+            
             if logits_stacked is None:
                 logits_stacked = logits_decoded.clone()  # Initialize logits directly with the first batch
             else:
                 logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
-
 
         return logits_stacked
     
@@ -393,9 +408,9 @@ class Trainer(BaseTrainer):
     def get_latent_gt(self, points_gt):
         inputs_distributed_gt = self.distribute_inputs(points_gt.unsqueeze(1), self.vol_bound_all, remove_padding = True)
         
-        latent_map_gt = self.encode_latent_map(inputs_distributed_gt, self.vol_bound_all['input_vol'], remove_padding = True).squeeze(0)
+        latent_map_gt, _ = self.encode_latent_map(inputs_distributed_gt, torch.tensor(self.vol_bound_all['input_vol'], device = self.device), remove_padding = True)
         # print(latent_map_gt.shape)
-        return latent_map_gt, inputs_distributed_gt
+        return latent_map_gt.squeeze(0), inputs_distributed_gt
     def merge_latent_map(self, latent_map):
         H, W, D, c, h, w, d = latent_map.size()
         latent_map = latent_map.reshape(-1, c, h, w, d)
@@ -454,9 +469,10 @@ class Trainer(BaseTrainer):
         latent_map = None  
 
         if remove_padding: vol_bound = self.remove_padding_single_dim(vol_bound).reshape(-1, *vol_bound.shape[-2:])
-
+        vol_bound = vol_bound.unsqueeze(0).repeat(n_inputs, 1, 1, 1)
+        
         inputs_distributed = inputs_distributed.reshape(n_inputs * n_crop, n_points, 4)
-        inputs_distributed_normalized = self.normalize_inputs(inputs_distributed, vol_bound, n_inputs)
+        vol_bound = vol_bound.reshape(n_inputs * n_crop, 2, 3)
 
         if self.limited_gpu: n_voxels_max = 20
         else: n_voxels_max = 1000
@@ -467,25 +483,31 @@ class Trainer(BaseTrainer):
             start = i * n_voxels_max
             end = min((i + 1) * n_voxels_max, inputs_distributed.shape[0])
             inputs_distributed_batch = inputs_distributed[start:end]
-            inputs_distributed_normalized_batch = inputs_distributed_normalized[start:end]
-
-            # Call encode_crop to get features and unet
-            fea, self.unet = self.encode_crop(inputs_distributed_batch, inputs_distributed_normalized_batch)
-            # Downsample and upsample features using unet
-            _, latent_map_batch = self.unet(fea)
-
+            inputs_distributed_batch_3D = inputs_distributed_batch[..., :3]
+            vol_bound_batch = vol_bound[start:end]
             
+            kwargs = {}
+                
+            fea_type = 'grid'
+            index = {}
+            ind = coord2index(inputs_distributed_batch.clone(), vol_bound_batch, reso=self.reso, plane=fea_type)
+            index[fea_type] = ind
+            input_cur_batch = add_key(inputs_distributed_batch_3D.clone(), index, 'points', 'index', device=self.device)
+            fea, self.unet = self.model.encode_inputs(input_cur_batch)
+
+            latent_map_batch_decoded, latent_map_batch, self.features_shapes = self.unet(fea, True)
+
             if latent_map is None:
                 latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch
+                latent_map_decoded = latent_map_batch_decoded.clone()
             else:
                 latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
-            # if self.limited_gpu:
-            #     del fea, latent_map_batch
-            #     torch.cuda.empty_cache()
+                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded), dim=0)
+
                 # Reshape latent_map to match the original input shape
         latent_map_shape = latent_map.shape
-        return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:])
-
+        latent_map_decoded_shape = latent_map_decoded.shape
+        return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:]), latent_map_decoded.reshape(n_inputs, n_crop, *latent_map_decoded_shape[1:])
 
     def normalize_inputs(self, inputs, vol_bound, n_inputs):
         vol_bound = torch.from_numpy(vol_bound).to(self.device)
@@ -564,7 +586,7 @@ class Trainer(BaseTrainer):
         
         if self.rand_points_inputs.shape[0] < n_max:
             n_repeat = np.ceil(n_max / self.rand_points_inputs.shape[0])
-            self.rand_points_inputs = self.rand_points_inputs.repeat(n_repeat, 1)
+            self.rand_points_inputs = self.rand_points_inputs.repeat(int(n_repeat), 1)
         random_points_sel = self.rand_points_inputs[:n_max]
         random_points = random_points_sel.repeat(n_inputs*n_crops,1, 1).to(device=self.device)
         random_points *= bb_size  # Scale points to fit inside each bounding box
@@ -587,24 +609,6 @@ class Trainer(BaseTrainer):
         index[fea_type] = ind
         input_cur = add_key(inputs.clone()[...,:3], index, 'points', 'index', device=self.device)
         fea, unet = self.model.encode_inputs(input_cur)
-        return fea, unet
-        
-    def encode_crop_sequential(self, inputs, device, vol_bound, fea = 'grid'):
-        ''' Encode a crop to feature volumes
-
-        Args:
-            inputs (tensor): input point cloud
-            device (device): pytorch device
-            vol_bound (dict): volume boundary
-        '''
-
-        index = {}
-        ind = coord2index(inputs.clone(), vol_bound, reso=self.grid_reso, plane=fea)
-        index[fea] = ind
-        input_cur = add_key(inputs.clone()[...,:3], index, 'points', 'index', device=device)
-
-        fea, unet = self.model.encode_inputs(input_cur)
-
         return fea, unet
         
     def concat_points(self, p_in, p_gt, n_in):

@@ -327,24 +327,24 @@ class Decoder(nn.Module):
                                          num_groups=num_groups)
 
 
-    def forward(self, encoder_features, x):
+    def forward(self, encoder_features_shapes, x):
         #encoder_features only to get the size of upsampled tensors
-        x = self.upsampling(encoder_features=encoder_features, x=x)
+        x = self.upsampling(encoder_features_shapes=encoder_features_shapes, x=x)
 
         # Bypass joining, if NoSkipConnection is selected. This is to decouple
         # encoder-decoder so that latent code can be stored.
         if (self.basic_module.__class__.__name__ != "NoSkipConnection"):
-            x = self.joining(encoder_features, x)
+            x = self.joining(encoder_features_shapes, x)
 
         x = self.basic_module(x)
         return x
 
     @staticmethod
-    def _joining(encoder_features, x, concat):
+    def _joining(encoder_features_shapes, x, concat):
         if concat:
-            return torch.cat((encoder_features, x), dim=1)
+            return torch.cat((encoder_features_shapes, x), dim=1)
         else:
-            return encoder_features + x
+            return encoder_features_shapes + x
 
 
 class Upsampling(nn.Module):
@@ -375,8 +375,8 @@ class Upsampling(nn.Module):
         else:
             self.upsample = partial(self._interpolate, mode=mode)
 
-    def forward(self, encoder_features, x):
-        output_size = encoder_features.size()[2:]
+    def forward(self, encoder_features_shapes, x):
+        output_size = encoder_features_shapes[2:]
         return self.upsample(x, output_size)
 
     @staticmethod
@@ -501,27 +501,44 @@ class Abstract3DUNet(nn.Module):
         else:
             # regression problem
             self.final_activation = None
+            
+    def decode(self, x, encoders_features_shapes_return):
+        # decoder part
+        x = x.clone()
+        for decoder, encoders_features_shapes in zip(self.decoders, encoders_features_shapes_return):
+            # pass the output from the corresponding encoder and the output
+            # of the previous decoder
+            x = decoder(encoders_features_shapes, x)
 
-    def forward(self, x):
+        x = self.final_conv(x)
+
+        # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs
+        # logits and it's up to the user to normalize it before visualising with tensorboard or computing validation metric
+        if self.testing and self.final_activation is not None:
+            x = self.final_activation(x)
+        
+        return x
+
+    def forward(self, x, return_feature_maps=False):
         # encoder part
-        encoders_features = []
+        encoders_features_shapes_return = []
 
         for encoder in self.encoders:
             x = encoder(x)
             # reverse the encoder outputs to be aligned with the decoder
-            encoders_features.insert(0, x)
+            encoders_features_shapes_return.insert(0, x.shape)
 
         # x is the latent code
         # x, before decoder is the latent code to be stored
         latent_code = x.clone()
 
-        encoders_features = encoders_features[1:]
-
+        encoders_features_shapes_return = encoders_features_shapes_return[1:]
+        
         # decoder part
-        for decoder, encoder_features in zip(self.decoders, encoders_features):
+        for decoder, encoders_features_shapes in zip(self.decoders, encoders_features_shapes_return):
             # pass the output from the corresponding encoder and the output
             # of the previous decoder
-            x = decoder(encoder_features, x)
+            x = decoder(encoders_features_shapes, x)
 
         x = self.final_conv(x)
 
@@ -530,7 +547,10 @@ class Abstract3DUNet(nn.Module):
         if self.testing and self.final_activation is not None:
             x = self.final_activation(x)
 
-        return x, latent_code
+        if return_feature_maps:
+            return x, latent_code, encoders_features_shapes_return
+        else:
+            return x, latent_code
 
 
 class UNet3D_noskipconnection_latent(Abstract3DUNet):

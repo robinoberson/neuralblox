@@ -65,7 +65,7 @@ class Generator3D(object):
         if vol_info is not None:
             self.input_vol, _, _ = vol_info
             
-    def return_logits(self, data, test_points):
+    def return_logits(self, data, vol_range_data, points_3D, vol_range_points):
         self.model.eval()
         device = self.device
         inputs_3D = data.get('inputs', torch.empty(1, 0)).to(device)
@@ -73,28 +73,27 @@ class Generator3D(object):
         inputs = torch.cat((inputs_3D, inputs_occ), dim=-1)  # Concatenate along the last dimension
 
         kwargs = {}
-
-
-        # obtain features for all crops
-        if self.vol_bound is not None:
-            self.get_crop_bound(inputs_3D)
-            c = self.encode_crop(inputs, device)
-        else:  # input the entire volume
-            
-            fea_type = 'grid'
-            index = {}
-            ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)
-            index[fea_type] = ind
-            input_cur = add_key(inputs_3D, index, 'points', 'index', device=device)
-            
-            with torch.no_grad():
                 
-                fea, unet = self.model.encode_inputs(input_cur)
-                c, _ = unet(fea)
-        # return c
-        values = self.eval_points(test_points, c, **kwargs).cpu().numpy()
+        fea_type = 'grid'
+        index = {}
+        ind = coord2index(inputs.clone(), vol_range_data, reso=self.grid_reso, plane=fea_type)
+        index[fea_type] = ind
+        input_cur = add_key(inputs_3D.clone(), index, 'points', 'index', device=device)
+        fea, unet = self.model.encode_inputs(input_cur)
+        fea_du, _ = unet(fea) #downsample and upsample 
+
+        kwargs = {}
+        pi_in = points_3D.clone()
+        pi_in = {'p': pi_in}
+        p_n = {}
+        p_n[fea_type] = normalize_coord(points_3D.clone(), vol_range_points, plane = fea_type).to(device)
+        pi_in['p_n'] = p_n
+
+        c = {}
+        c['grid'] = fea_du
+        logits = self.model.decode(pi_in, c, **kwargs).logits
         
-        return values
+        return logits
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
 
@@ -119,7 +118,6 @@ class Generator3D(object):
             self.get_crop_bound(inputs_3D)
             c = self.encode_crop(inputs, device)
         else:  # input the entire volume
-            
             fea_type = 'grid'
             index = {}
             ind = coord2index(inputs.clone(), self.vol_range, reso=self.grid_reso, plane=fea_type)

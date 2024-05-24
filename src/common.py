@@ -379,21 +379,33 @@ def normalize_coord(p, vol_range, plane='xz'):
         plane (str): feature type, ['xz', 'xy', 'yz'] - canonical planes; ['grid'] - grid volume
     '''
     # Extract coordinates and occupancy flag
+
+        
     if p.shape[-1] == 4:
-        coord = p[..., :3]
-        occ = p[..., 3].unsqueeze(-1)
+        coord = p[..., :3].clone()
+        occ = p[..., 3].unsqueeze(-1).clone()
     else:
-        coord = p
+        coord = p.clone()
+        
+    if not isinstance(vol_range, torch.Tensor):
+        vol_range = torch.tensor(vol_range).to(p.device)
+        
+    if len(vol_range.shape) == 2:
+        batch_size = coord.shape[0]
+        vol_range = vol_range.unsqueeze(0).repeat(batch_size, 1, 1).clone()
         
     # Normalize coordinates #TODO check     coord = (coord - vol_range[0]) / (vol_range[1] - vol_range[0])
 
-    for dim in range(3):
-        coord[..., dim] = (coord[..., dim] - vol_range[0][dim]) / (vol_range[1][dim] - vol_range[0][dim])
+    for dim in range(3):      
+        range_diff = vol_range[:, 1] - vol_range[:, 0]  # Shape: [batch_size, 3]
+        # coord[:, :, dim] = coord[:, :, dim] * range_diff[:, dim].unsqueeze(1) + vol_range[:, 0, dim].unsqueeze(1)
+        coord[..., dim] = (coord[..., dim] - vol_range[:, 0, dim].unsqueeze(1)) / (range_diff[:, dim].unsqueeze(1))
 
     # bb_min_coord = torch.min(coord, dim=-2)[0]
     # bb_max_coord = torch.max(coord, dim=-2)[0]
     
     if torch.max(coord) > 1.0 or torch.min(coord) < 0.0:
+        print('Problem with coord')
         # a_reshaped = coord.reshape(-1, 3)
         # mask_bigger = torch.sum(a_reshaped > 1.0, 1)
         # mask_smaller = torch.sum(a_reshaped < 0.0, 1)
@@ -403,6 +415,9 @@ def normalize_coord(p, vol_range, plane='xz'):
         
         coord[coord > 1.0] = 1.0 - 10e-6
         coord[coord < 0.0] = 0.0
+    
+    if torch.max(coord) < 0.8 or torch.min(coord) > 0.2:
+        print('Problem with coord, not in [0.2, 0.8]')
         
 
     if p.shape[-1] == 4:
@@ -445,6 +460,9 @@ def coord2index(p, vol_range, reso=None, plane='grid', normalize_coords = True):
         temp = normalize_coord(p, vol_range, plane=plane)
     else:
         temp = p
+        
+    bb_min_temp = torch.min(temp, dim=-2)[0]
+    bb_max_temp = torch.max(temp, dim=-2)[0]
     
     x = temp[..., :3]
     if p.shape[-1] == 4:
