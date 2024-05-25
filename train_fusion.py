@@ -1,4 +1,6 @@
 
+from comet_ml import Experiment
+from comet_ml.integration.pytorch import log_model
 import numpy as np
 import os
 import argparse
@@ -26,8 +28,7 @@ cfg = config.load_config(args.config, 'configs/default.yaml')
 
 log_comet = cfg['training']['log_comet']
 if log_comet:
-    from comet_ml import Experiment
-    from comet_ml.integration.pytorch import log_model
+
     
     experiment = Experiment(
     api_key="PhozpUD8pYftjTWYPEI2hbrnw",
