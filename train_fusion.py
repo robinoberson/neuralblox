@@ -186,6 +186,7 @@ while True:
         
         logger.add_scalar('train/loss', loss, it)
         if log_comet: 
+            print('Loss: %.4f' % loss)
             experiment.log_metric('train_loss', loss, step=it)
             for idx_elem, elem in enumerate(losses):
                 experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
