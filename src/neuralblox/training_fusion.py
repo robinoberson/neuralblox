@@ -89,8 +89,8 @@ class Trainer(BaseTrainer):
         
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
@@ -129,7 +129,7 @@ class Trainer(BaseTrainer):
         # compute cost
         # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        # loss.backward()
+        loss.backward()
         self.optimizer.step()
         
         # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
@@ -162,7 +162,7 @@ class Trainer(BaseTrainer):
 
         # combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
         combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
-        # print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
+        print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
 
         return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]
     
@@ -218,7 +218,7 @@ class Trainer(BaseTrainer):
         
         inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
         # Encode latents 
-        latent_map_sampled = self.encode_latent_map(inputs_distributed, self.vol_bound_all['input_vol'])
+        latent_map_sampled, _ = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
         # Stack latents 
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
         # Merge latents

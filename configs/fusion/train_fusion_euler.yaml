@@ -12,5 +12,5 @@ training:
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23/aug_model_20000.pt
   checkpoint_every: 200
   limited_gpu: false
-  save_data_viz: true
+  save_data_viz: false
   log_comet: true

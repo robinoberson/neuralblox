@@ -14,4 +14,6 @@ training:
   limited_gpu: true
   checkpoint_every: 50
   log_comet: false 
+  save_data_viz: false
+
   # print_every: 3
