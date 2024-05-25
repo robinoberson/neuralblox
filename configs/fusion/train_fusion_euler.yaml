@@ -1,15 +1,15 @@
 inherit_from: configs/fusion/train_fusion.yaml
 data:
-  path: /cluster/scratch/roberson/data/fusion/fusion_easy_data_temp
-  path_gt: /cluster/scratch/roberson/data/fusion/fusion_easy_data_temp_gt
+  path: /cluster/scratch/roberson/data/fusion/fusion_2batches_robot_test
+  path_gt: /cluster/scratch/roberson/data/fusion/fusion_2batches_gt_test
   # path: /cluster/scratch/roberson/data/fusion/fusion_wave
   # path_gt: /cluster/scratch/roberson/data/fusion/fusion_wave_gt
   # path: '/cluster/scratch/roberson/data/fusion/fusion_robot_temp'
   # path_gt: '/cluster/scratch/roberson/data/fusion/fusion_gt_temp'
 
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_gt_logits_only
-  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24/aug_model_10000.pt
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_full_scenes
+  backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23/aug_model_20000.pt
   checkpoint_every: 200
   limited_gpu: false
   save_data_viz: true

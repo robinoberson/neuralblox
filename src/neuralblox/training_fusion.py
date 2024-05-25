@@ -132,7 +132,7 @@ class Trainer(BaseTrainer):
         # loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -162,7 +162,7 @@ class Trainer(BaseTrainer):
 
         # combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
         combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
-        print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
+        # print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
 
         return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]
     
@@ -234,64 +234,64 @@ class Trainer(BaseTrainer):
         
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
-    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
-        import open3d as o3d
+    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
+    #     import open3d as o3d
         
-        file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
+    #     file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
 
-        with open(file_path, 'r') as f:
-            config = yaml.safe_load(f)
+    #     with open(file_path, 'r') as f:
+    #         config = yaml.safe_load(f)
         
-        if not config['visualization']: 
-            return
+    #     if not config['visualization']: 
+    #         return
 
-        p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+    #     p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
 
-        occ_gt = logits_gt.detach().cpu().numpy()
-        occ_sampled = logits_sampled.detach().cpu().numpy()
+    #     occ_gt = logits_gt.detach().cpu().numpy()
+    #     occ_sampled = logits_sampled.detach().cpu().numpy()
 
-        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-        values_gt = values_gt.reshape(-1)
-        values_sampled = values_sampled.reshape(-1)
+    #     values_gt = values_gt.reshape(-1)
+    #     values_sampled = values_sampled.reshape(-1)
 
-        threshold = 0.5
+    #     threshold = 0.5
 
-        values_gt[values_gt < threshold] = 0
-        values_gt[values_gt >= threshold] = 1
+    #     values_gt[values_gt < threshold] = 0
+    #     values_gt[values_gt >= threshold] = 1
 
-        values_sampled[values_sampled < threshold] = 0
-        values_sampled[values_sampled >= threshold] = 1
+    #     values_sampled[values_sampled < threshold] = 0
+    #     values_sampled[values_sampled >= threshold] = 1
 
-        both_occ = np.logical_and(values_gt, values_sampled)
+    #     both_occ = np.logical_and(values_gt, values_sampled)
         
-        pcd = o3d.geometry.PointCloud()
-        colors = np.zeros((values_gt.shape[0], 3))
-        colors[values_gt == 1] = [1, 0, 0] # red
-        colors[values_sampled == 1] = [0, 0, 1] # blue
-        colors[both_occ == 1] = [0, 1, 0] # green
+    #     pcd = o3d.geometry.PointCloud()
+    #     colors = np.zeros((values_gt.shape[0], 3))
+    #     colors[values_gt == 1] = [1, 0, 0] # red
+    #     colors[values_sampled == 1] = [0, 0, 1] # blue
+    #     colors[both_occ == 1] = [0, 1, 0] # green
         
-        mask = np.any(colors != [0, 0, 0], axis=1)
-        # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+    #     mask = np.any(colors != [0, 0, 0], axis=1)
+    #     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
         
-        points_second = inputs_distributed
-        pcd_inputs = o3d.geometry.PointCloud()
-        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
-        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-        pcd_inputs.paint_uniform_color([0.2, 0.5, 1]) # blue
+    #     points_second = inputs_distributed
+    #     pcd_inputs = o3d.geometry.PointCloud()
+    #     inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+    #     pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+    #     pcd_inputs.paint_uniform_color([0.2, 0.5, 1]) # blue
         
-        colors = colors[mask]
-        pcd.points = o3d.utility.Vector3dVector(p_full[mask])
-        bb_min_points = np.min(p_full[mask], axis=0)
-        bb_max_points = np.max(p_full[mask], axis=0)
-        print(bb_min_points, bb_max_points)
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
-        o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
+    #     colors = colors[mask]
+    #     pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+    #     bb_min_points = np.min(p_full[mask], axis=0)
+    #     bb_max_points = np.max(p_full[mask], axis=0)
+    #     print(bb_min_points, bb_max_points)
+    #     pcd.colors = o3d.utility.Vector3dVector(colors)
+    #     base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+    #     o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
 
-        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
-        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
+    #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
+    #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
         p_in_occ = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
