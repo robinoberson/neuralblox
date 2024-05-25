@@ -1,6 +1,11 @@
 
 from comet_ml import Experiment
 from comet_ml.integration.pytorch import log_model
+experiment = Experiment(
+api_key="PhozpUD8pYftjTWYPEI2hbrnw",
+project_name="training-fusion",
+workspace="robinoberson"
+)
 import numpy as np
 import os
 import argparse
@@ -27,14 +32,10 @@ args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 
 log_comet = cfg['training']['log_comet']
-if log_comet:
+# if log_comet:
 
     
-    experiment = Experiment(
-    api_key="PhozpUD8pYftjTWYPEI2hbrnw",
-    project_name="training-fusion",
-    workspace="robinoberson"
-    )
+
 
 import torch
 import torch.optim as optim
@@ -186,11 +187,11 @@ while True:
                 prev_lr = current_lr
         
         logger.add_scalar('train/loss', loss, it)
-        if log_comet: 
-            print('Loss: %.4f' % loss)
-            experiment.log_metric('train_loss', loss, step=it)
-            for idx_elem, elem in enumerate(losses):
-                experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
+        # if log_comet: 
+        print('Loss: %.4f' % loss)
+        experiment.log_metric('train_loss', loss, step=it)
+        for idx_elem, elem in enumerate(losses):
+            experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
 
         # Print output
         if print_every > 0 and (it % print_every) == 0:
@@ -198,10 +199,10 @@ while True:
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
                      % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             
-            if log_comet: 
-                for param_group in optimizer.param_groups:
-                    lr = param_group['lr']
-                    experiment.log_metric("learning_rate", lr, step=it)
+            # if log_comet: 
+            for param_group in optimizer.param_groups:
+                lr = param_group['lr']
+                experiment.log_metric("learning_rate", lr, step=it)
 
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
