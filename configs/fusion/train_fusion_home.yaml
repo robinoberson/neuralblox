@@ -4,12 +4,12 @@ data:
   # path_gt: /home/robin/Dev/MasterThesis/data/fusion/fusion_easy_data_gt_temp
   # path: /home/robin/Dev/MasterThesis/data/fusion
   # path_gt: /home/robin/Dev/MasterThesis/data/fusion_gt
-  path: /home/robin/Dev/MasterThesis/data/fusion/single_box
-  path_gt: /home/robin/Dev/MasterThesis/data/fusion/single_box_gt
+  path: /home/robin/Dev/MasterThesis/data/fusion/fusion_2batches_robot_test
+  path_gt: /home/robin/Dev/MasterThesis/data/fusion/fusion_2batches_gt_test
   
 training:
-  out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/single_voxel
-  backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_200000.pt
+  out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/test_full_scenes
+  backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_20000.pt
   learning_rate: 0.01
   limited_gpu: true
   checkpoint_every: 50

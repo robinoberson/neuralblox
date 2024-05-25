@@ -42,7 +42,7 @@ model:
   c_dim: 32
 training:
   out_dir: out/pointcloud_crop_training
-  batch_size: 8
+  batch_size: 2
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
@@ -56,7 +56,8 @@ training:
   learning_rate: 0.01
   limited_gpu: false
   log_comet: true
-  save_data_viz: false
+  save_data_viz: true
+  backbone_file: model.pt
 
 test:
   threshold: 0.01
@@ -71,3 +72,6 @@ generation:
   sliding_window: True
   resolution_0: 30
   voxel_threshold: 0.001
+
+visualization: false
+

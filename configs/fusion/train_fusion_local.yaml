@@ -22,7 +22,5 @@ training:
   limited_gpu: true
   checkpoint_every: 30
   log_comet: true 
-  batch_size: 2
-  save_data_viz: false
   # print_every: 3
 visualization: false
