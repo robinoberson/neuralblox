@@ -52,58 +52,103 @@ input_tensor = latent_map_sampled_stacked[7].unsqueeze(0)
 output_tensor = latent_map_sampled_stacked[7,:128, 6:12, 6:12, 6:12].unsqueeze(0)
 print(input_tensor.shape, output_tensor.shape)
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv3d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        self.bn1 = nn.BatchNorm3d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv3d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm3d(out_channels)
+
+        self.downsample = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm3d(out_channels)
+            )
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
 class Conv3D_one_input(nn.Module):
-    def __init__(self, num_layers, num_channels):
+    def __init__(self, num_blocks, num_channels):
         super(Conv3D_one_input, self).__init__()
-        
-        assert num_layers >= 3 and num_layers <= 10, "Number of layers must be between 3 and 7"
+
         assert num_channels[0] == 256 and num_channels[-1] == 128, "Input must have 256 channels and output must have 128 channels"
 
-        self.conv_layers = nn.ModuleList()
+        self.initial_conv = nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0)
+        self.initial_bn = nn.BatchNorm3d(num_channels[1])
+        self.initial_relu = nn.ReLU(inplace=True)
 
-        # Define the initial three layers
-        self.conv_layers.append(nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0))
-        # print(f'Adding layer 0, {num_channels[0]} -> {num_channels[1]}')
-        self.conv_layers.append(nn.Conv3d(num_channels[1], num_channels[2], kernel_size=3, padding=1, stride=2))
-        # print(f'Adding layer 1, {num_channels[1]} -> {num_channels[2]}')
-        self.conv_layers.append(nn.Conv3d(num_channels[2], num_channels[3], kernel_size=3, padding=0))
-        # print(f'Adding layer 2, {num_channels[2]} -> {num_channels[3]}')
+        self.layers = nn.ModuleList()
+        for i in range(0, num_blocks):
+            stride = 1
+            if i == 0:
+                stride = 2
+            
+            self.layers.append(ResidualBlock(num_channels[i+1], num_channels[i + 2], stride=stride))
 
-        # Define the additional layers that preserve input/output sizes
-        for i in range(3, num_layers-2):
-            # print(f'Adding layer {i}, {num_channels[i]} -> {num_channels[i+1]}')
-            self.conv_layers.append(nn.Conv3d(num_channels[i], num_channels[i+1], kernel_size=3, padding=1))
-        
-        # print(f'Adding final layer {num_layers-2}, {num_channels[-2]} -> {num_channels[-1]}')
-        # Define the final layer to ensure output has 128 channels
-        self.conv_layers.append(nn.Conv3d(num_channels[-2], num_channels[-1], kernel_size=3, padding=1))
+        self.final_conv = nn.Conv3d(num_channels[-2], num_channels[-1], kernel_size=3, padding=0)
+        self.final_bn = nn.BatchNorm3d(num_channels[-1])
+        self.final_relu = nn.ReLU(inplace=True)
 
         # Initialize weights
-        for conv_layer in self.conv_layers:
-            init.xavier_uniform_(conv_layer.weight)
-        
-        self.activation = nn.ReLU()
+        self._initialize_weights()
 
     def forward(self, fea):
         z = fea['latent']
-        
-        for conv_layer in self.conv_layers:
-            z = conv_layer(z)
-            z = self.activation(z)
+
+        z = self.initial_conv(z)
+        z = self.initial_bn(z)
+        z = self.initial_relu(z)
+
+        for layer in self.layers:
+            z = layer(z)
+
+        z = self.final_conv(z)
+        z = self.final_bn(z)
+        z = self.final_relu(z)
 
         return z
 
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm3d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+
 # Function to create a model with a varying number of layers and channels
-def create_model(num_layers, num_channels):
-    return Conv3D_one_input(num_layers=num_layers, num_channels=num_channels)
+def create_model(num_blocks, num_channels):
+    return Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels)
 
 def generate_random_configurations(num_samples):
     configurations = []
     for _ in range(num_samples):
-        num_layers = random.randint(5, 10)
+        num_blocks = random.randint(1, 5)
         num_channels = [256]
-        for i in range(num_layers - 2):
-            if i < (num_layers - 2) // 2:  # First half: increment
+        for i in range(num_blocks+1):
+            if i < (num_blocks+1) // 2:  # First half: increment
                 channel_count = random.randint(num_channels[-1], 512)
             else:  # Second half: decrement
                 channel_count = random.randint(128, num_channels[-1])
@@ -113,10 +158,14 @@ def generate_random_configurations(num_samples):
             num_channels.append(channel_count)
 
         num_channels.append(128)
-        configurations.append((num_layers, num_channels))
+        configurations.append((num_blocks, num_channels))
     return configurations
     
-def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=10000, lr=0.001):
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=15000, lr=0.01):
     # Move model to the device
     model.to(device)
     
@@ -124,16 +173,18 @@ def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=10
     criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
+    # Learning rate scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=100, factor=0.8)
+    
+    # Initial learning rate
+    init_lr = lr
+    
     # Training loop
     for epoch in range(num_epochs):
         model.train()  # Set the model to training mode
         
         # Forward pass
         outputs = model({'latent': input_tensor})
-        
-        if outputs.shape != output_tensor.shape:
-            print(f'Output shape: {outputs.shape}, Random Output shape: {output_tensor.shape}')
-            return None
         loss = criterion(outputs, output_tensor)
         
         # Backward pass and optimization
@@ -141,10 +192,20 @@ def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=10
         loss.backward()  # Compute gradients
         optimizer.step()  # Update the model parameters
 
+        # Step the scheduler based on the validation loss
+        scheduler.step(loss)
+        
+        # Check if learning rate has changed
+        current_lr = optimizer.param_groups[0]['lr']
+        if current_lr != init_lr:
+            print(f'Learning rate changed to {current_lr:.6f} at epoch {epoch+1}')
+
         if (epoch+1) % 1000 == 0:
             print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 
     return loss.item()
+
+
 num_samples = 30
 configurations = generate_random_configurations(num_samples)
 print(configurations)
@@ -163,28 +224,28 @@ os.makedirs(os.path.dirname(results_file), exist_ok=True)
 
 # Open the file in write mode
 with open(results_file, 'w') as f:
-    for num_layers, num_channels in configurations:
-        print(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}')
-        model = create_model(num_layers=num_layers, num_channels=num_channels)
+    for num_blocks, num_channels in configurations:
+        print(f'Testing configuration: num_blocks={num_blocks}, num_channels={num_channels}')
+        model = create_model(num_blocks=num_blocks, num_channels=num_channels)
         final_loss = train_and_evaluate(model, input_tensor, output_tensor, device)
-        results.append((num_layers, num_channels, final_loss))
-        print(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}')
+        results.append((num_blocks, num_channels, final_loss))
+        print(f'Configuration: num_blocks={num_blocks}, num_channels={num_channels}, Final Loss: {final_loss:.4f}')
         print('')
         print('*' * 50)
         print('')
 
         # Write the results to the file
-        f.write(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}\n')
-        f.write(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}\n')
+        f.write(f'Testing configuration: num_blocks={num_blocks}, num_channels={num_channels}\n')
+        f.write(f'Configuration: num_blocks={num_blocks}, num_channels={num_channels}, Final Loss: {final_loss:.4f}\n')
         f.write('*' * 50)
         f.write('\n')
 
         # Update best configuration if necessary
         if final_loss < best_loss:
             best_loss = final_loss
-            best_config = (num_layers, num_channels)
+            best_config = (num_blocks, num_channels)
 
         # Write the best configuration to the file
         f.write("\nBest Configuration:\n")
-        f.write(f'num_layers={best_config[0]}, num_channels={best_config[1]}, Final Loss={best_loss:.4f}\n')
+        f.write(f'num_blocks={best_config[0]}, num_channels={best_config[1]}, Final Loss={best_loss:.4f}\n')
 
