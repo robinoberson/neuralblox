@@ -10,7 +10,7 @@ import itertools
 import random
 from scipy.stats import truncnorm
 import datetime
-
+import os 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 torch.manual_seed(42)
@@ -149,10 +149,12 @@ best_loss = float('inf')
 
 results = []
 # Specify the file path
-current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 # Specify the file path with the date included
-results_file = f'out_fusion/redwood/logs/results_{current_date}.txt'
+results_file = f'out_fusion/redwood/logs/results_{current_datetime}.txt'
+#create dir if not exist
+os.makedirs(os.path.dirname(results_file), exist_ok=True)
 
 # Open the file in write mode
 with open(results_file, 'w') as f:
