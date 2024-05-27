@@ -82,7 +82,7 @@ class Conv3D_one_input(nn.Module):
         for conv_layer in self.conv_layers:
             init.xavier_uniform_(conv_layer.weight)
         
-        self.activation = nn.LeakyReLU()
+        self.activation = nn.ReLU()
 
     def forward(self, fea):
         z = fea['latent']
