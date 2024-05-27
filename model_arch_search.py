@@ -1,3 +1,4 @@
+print('Launching script for model architecture search...')
 import numpy as np
 from src import layers
 import torch
