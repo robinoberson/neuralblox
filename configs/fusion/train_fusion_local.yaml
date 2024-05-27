@@ -21,6 +21,6 @@ training:
   learning_rate: 0.01
   limited_gpu: true
   checkpoint_every: 30
-  log_comet: true 
+  log_comet: false 
   # print_every: 3
-visualization: false
+visualization: true

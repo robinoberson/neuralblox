@@ -132,7 +132,7 @@ class Trainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -271,6 +271,7 @@ class Trainer(BaseTrainer):
     #     colors[values_gt == 1] = [1, 0, 0] # red
     #     colors[values_sampled == 1] = [0, 0, 1] # blue
     #     colors[both_occ == 1] = [0, 1, 0] # green
+    #     # colors[both_occ == 1] = [0, 0, 1] # green
         
     #     mask = np.any(colors != [0, 0, 0], axis=1)
     #     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
@@ -279,7 +280,7 @@ class Trainer(BaseTrainer):
     #     pcd_inputs = o3d.geometry.PointCloud()
     #     inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
     #     pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-    #     pcd_inputs.paint_uniform_color([0.2, 0.5, 1]) # blue
+    #     pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
         
     #     colors = colors[mask]
     #     pcd.points = o3d.utility.Vector3dVector(p_full[mask])
@@ -292,6 +293,7 @@ class Trainer(BaseTrainer):
 
     #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
     #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
+        
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
         p_in_occ = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
