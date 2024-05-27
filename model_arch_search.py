@@ -16,35 +16,41 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.manual_seed(42)
 np.random.seed(42)
 
-def generate_random_tensor(shape, mean, std, lower_bound, upper_bound, device):
+# def generate_random_tensor(shape, mean, std, lower_bound, upper_bound, device):
 
-    samples = []
-    while len(samples) < np.prod(shape):
-        # Generate random samples from the Gaussian distribution
-        random_samples = truncnorm.rvs((lower_bound - mean) / std, (upper_bound - mean) / std, loc=mean, scale=std, size=1000)
-        # Filter samples within the desired range
-        filtered_samples = random_samples[(random_samples >= lower_bound) & (random_samples <= upper_bound)]
-        samples.extend(filtered_samples.tolist())
+#     samples = []
+#     while len(samples) < np.prod(shape):
+#         # Generate random samples from the Gaussian distribution
+#         random_samples = truncnorm.rvs((lower_bound - mean) / std, (upper_bound - mean) / std, loc=mean, scale=std, size=1000)
+#         # Filter samples within the desired range
+#         filtered_samples = random_samples[(random_samples >= lower_bound) & (random_samples <= upper_bound)]
+#         samples.extend(filtered_samples.tolist())
 
-    # Convert the samples to a numpy array and reshape
-    random_array = np.array(samples)[:np.prod(shape)].reshape(shape)
+#     # Convert the samples to a numpy array and reshape
+#     random_array = np.array(samples)[:np.prod(shape)].reshape(shape)
 
-    # Convert the numpy array to a PyTorch tensor and move to the specified device
-    random_tensor = torch.tensor(random_array, dtype=torch.float32, device=device)
+#     # Convert the numpy array to a PyTorch tensor and move to the specified device
+#     random_tensor = torch.tensor(random_array, dtype=torch.float32, device=device)
 
-    return random_tensor
+#     return random_tensor
 
 
-# Parameters obtained from the Kolmogorov-Smirnov test
-mean = 15.5506935 
-std = 39.65122
+# # Parameters obtained from the Kolmogorov-Smirnov test
+# mean = 15.5506935 
+# std = 39.65122
 
-# Define the lower and upper bounds of the truncated range
-lower_bound = 0
-upper_bound = 1500
+# # Define the lower and upper bounds of the truncated range
+# lower_bound = 0
+# upper_bound = 1500
 
-random_input = generate_random_tensor((1, 256, 18, 18, 18), mean, std, lower_bound, upper_bound, device)
-random_output = generate_random_tensor((1, 128, 6, 6, 6), mean, std, lower_bound, upper_bound, device)
+# input_tensor = generate_random_tensor((1, 256, 18, 18, 18), mean, std, lower_bound, upper_bound, device)
+# output_tensor = generate_random_tensor((1, 128, 6, 6, 6), mean, std, lower_bound, upper_bound, device)
+
+latent_map_sampled_stacked = torch.load('../Playground/Training/debug/fea_down/latent_map_sampled_merged.pt').reshape(-1, 256, 18, 18, 18)
+
+input_tensor = latent_map_sampled_stacked[7]
+output_tensor = latent_map_sampled_stacked[7,:128, 6:12, 6:12, 6:12]
+print(input_tensor.shape, output_tensor.shape)
 
 class Conv3D_one_input(nn.Module):
     def __init__(self, num_layers, num_channels):
@@ -76,7 +82,7 @@ class Conv3D_one_input(nn.Module):
         for conv_layer in self.conv_layers:
             init.xavier_uniform_(conv_layer.weight)
         
-        self.activation = nn.ReLU()
+        self.activation = nn.LeakyReLU()
 
     def forward(self, fea):
         z = fea['latent']
@@ -110,7 +116,7 @@ def generate_random_configurations(num_samples):
         configurations.append((num_layers, num_channels))
     return configurations
     
-def train_and_evaluate(model, random_input, random_output, device, num_epochs=10000, lr=0.001):
+def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=10000, lr=0.001):
     # Move model to the device
     model.to(device)
     
@@ -123,12 +129,12 @@ def train_and_evaluate(model, random_input, random_output, device, num_epochs=10
         model.train()  # Set the model to training mode
         
         # Forward pass
-        outputs = model({'latent': random_input})
+        outputs = model({'latent': input_tensor})
         
-        if outputs.shape != random_output.shape:
-            print(f'Output shape: {outputs.shape}, Random Output shape: {random_output.shape}')
+        if outputs.shape != output_tensor.shape:
+            print(f'Output shape: {outputs.shape}, Random Output shape: {output_tensor.shape}')
             return None
-        loss = criterion(outputs, random_output)
+        loss = criterion(outputs, output_tensor)
         
         # Backward pass and optimization
         optimizer.zero_grad()  # Clear the gradients
@@ -141,7 +147,6 @@ def train_and_evaluate(model, random_input, random_output, device, num_epochs=10
     return loss.item()
 num_samples = 30
 configurations = generate_random_configurations(num_samples)
-
 print(configurations)
 
 best_config = None
@@ -161,7 +166,7 @@ with open(results_file, 'w') as f:
     for num_layers, num_channels in configurations:
         print(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}')
         model = create_model(num_layers=num_layers, num_channels=num_channels)
-        final_loss = train_and_evaluate(model, random_input, random_output, device)
+        final_loss = train_and_evaluate(model, input_tensor, output_tensor, device)
         results.append((num_layers, num_channels, final_loss))
         print(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}')
         print('')

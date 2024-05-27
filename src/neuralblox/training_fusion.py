@@ -89,9 +89,13 @@ class Trainer(BaseTrainer):
         
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
+        # torch.save(latent_map_sampled_merged, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_sampled_merged.pt')
+        # torch.save(latent_map_sampled_stacked, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_sampled_merged.pt')
+        # torch.save(inputs_distributed, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/inputs_distributed.pt')
+
         # del latent_map_sampled, latent_map_sampled_stacked
         torch.cuda.empty_cache()
         # Compute gt latent
@@ -100,7 +104,7 @@ class Trainer(BaseTrainer):
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
         
         occupied_voxels = torch.sum(inputs_distributed_gt.squeeze(0)[:, :, 3], dim=1).to(dtype=torch.bool)
-
+        
         # return p_stacked, p_n_stacked, inputs_distributed
         # latent_map_gt = latent_map_gt[occupied_voxels]
         # latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
@@ -129,10 +133,10 @@ class Trainer(BaseTrainer):
         # compute cost
         # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        loss.backward()
+        # loss.backward()
         self.optimizer.step()
         
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -234,65 +238,65 @@ class Trainer(BaseTrainer):
         
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
-    # def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
-    #     import open3d as o3d
+    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
+        import open3d as o3d
         
-    #     file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
+        file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
 
-    #     with open(file_path, 'r') as f:
-    #         config = yaml.safe_load(f)
+        with open(file_path, 'r') as f:
+            config = yaml.safe_load(f)
         
-    #     if not config['visualization']: 
-    #         return
+        if not config['visualization']: 
+            return
 
-    #     p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+        p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
 
-    #     occ_gt = logits_gt.detach().cpu().numpy()
-    #     occ_sampled = logits_sampled.detach().cpu().numpy()
+        occ_gt = logits_gt.detach().cpu().numpy()
+        occ_sampled = logits_sampled.detach().cpu().numpy()
 
-    #     values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
-    #     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
+        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-    #     values_gt = values_gt.reshape(-1)
-    #     values_sampled = values_sampled.reshape(-1)
+        values_gt = values_gt.reshape(-1)
+        values_sampled = values_sampled.reshape(-1)
 
-    #     threshold = 0.5
+        threshold = 0.5
 
-    #     values_gt[values_gt < threshold] = 0
-    #     values_gt[values_gt >= threshold] = 1
+        values_gt[values_gt < threshold] = 0
+        values_gt[values_gt >= threshold] = 1
 
-    #     values_sampled[values_sampled < threshold] = 0
-    #     values_sampled[values_sampled >= threshold] = 1
+        values_sampled[values_sampled < threshold] = 0
+        values_sampled[values_sampled >= threshold] = 1
 
-    #     both_occ = np.logical_and(values_gt, values_sampled)
+        both_occ = np.logical_and(values_gt, values_sampled)
         
-    #     pcd = o3d.geometry.PointCloud()
-    #     colors = np.zeros((values_gt.shape[0], 3))
-    #     colors[values_gt == 1] = [1, 0, 0] # red
-    #     colors[values_sampled == 1] = [0, 0, 1] # blue
-    #     colors[both_occ == 1] = [0, 1, 0] # green
-    #     # colors[both_occ == 1] = [0, 0, 1] # green
+        pcd = o3d.geometry.PointCloud()
+        colors = np.zeros((values_gt.shape[0], 3))
+        colors[values_gt == 1] = [1, 0, 0] # red
+        colors[values_sampled == 1] = [0, 0, 1] # blue
+        colors[both_occ == 1] = [0, 1, 0] # green
+        # colors[both_occ == 1] = [0, 0, 1] # green
         
-    #     mask = np.any(colors != [0, 0, 0], axis=1)
-    #     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+        mask = np.any(colors != [0, 0, 0], axis=1)
+        # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
         
-    #     points_second = inputs_distributed
-    #     pcd_inputs = o3d.geometry.PointCloud()
-    #     inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
-    #     pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-    #     pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
+        points_second = inputs_distributed
+        pcd_inputs = o3d.geometry.PointCloud()
+        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+        pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
         
-    #     colors = colors[mask]
-    #     pcd.points = o3d.utility.Vector3dVector(p_full[mask])
-    #     bb_min_points = np.min(p_full[mask], axis=0)
-    #     bb_max_points = np.max(p_full[mask], axis=0)
-    #     print(bb_min_points, bb_max_points)
-    #     pcd.colors = o3d.utility.Vector3dVector(colors)
-    #     base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
-    #     o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
+        colors = colors[mask]
+        pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+        bb_min_points = np.min(p_full[mask], axis=0)
+        bb_max_points = np.max(p_full[mask], axis=0)
+        print(bb_min_points, bb_max_points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
 
-    #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
-    #     o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
+        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
+        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
         
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
