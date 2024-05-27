@@ -10,7 +10,7 @@ training:
   visualize_every: 100
   validate_loss_every: 5000
   checkpoint_every: 500
-  starting_model: aug_model_10000.pt
+  starting_model: aug_model_20000.pt
   log_comet: false
   lr: 0.01
 test:
