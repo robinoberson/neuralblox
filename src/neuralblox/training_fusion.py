@@ -132,7 +132,7 @@ class Trainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
