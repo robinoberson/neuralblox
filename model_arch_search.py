@@ -48,8 +48,8 @@ np.random.seed(42)
 
 latent_map_sampled_stacked = torch.load('../Playground/Training/debug/fea_down/latent_map_sampled_merged.pt').reshape(-1, 256, 18, 18, 18)
 
-input_tensor = latent_map_sampled_stacked[7]
-output_tensor = latent_map_sampled_stacked[7,:128, 6:12, 6:12, 6:12]
+input_tensor = latent_map_sampled_stacked[7].unsqueeze(0)
+output_tensor = latent_map_sampled_stacked[7,:128, 6:12, 6:12, 6:12].unsqueeze(0)
 print(input_tensor.shape, output_tensor.shape)
 
 class Conv3D_one_input(nn.Module):
