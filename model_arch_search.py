@@ -9,6 +9,8 @@ import numpy as np
 import itertools
 import random
 from scipy.stats import truncnorm
+import datetime
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 torch.manual_seed(42)
@@ -108,7 +110,7 @@ def generate_random_configurations(num_samples):
         configurations.append((num_layers, num_channels))
     return configurations
     
-def train_and_evaluate(model, random_input, random_output, device, num_epochs=15000, lr=0.001):
+def train_and_evaluate(model, random_input, random_output, device, num_epochs=10000, lr=0.001):
     # Move model to the device
     model.to(device)
     
@@ -146,25 +148,36 @@ best_config = None
 best_loss = float('inf')
 
 results = []
-for num_layers, num_channels in configurations:
-    print(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}')
-    model = create_model(num_layers=num_layers, num_channels=num_channels)
-    final_loss = train_and_evaluate(model, random_input, random_output, device)
-    results.append((num_layers, num_channels, final_loss))
-    print(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}')
-    print('')
-    print('*'*50)
-    print('')
-    # Update best configuration if necessary
-    if final_loss < best_loss:
-        best_loss = final_loss
-        best_config = (num_layers, num_channels)
+# Specify the file path
+current_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
-# Print results
-print("Results:")
-for num_layers, num_channels, final_loss in results:
-    print(f'num_layers={num_layers}, num_channels={num_channels}, Final Loss={final_loss:.4f}')
+# Specify the file path with the date included
+results_file = f'out_fusion/redwood/logs/results_{current_date}.txt'
 
-# Print best configuration
-print("\nBest Configuration:")
-print(f'num_layers={best_config[0]}, num_channels={best_config[1]}, Final Loss={best_loss:.4f}')
+# Open the file in write mode
+with open(results_file, 'w') as f:
+    for num_layers, num_channels in configurations:
+        print(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}')
+        model = create_model(num_layers=num_layers, num_channels=num_channels)
+        final_loss = train_and_evaluate(model, random_input, random_output, device)
+        results.append((num_layers, num_channels, final_loss))
+        print(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}')
+        print('')
+        print('*' * 50)
+        print('')
+
+        # Write the results to the file
+        f.write(f'Testing configuration: num_layers={num_layers}, num_channels={num_channels}\n')
+        f.write(f'Configuration: num_layers={num_layers}, num_channels={num_channels}, Final Loss: {final_loss:.4f}\n')
+        f.write('*' * 50)
+        f.write('\n')
+
+        # Update best configuration if necessary
+        if final_loss < best_loss:
+            best_loss = final_loss
+            best_config = (num_layers, num_channels)
+
+        # Write the best configuration to the file
+        f.write("\nBest Configuration:\n")
+        f.write(f'num_layers={best_config[0]}, num_channels={best_config[1]}, Final Loss={best_loss:.4f}\n')
+
