@@ -496,8 +496,12 @@ class Trainer(BaseTrainer):
             index[fea_type] = ind
             input_cur_batch = add_key(inputs_distributed_batch_3D.clone(), index, 'points', 'index', device=self.device)
             fea, self.unet = self.model.encode_inputs(input_cur_batch)
+            
+            # fea_min, fea_max = torch.min(fea), torch.max(fea)
 
             latent_map_batch_decoded, latent_map_batch, self.features_shapes = self.unet(fea, True)
+            # min_latent, max_latent = torch.min(latent_map_batch), torch.max(latent_map_batch)
+            # min_latent1, max_latent1 = torch.min(latent_map_batch_decoded), torch.max(latent_map_batch_decoded)
 
             if latent_map is None:
                 latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch

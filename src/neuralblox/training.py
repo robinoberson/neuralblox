@@ -205,7 +205,15 @@ class Trainer(BaseTrainer):
         else:
             fea, _ = self.model.encode_inputs(input_cur)
         
-        fea_du, _ = self.unet(fea) #downsample and upsample 
+        fea_du, fea_d = self.unet(fea) #downsample and upsample 
+        
+        #save fea_du
+        folder = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down'
+        n_files = len(os.listdir(folder))
+        torch.save(fea_d, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/fea_d_'+str(n_files)+'.pt')
+        
+        # min_fea_du, max_fea_du = torch.min(fea_du), torch.max(fea_du)
+        # min_fea_d, max_fea_d = torch.min(fea_d), torch.max(fea_d)
         
         #save fea_du
         # torch.save(fea_du, '/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/fea_du.pt')
