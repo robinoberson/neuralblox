@@ -75,7 +75,8 @@ class Trainer(BaseTrainer):
         p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
         # p_in[1] = p_in[0]
         # points_gt = p_in[0].unsqueeze(0)
-        
+        torch.save(p_in, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/p_in.pt')
+        torch.save(points_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/points_gt.pt')
         #Step 1 get the bounding box of the scene
         inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
         self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
@@ -86,9 +87,9 @@ class Trainer(BaseTrainer):
         # return latent_map_sampled, latent_map_sampled_decoded, inputs_distributed
         # Stack latents 
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
-        
+        torch.save(latent_map_sampled_stacked, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/input_tensor.pt')
         # Merge latents
-        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
         n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
         latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
@@ -101,7 +102,9 @@ class Trainer(BaseTrainer):
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
         # return latent_map_gt, latent_map_gt_decoded, inputs_distributed_gt
+        # torch.save(latent_map_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_gt.pt')
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
+        torch.save((p_stacked, p_n_stacked), '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/p_query.pt')
         
         occupied_voxels = torch.sum(inputs_distributed_gt.squeeze(0)[:, :, 3], dim=1).to(dtype=torch.bool)
         
@@ -112,18 +115,13 @@ class Trainer(BaseTrainer):
         # p_n_stacked = p_n_stacked[occupied_voxels]
         # inputs_distributed_gt = inputs_distributed_gt[:, occupied_voxels]
         
-        # latent_map_gt = latent_map_gt
-        # latent_map_sampled_merged = latent_map_sampled_merged
-        # p_stacked = p_stacked
-        # p_n_stacked = p_n_stacked
-        # inputs_distributed_gt = inputs_distributed_gt
-        
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
         torch.cuda.empty_cache()
         
         logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
         
+        torch.save(logits_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/output_tensor.pt')
         torch.cuda.empty_cache()
 
         if logits_gt.shape != logits_sampled.shape:
@@ -239,6 +237,7 @@ class Trainer(BaseTrainer):
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
     def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
+        geos = []
         import open3d as o3d
         
         file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
@@ -279,13 +278,14 @@ class Trainer(BaseTrainer):
         
         mask = np.any(colors != [0, 0, 0], axis=1)
         # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
-        
-        points_second = inputs_distributed
-        pcd_inputs = o3d.geometry.PointCloud()
-        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
-        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-        pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
-        
+        if inputs_distributed is not None:
+            points_second = inputs_distributed
+            pcd_inputs = o3d.geometry.PointCloud()
+            inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+            pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+            pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
+            geos += [pcd_inputs]
+            
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
         bb_min_points = np.min(p_full[mask], axis=0)
@@ -293,10 +293,12 @@ class Trainer(BaseTrainer):
         print(bb_min_points, bb_max_points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
         base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
-        o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
+        
+        geos += [pcd, base_axis]
+        o3d.visualization.draw_geometries(geos)
 
-        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
-        o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
+        # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
+        # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
         
     def get_inputs_from_batch(self, batch, points_gt):
         p_in_3D = batch.get('inputs').to(self.device)
@@ -486,6 +488,7 @@ class Trainer(BaseTrainer):
         n_batch_voxels = int(np.ceil(inputs_distributed.shape[0] / n_voxels_max))
 
         for i in range(n_batch_voxels):
+            torch.cuda.empty_cache()
             start = i * n_voxels_max
             end = min((i + 1) * n_voxels_max, inputs_distributed.shape[0])
             inputs_distributed_batch = inputs_distributed[start:end]
