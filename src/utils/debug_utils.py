@@ -20,8 +20,11 @@ def get_trainer(cfg_fusion_training):
     model_merging_dir = cfg_fusion_training['training']['out_dir']
 
     checkpoint_io_merging = CheckpointIO(model_merging_dir, model=model_merging)
-    _ = checkpoint_io_merging.load(os.path.join(model_merging_dir, cfg_fusion_training['test']['model_file']))
-    
+    try:
+        _ = checkpoint_io_merging.load(os.path.join(model_merging_dir, cfg_fusion_training['test']['model_file']))
+    except FileExistsError as e:
+        print(f'No checkpoint file found! {e}')
+        
     optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=0.01)
     trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg_fusion_training, device=device)
     
