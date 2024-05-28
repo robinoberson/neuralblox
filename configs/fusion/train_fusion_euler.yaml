@@ -8,9 +8,9 @@ data:
   # path_gt: '/cluster/scratch/roberson/data/fusion/fusion_gt_temp'
 
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_full_scenes
+  out_dir: /cluster/scratch/roberson/neuralblox/out_fusion/test_full_scene_overfit
   backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23/aug_model_20000.pt
   checkpoint_every: 20
   limited_gpu: false
   save_data_viz: true
-  log_comet: false
+  log_comet: true
