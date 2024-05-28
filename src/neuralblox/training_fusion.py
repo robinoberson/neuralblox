@@ -236,17 +236,18 @@ class Trainer(BaseTrainer):
         
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
-    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed=None):
+    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_gt = None, inputs_distributed=None, force_viz = False):
         geos = []
-        import open3d as o3d
         
         file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
 
         with open(file_path, 'r') as f:
             config = yaml.safe_load(f)
-        
-        if not config['visualization']: 
+            
+        if not(force_viz or config['visualization']):
             return
+
+        import open3d as o3d
 
         p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
 
@@ -274,6 +275,7 @@ class Trainer(BaseTrainer):
         colors[values_gt == 1] = [1, 0, 0] # red
         colors[values_sampled == 1] = [0, 0, 1] # blue
         colors[both_occ == 1] = [0, 1, 0] # green
+        colors[values_sampled == 0] = [0, 0, 0.5]
         # colors[both_occ == 1] = [0, 0, 1] # green
         
         mask = np.any(colors != [0, 0, 0], axis=1)
@@ -285,6 +287,14 @@ class Trainer(BaseTrainer):
             pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
             pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
             geos += [pcd_inputs]
+            
+        if inputs_gt is not None:
+            points_second = inputs_gt
+            pcd_inputs_gt = o3d.geometry.PointCloud()
+            inputs_reshaped = inputs_gt.reshape(-1, 4).detach().cpu().numpy()
+            pcd_inputs_gt.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+            pcd_inputs_gt.paint_uniform_color([0., 0.5, 1.0]) # blue
+            geos += [pcd_inputs_gt]
             
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])

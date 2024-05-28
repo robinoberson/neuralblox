@@ -6,10 +6,9 @@ import os
 import torch.optim as optim
 import random
 from src.layers import Conv3D_one_input
-
-def get_trainer(cfg_fusion_training):
-    is_cuda = (torch.cuda.is_available())
-    device = torch.device("cuda" if is_cuda else "cpu")
+import numpy as np
+def get_trainer(cfg_fusion_training, device):
+    
 
     model = config.get_model(cfg_fusion_training, device=device)
     checkpoint_io = CheckpointIO(cfg_fusion_training['training']['out_dir'], model=model)
@@ -46,61 +45,69 @@ def get_train_loader(cfg_path_fusion_training, cfg_path_default):
     
     return train_loader
 
-def plot_batch():
+def get_gt_points(batch, device, cfg):
     p_in = batch.get('inputs').to(device)        
     batch_size, T, D = p_in.size() 
-    if batch_size < cfg_fusion_training['training']['batch_size']:
+    if batch_size < cfg['training']['batch_size']:
         print('Batch size too small, skipping batch')
 
     categories = batch.get('category')
     unique_cat = np.unique(categories)
     if len(unique_cat) > 1:
         print('Multiple categories found in batch, skipping batch')
-
+        
     category = unique_cat[0]
-    
-    path_gt_points = os.path.join(cfg_fusion_training['data']['path_gt'], category, '000000', cfg_fusion_training['data']['gt_file_name'])
+    path_gt_points = os.path.join(cfg['data']['path_gt'], category, '000000', cfg['data']['gt_file_name'])
     
     points_gt_npz = np.load(path_gt_points)
     points_gt_3D = points_gt_npz['points']
     points_gt_3D = torch.from_numpy(points_gt_3D).to(device).float()
-    
+
     points_gt_occ = np.unpackbits(points_gt_npz['occupancies'])
-    points_gt_occ = torch.from_numpy(points_gt_occ).to(device).float()
+    points_gt_occ = torch.from_numpy(points_gt_occ).to(device).float().unsqueeze(-1)
     
     random_indices = np.random.choice(points_gt_3D.shape[0], size=T, replace=False)
     points_gt_3D = points_gt_3D[random_indices]
     points_gt_occ = points_gt_occ[random_indices]
+    
+    points_gt = torch.cat((points_gt_3D, points_gt_occ), dim=-1)
+    
+    return points_gt
 
-    points_gt = torch.concatenate([points_gt_3D, points_gt_occ.unsqueeze(-1)], dim = -1)
-
-    print(f"points_gt.shape: {points_gt.shape}, points_gt_occ.shape: {points_gt_occ.shape}")
-    print(f"batch['inputs'].shape: {batch['inputs'].shape}, batch['inputs.occ'].shape: {batch['inputs.occ'].shape}")
+def plot_batch(batch, device, cfg_fusion_training):
+    
+    points_gt = get_gt_points(batch, device, cfg_fusion_training)
     
     points_full = batch['inputs'].reshape(-1, 3).cpu().numpy()
     points_occ_full = batch['inputs.occ'].reshape(-1).cpu().numpy()
     points_gt_full = points_gt[..., :3].reshape(-1, 3).cpu().numpy()
 
-    print(points_full.shape, points_occ_full.shape, points_gt_full.shape)
-
     import open3d as o3d
-
-    pcd_full = o3d.geometry.PointCloud()
-    pcd_full.points = o3d.utility.Vector3dVector(points_full)
-    colors = np.zeros((points_full.shape[0], 3))
-    colors[points_occ_full == 0] = [0, 1, 0]
-    colors[points_occ_full == 1] = [0, 0, 1]
-    pcd_full.colors = o3d.utility.Vector3dVector(colors)
+    
+    
+    pcd_0 = o3d.geometry.PointCloud()
+    pcd_0.points = o3d.utility.Vector3dVector(batch['inputs'][0])
+    colors_0 = np.zeros((batch['inputs'][0].shape[0], 3))
+    colors_0[batch['inputs.occ'][0] == 0] = [1, 1, 0]
+    colors_0[batch['inputs.occ'][0] == 1] = np.random.rand(3)
+    pcd_0.colors = o3d.utility.Vector3dVector(colors_0)
+    
+    pcd_1 = o3d.geometry.PointCloud()
+    pcd_1.points = o3d.utility.Vector3dVector(batch['inputs'][1])
+    colors_1 = np.zeros((batch['inputs'][1].shape[0], 3))
+    colors_1[batch['inputs.occ'][1] == 0] = [0, 1, 1]
+    colors_1[batch['inputs.occ'][1] == 1] = np.random.rand(3)
+    pcd_1.colors = o3d.utility.Vector3dVector(colors_1)
 
     pcd_gt = o3d.geometry.PointCloud()
     pcd_gt.points = o3d.utility.Vector3dVector(points_gt_full)
     colors = np.zeros((points_gt_full.shape[0], 3))
     print(points_gt.shape)
-    colors[points_gt[:, 3].cpu().numpy() == 0] = [0, 1, 0]
-    colors[points_gt[:, 3].cpu().numpy() == 1] = [1, 0, 0]
+    colors[points_gt[:, 3].cpu().numpy() == 0] = [1, 0, 1]
+    colors[points_gt[:, 3].cpu().numpy() == 1] = np.random.rand(3)
     pcd_gt.colors = o3d.utility.Vector3dVector(colors)
 
-    o3d.visualization.draw_geometries([pcd_full, pcd_gt])
+    o3d.visualization.draw_geometries([pcd_1, pcd_0, pcd_gt])
     
     
 def create_model(num_blocks, num_channels):
@@ -124,3 +131,23 @@ def generate_random_configurations(num_samples):
         num_channels.append(128)
         configurations.append((num_blocks, num_channels))
     return configurations
+
+def plot_4D_points(points, plot_unocc=True):
+    import open3d as o3d
+    points_full = points.reshape(-1, 4).cpu().numpy()
+    points = points_full[:, :3]
+    occ = points_full[:, 3]
+    
+    pcd_occ = o3d.geometry.PointCloud()
+    pcd_occ.points = o3d.utility.Vector3dVector(points[occ == 1])
+    pcd_occ.paint_uniform_color([1, 0, 0])
+    
+    pcd_unocc = o3d.geometry.PointCloud()
+    pcd_unocc.points = o3d.utility.Vector3dVector(points[occ == 0])
+    pcd_unocc.paint_uniform_color([0, 1, 0])
+    
+    if plot_unocc:
+        o3d.visualization.draw_geometries([pcd_occ, pcd_unocc])
+    else:
+        o3d.visualization.draw_geometries([pcd_occ])
+    

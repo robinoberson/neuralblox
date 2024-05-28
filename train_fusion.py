@@ -20,7 +20,6 @@ parser.add_argument('--exit-after', type=int, default=-1,
                     help='Checkpoint and exit after specified number of seconds'
                          'with exit code 2.')
 
-
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 
