@@ -524,8 +524,10 @@ class Trainer(BaseTrainer):
                 latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch
                 latent_map_decoded = latent_map_batch_decoded.clone()
             else:
-                latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
-                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded), dim=0)
+                latent_map = torch.cat((latent_map, latent_map_batch.clone()), dim=0)  # Concatenate latent maps
+                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded.clone()), dim=0)
+                
+            del latent_map_batch, latent_map_batch_decoded, fea 
 
                 # Reshape latent_map to match the original input shape
         latent_map_shape = latent_map.shape
