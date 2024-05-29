@@ -8,7 +8,7 @@ data:
   path_gt: /home/robin/Dev/MasterThesis/data/fusion/fusion_2batches_gt_test
   
 training:
-  out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/test_full_scenes
+  out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/test_full_scenes_test
   backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_20000.pt
   learning_rate: 0.01
   limited_gpu: true

@@ -66,7 +66,7 @@ class Trainer(BaseTrainer):
         
         n_inputs = 2
         
-        torch.cuda.empty_cache()
+        if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.train()
         self.model_merge.train()
@@ -98,7 +98,7 @@ class Trainer(BaseTrainer):
         # torch.save(inputs_distributed, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/inputs_distributed.pt')
 
         # del latent_map_sampled, latent_map_sampled_stacked
-        torch.cuda.empty_cache()
+        if self.limited_gpu: torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
         # return latent_map_gt, latent_map_gt_decoded, inputs_distributed_gt
@@ -117,12 +117,12 @@ class Trainer(BaseTrainer):
         
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
         # del latent_map_sampled_merged
-        torch.cuda.empty_cache()
+        if self.limited_gpu: torch.cuda.empty_cache()
         
         logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
         
         torch.save(logits_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/output_tensor.pt')
-        torch.cuda.empty_cache()
+        if self.limited_gpu: torch.cuda.empty_cache()
 
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
@@ -207,7 +207,7 @@ class Trainer(BaseTrainer):
     def save_data_visualization(self, data_batch, points_gt):
         n_inputs = 2
         
-        torch.cuda.empty_cache()
+        if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.eval()
         self.model_merge.eval()
@@ -479,57 +479,62 @@ class Trainer(BaseTrainer):
                                     latent_map_neighbored[i-1, j-1, k-1, (idx_n_in)*c:(idx_n_in+1)*c, l*h:(l+1)*h, m*w:(m+1)*w, n*d:(n+1)*d] = latent_map[idx_n_in, index[0], index[1], index[2]]
         
         return latent_map_neighbored
-    def encode_latent_map(self, inputs_distributed, vol_bound, remove_padding = False): #TODO Make faster 
+    
+    def encode_latent_map(self, inputs_distributed, vol_bound, remove_padding=False):
         n_inputs, n_crop, n_points, _ = inputs_distributed.shape
-
         d = self.reso // self.factor
+
         # Initialize latent_map to accumulate latent maps
         latent_map = None  
 
-        if remove_padding: vol_bound = self.remove_padding_single_dim(vol_bound).reshape(-1, *vol_bound.shape[-2:])
+        if remove_padding:
+            vol_bound = self.remove_padding_single_dim(vol_bound).reshape(-1, *vol_bound.shape[-2:])
         vol_bound = vol_bound.unsqueeze(0).repeat(n_inputs, 1, 1, 1)
         
         inputs_distributed = inputs_distributed.reshape(n_inputs * n_crop, n_points, 4)
         vol_bound = vol_bound.reshape(n_inputs * n_crop, 2, 3)
 
-        if self.limited_gpu: n_voxels_max = 20
-        else: n_voxels_max = 1000
+        if self.limited_gpu:
+            n_voxels_max = 20
+        else:
+            n_voxels_max = 1000
         
         n_batch_voxels = int(np.ceil(inputs_distributed.shape[0] / n_voxels_max))
 
-        for i in range(n_batch_voxels):
-            torch.cuda.empty_cache()
+        for i in range(n_batch_voxels): 
+            if self.limited_gpu: torch.cuda.empty_cache()
             start = i * n_voxels_max
             end = min((i + 1) * n_voxels_max, inputs_distributed.shape[0])
             inputs_distributed_batch = inputs_distributed[start:end]
             inputs_distributed_batch_3D = inputs_distributed_batch[..., :3]
             vol_bound_batch = vol_bound[start:end]
-            
+
             kwargs = {}
-                
             fea_type = 'grid'
             index = {}
-            ind = coord2index(inputs_distributed_batch.clone(), vol_bound_batch, reso=self.reso, plane=fea_type)
+            ind = coord2index(inputs_distributed_batch, vol_bound_batch, reso=self.reso, plane=fea_type)
             index[fea_type] = ind
-            input_cur_batch = add_key(inputs_distributed_batch_3D.clone(), index, 'points', 'index', device=self.device)
+            input_cur_batch = add_key(inputs_distributed_batch_3D, index, 'points', 'index', device=self.device)
             fea, self.unet = self.model.encode_inputs(input_cur_batch)
             
-            # fea_min, fea_max = torch.min(fea), torch.max(fea)
-
             latent_map_batch_decoded, latent_map_batch, self.features_shapes = self.unet(fea, True)
-            # min_latent, max_latent = torch.min(latent_map_batch), torch.max(latent_map_batch)
-            # min_latent1, max_latent1 = torch.min(latent_map_batch_decoded), torch.max(latent_map_batch_decoded)
 
             if latent_map is None:
-                latent_map = latent_map_batch.clone()  # Initialize latent_map with the first batch
-                latent_map_decoded = latent_map_batch_decoded.clone()
+                latent_map = latent_map_batch  # Initialize latent_map with the first batch
+                latent_map_decoded = latent_map_batch_decoded
             else:
-                latent_map = torch.cat((latent_map, latent_map_batch.clone()), dim=0)  # Concatenate latent maps
-                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded.clone()), dim=0)
-                
-            del latent_map_batch, latent_map_batch_decoded, fea 
+                latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
+                if self.limited_gpu: 
+                    del latent_map_batch, fea, inputs_distributed_batch, inputs_distributed_batch_3D, vol_bound_batch, input_cur_batch, ind, index
+                    torch.cuda.empty_cache()
+                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded), dim=0)
 
-                # Reshape latent_map to match the original input shape
+            # Explicitly delete tensors to free memory
+            
+            if self.limited_gpu: 
+                del latent_map_batch_decoded
+                torch.cuda.empty_cache()
+
         latent_map_shape = latent_map.shape
         latent_map_decoded_shape = latent_map_decoded.shape
         return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:]), latent_map_decoded.reshape(n_inputs, n_crop, *latent_map_decoded_shape[1:])
