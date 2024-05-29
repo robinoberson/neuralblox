@@ -15,5 +15,6 @@ training:
   checkpoint_every: 50
   log_comet: false 
   save_data_viz: false
-
+  starting_model: model_0.pt
   # print_every: 3
+visualization: true

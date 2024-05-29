@@ -52,7 +52,7 @@ class CategoryBatchSampler(data.BatchSampler):
                 yield batch[:self.batch_size]
                 batch = batch[self.batch_size:]
         
-                
+            
 class Shapes3dDataset(data.Dataset):
     ''' 3D Shapes dataset class.
     '''
@@ -304,3 +304,19 @@ def worker_init_fn(worker_id):
     random_data = os.urandom(4)
     base_seed = int.from_bytes(random_data, byteorder="big")
     np.random.seed(base_seed + worker_id)
+
+class OptiFusionDataset(data.Dataset):
+    def __init__(self, data_dir):
+        self.data_dir = data_dir
+        self.batch_dirs = sorted([os.path.join(data_dir, d) for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))])
+
+    def __len__(self):
+        return len(self.batch_dirs)
+
+    def __getitem__(self, idx):
+        batch_dir = self.batch_dirs[idx]
+        latent_map_sampled_stacked = torch.load(os.path.join(batch_dir, 'latent_map_sampled_stacked.pt'))
+        logits_gt = torch.load(os.path.join(batch_dir, 'logits_gt.pt'))
+        p_stacked = torch.load(os.path.join(batch_dir, 'p_stacked.pt'))
+        p_n_stacked = torch.load(os.path.join(batch_dir, 'p_n_stacked.pt'))
+        return latent_map_sampled_stacked, logits_gt, p_stacked, p_n_stacked

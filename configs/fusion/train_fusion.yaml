@@ -42,6 +42,7 @@ model:
   c_dim: 32
 training:
   out_dir: out/pointcloud_crop_training
+  vis_dir: viz
   batch_size: 2
   model_selection_metric: iou
   model_selection_mode: maximize
@@ -58,6 +59,7 @@ training:
   log_comet: true
   save_data_viz: true
   backbone_file: model.pt
+  starting_model: model_merging.pt
 
 test:
   threshold: 0.01

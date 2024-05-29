@@ -134,7 +134,7 @@ class Trainer(BaseTrainer):
         # loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed)
+        self.visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
     
@@ -236,10 +236,11 @@ class Trainer(BaseTrainer):
         
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
-    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_gt = None, inputs_distributed=None, force_viz = False):
+    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, inputs_gt = None, inputs_distributed=None, force_viz = False):
         geos = []
         
         file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
+        file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
 
         with open(file_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -275,7 +276,7 @@ class Trainer(BaseTrainer):
         colors[values_gt == 1] = [1, 0, 0] # red
         colors[values_sampled == 1] = [0, 0, 1] # blue
         colors[both_occ == 1] = [0, 1, 0] # green
-        colors[values_sampled == 0] = [0, 0, 0.5]
+        # colors[values_sampled == 0] = [0, 0, 0.5]
         # colors[both_occ == 1] = [0, 0, 1] # green
         
         mask = np.any(colors != [0, 0, 0], axis=1)
