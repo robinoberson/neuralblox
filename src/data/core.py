@@ -6,6 +6,7 @@ import yaml
 from src.common import decide_total_volume_range, update_reso
 import torch
 import random
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -319,4 +320,19 @@ class OptiFusionDataset(data.Dataset):
         logits_gt = torch.load(os.path.join(batch_dir, 'logits_gt.pt'))
         p_stacked = torch.load(os.path.join(batch_dir, 'p_stacked.pt'))
         p_n_stacked = torch.load(os.path.join(batch_dir, 'p_n_stacked.pt'))
-        return latent_map_sampled_stacked, logits_gt, p_stacked, p_n_stacked
+        p_in = torch.load(os.path.join(batch_dir, 'p_in.pt'))
+        return latent_map_sampled_stacked, logits_gt, p_stacked, p_n_stacked, p_in
+    
+
+class CombinedLoss(nn.Module):
+    def __init__(self, alpha=0.5):
+        super(CombinedLoss, self).__init__()
+        self.mse = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+        self.alpha = alpha  # Weight for the L1 loss component
+    
+    def forward(self, input, target):
+        mse_loss = self.mse(input, target)
+        l1_loss = self.l1(input, target)
+        combined_loss = (1 - self.alpha) * mse_loss + self.alpha * l1_loss
+        return combined_loss

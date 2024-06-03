@@ -1,6 +1,6 @@
 
 from src.data.core import (
-    Shapes3dDataset, collate_remove_none, worker_init_fn, CategoryBatchSampler, OptiFusionDataset
+    Shapes3dDataset, collate_remove_none, worker_init_fn, CategoryBatchSampler, OptiFusionDataset, CombinedLoss
 )
 from src.data.fields import (
     IndexField, PointsField,
@@ -29,4 +29,5 @@ __all__ = [
     PointcloudNoise,
     SubsamplePointcloud,
     SubsamplePoints,
+    CombinedLoss
 ]
