@@ -29,7 +29,7 @@ class Trainer(BaseTrainer):
 
     '''
 
-    def __init__(self, model, model_merge, optimizer, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
+    def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
                  vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False):
         self.model = model
         self.model_merge = model_merge
@@ -50,18 +50,14 @@ class Trainer(BaseTrainer):
         self.limited_gpu = limited_gpu
         self.reso = grid_reso
         self.iteration = 0
+        self.cfg = cfg
         self.rand_points_inputs = (torch.load('pretrained_models/fusion/empty_inputs.pt').to(self.device) + 0.56) / 1.12
         # self.rand_points_inputs = torch.rand(20000, 3) 
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
 
-    def train_sequence_window(self, data_batch, points_gt):
-        ''' Performs a training step.
-
-        Args:
-            data (dict): data dictionary
-        '''
+    def train_sequence_window(self, data_batch):
         t0 = time.time()
         
         n_inputs = 2
@@ -72,120 +68,47 @@ class Trainer(BaseTrainer):
         self.model_merge.train()
         self.optimizer.zero_grad()
         
-        p_in, points_gt = self.get_inputs_from_batch(data_batch, points_gt)
-        # p_in[1] = p_in[0]
-        # points_gt = p_in[0].unsqueeze(0)
-        torch.save(p_in, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/p_in.pt')
-        torch.save(points_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/points_gt.pt')
+        p_in, p_query = self.get_inputs_from_batch(data_batch)
+        p_full = torch.cat((p_in, p_query), dim=-1)
         #Step 1 get the bounding box of the scene
-        inputs, inputs_full = self.concat_points(p_in, points_gt, n_inputs) #Everything 4D
-        self.vol_bound_all = self.get_crop_bound(inputs_full.view(-1, 4), self.input_crop_size, self.query_crop_size)
+        self.vol_bound_all = self.get_crop_bound(p_in.view(-1, 4), self.input_crop_size, self.query_crop_size)
         
-        inputs_distributed = self.distribute_inputs(inputs.unsqueeze(1), self.vol_bound_all)
+        inputs_distributed = self.distribute_inputs(p_in.unsqueeze(1), self.vol_bound_all)
+        
         # Encode latents 
         latent_map_sampled, latent_map_sampled_decoded = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
-        # return latent_map_sampled, latent_map_sampled_decoded, inputs_distributed
         # Stack latents 
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
-        torch.save(latent_map_sampled_stacked, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/input_tensor.pt')
         # Merge latents
-        # latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
-        # torch.save(latent_map_sampled_merged, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_sampled_merged.pt')
-        # torch.save(latent_map_sampled_stacked, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_sampled_merged.pt')
-        # torch.save(inputs_distributed, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/inputs_distributed.pt')
-
-        # del latent_map_sampled, latent_map_sampled_stacked
         if self.limited_gpu: torch.cuda.empty_cache()
         # Compute gt latent
         latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
-        # return latent_map_gt, latent_map_gt_decoded, inputs_distributed_gt
-        # torch.save(latent_map_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/latent_map_gt.pt')
         p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
-        torch.save((p_stacked, p_n_stacked), '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/p_query.pt')
-        
-        occupied_voxels = torch.sum(inputs_distributed_gt.squeeze(0)[:, :, 3], dim=1).to(dtype=torch.bool)
-        
-        # return p_stacked, p_n_stacked, inputs_distributed
-        # latent_map_gt = latent_map_gt[occupied_voxels]
-        # latent_map_sampled_merged = latent_map_sampled_merged[occupied_voxels]
-        # p_stacked = p_stacked[occupied_voxels]
-        # p_n_stacked = p_n_stacked[occupied_voxels]
-        # inputs_distributed_gt = inputs_distributed_gt[:, occupied_voxels]
         
         logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
+        
         # del latent_map_sampled_merged
         if self.limited_gpu: torch.cuda.empty_cache()
         
         logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
         
-        torch.save(logits_gt, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/output_tensor.pt')
         if self.limited_gpu: torch.cuda.empty_cache()
 
         if logits_gt.shape != logits_sampled.shape:
             print(logits_gt.shape, logits_sampled.shape)
             raise ValueError
-        # return latent_map_sampled, latent_map_gt, inputs_distributed, inputs_distributed_gt
         # compute cost
-        # loss, losses = self.compute_loss_old(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt, inputs_distributed_gt)
         loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
-        # loss.backward()
+        loss.backward()
         self.optimizer.step()
         
         self.visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed)
         self.iteration += 1
         return loss, losses
-    
-    
-    def compute_loss_easy(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
-        loss_fc = torch.nn.L1Loss(reduction='mean')
-        loss_i = loss_fc(logits_sampled, logits_gt)
-        loss_ii = loss_fc(latent_map_sampled, latent_map_gt)
-        # loss = loss_i + loss_ii
-        loss = loss_i
-        print(f'loss_i: {loss_i:.2f}, loss_ii: {loss_ii:.2f}, loss: {loss:.2f}')
-        return loss, [loss_i, loss_ii]
-    
-    def compute_loss_combined(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt):
-        # Define loss functions
-        loss_fc_mse = torch.nn.MSELoss(reduction='mean')
-        loss_fc_l1 = torch.nn.L1Loss(reduction='mean')
-        # Compute MSE loss for logits and latent maps
-        loss_i_mse = loss_fc_mse(logits_sampled, logits_gt)
-        loss_ii_mse = loss_fc_mse(latent_map_sampled, latent_map_gt)
-
-        # Compute L1 loss for logits and latent maps
-        loss_i_l1 = loss_fc_l1(logits_sampled, logits_gt)
-        loss_ii_l1 = loss_fc_l1(latent_map_sampled, latent_map_gt)
-        # Combine the three loss terms with weights
-        alpha = 0.2  # Weight for MSE loss
-
-        # combined_loss = alpha * (loss_i_mse + loss_ii_mse) + (1 - alpha) * (loss_i_l1 + loss_ii_l1)
-        combined_loss = alpha * (loss_i_mse) + (1 - alpha) * (loss_i_l1)
-        print(f'Combined Loss: {combined_loss:.2f}, MSE Loss (Logits): {loss_i_mse:.2f}, MSE Loss (Latent): {loss_ii_mse:.2f}, L1 Loss (Logits): {loss_i_l1:.2f}, L1 Loss (Latent): {loss_ii_l1:.2f}')
-
-        return combined_loss, [loss_i_mse, loss_ii_mse, loss_i_l1, loss_ii_l1]
-    
-    def compute_loss_old(self, logits_sampled, logits_gt, latent_map_sampled, latent_map_gt, inputs_distributed):
-        
-        elevation_voxels = self.get_elevated_voxels(inputs_distributed)
-        
-        loss_logits_elevated = torch.nn.L1Loss(reduction='mean')
-        loss_logits_flat = torch.nn.L1Loss(reduction='mean')
-        loss_latents_elevated = torch.nn.L1Loss(reduction='mean')
-        loss_latents_flat = torch.nn.L1Loss(reduction='mean')
-        
-        loss_i = 5 * loss_logits_elevated(logits_sampled[elevation_voxels], logits_gt[elevation_voxels])
-        loss_ii = 2 * loss_latents_elevated(latent_map_sampled[elevation_voxels], latent_map_gt[elevation_voxels])
-        loss_iii = 1 * loss_logits_flat(logits_sampled[~elevation_voxels], logits_gt[~elevation_voxels])
-        loss_iv = 1 * loss_latents_flat(latent_map_sampled[~elevation_voxels], latent_map_gt[~elevation_voxels])
-        # loss = loss_i + loss_ii + loss_iii + loss_iv
-        loss = loss_i + loss_iii
-        if self.iteration%10 == 0: print(f'loss_i: {loss_i}, loss_ii: {loss_ii}, loss_iii: {loss_iii}, loss_iv: {loss_iv}, loss: {loss}')
-        
-        return loss, [loss_i, loss_ii, loss_iii, loss_iv]
 
     def get_elevated_voxels(self, inputs):
         inputs_reshaped = inputs.reshape(-1, *inputs.shape[2:]).detach().cpu().numpy()
@@ -311,17 +234,31 @@ class Trainer(BaseTrainer):
         # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test.ply", pcd)
         # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
         
-    def get_inputs_from_batch(self, batch, points_gt):
-        p_in_3D = batch.get('inputs').to(self.device)
-        p_in_occ = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
+    def get_inputs_from_batch(self, batch):
+        p_in_3D_full = batch.get('inputs').to(self.device)
+        p_in_occ_full = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
+
+        p_in_3D = torch.empty(2, self.cfg['data']['pointcloud_n_training'], 3).to(self.device)
+        p_in_occ = torch.empty(2, self.cfg['data']['pointcloud_n_training'], 1).to(self.device)
         
-        p_in = torch.cat([p_in_3D, p_in_occ], dim = -1)
-        points_gt = points_gt.unsqueeze(0)
+        index_1 = torch.randint(0, p_in_3D_full.shape[0], (self.cfg['data']['pointcloud_n_training'],))
+        index_2 = torch.randint(0, p_in_3D_full.shape[0], (self.cfg['data']['pointcloud_n_training'],))
         
-        indices = torch.randperm(points_gt.shape[1])[:p_in_3D.shape[1]]
-        points_gt = points_gt[:, indices]
+        p_in_3D[0] = p_in_3D_full[index_1]
+        p_in_3D[1] = p_in_3D_full[index_1]
         
-        return p_in, points_gt
+        p_in_occ[0] = p_in_occ_full[index_1]
+        p_in_occ[1] = p_in_occ_full[index_2]
+        
+        p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
+        
+        p_query_3D = batch.get('points').to(self.device)
+        p_query_occ = batch.get('points.occ').to(self.device).unsqueeze(-1)
+        
+        p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
+        p_query = torch.cat((p_query_3D, p_query_occ), dim=-1)
+        
+        return p_in, p_query
     
     def remove_padding_single_dim(self, tensor):
         other_dims = tensor.shape[1:]

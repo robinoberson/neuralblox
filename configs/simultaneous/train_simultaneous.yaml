@@ -1,0 +1,72 @@
+method: neuralblox
+data:
+  input_type: pointcloud
+  classes: null
+  path: null
+  pointcloud_n: 50000
+  pointcloud_n_training: 32768
+  pointcloud_noise: 0.005
+  points_subsample: 65536
+  points_iou_subsample: 65536
+  points_file: points.npz
+  points_iou_file: points.npz
+  points_unpackbits: true
+  unit_size: 0.02 # size of a voxel
+  query_vol_size: 25
+  grid_resolution: 24
+  input_vol: 1.0
+  query_vol: 1.0
+model:
+  local_coord: True
+  encoder: pointnet_crop_local_pool_latent
+  encoder_kwargs:
+    grid_resolution: 24
+    hidden_dim: 32
+    plane_type: ['grid']
+    unet3d: True
+    unet3d_kwargs:
+      num_levels: 3 # define the receptive field, 3 -> 32, 4 -> 64
+      f_maps: 32
+      in_channels: 64
+      out_channels: 64
+    pos_encoding: sin_cos
+  decoder: simple_local_crop
+  decoder_kwargs:
+    sample_mode: bilinear # bilinear / nearest
+    hidden_size: 32
+  pos_encoding: sin_cos
+  c_dim: 32
+training:
+  out_dir: null
+  batch_size: 1
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  print_every: 1000
+  visualize_every: 10000
+  validate_loss_every: 5000
+  checkpoint_every: 500
+  backup_every: 10000
+  n_workers: 8
+  n_workers_val: 4
+  reset_training: true
+  monitor_gpu_usage: false 
+  log_comet: false
+  lr: 0.01
+  lr_reduce_factor: 0.93
+  lr_patience: 5000
+  model_backbone_file: model.pt
+  model_merging_file: model_merging.pt
+  limited_gpu: false
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false
+  model_backbone_file: model.pt
+  model_merging_file: model_merging.pt
+
+generation:
+  vis_n_outputs: 2
+  refine: false
+  n_x: 128
+  n_z: 1
+  resolution_0: 100

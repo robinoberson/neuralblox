@@ -151,7 +151,6 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
     '''
     threshold = cfg['test']['threshold']
     out_dir = cfg['training']['out_dir']
-    stack_latents = cfg['training']['stack_latents']
     vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
@@ -163,6 +162,7 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
 
     trainer = training_fusion.Trainer(
         model, model_merge, optimizer, 
+        cfg = cfg,
         device=device, input_type=input_type,
         vis_dir=vis_dir, threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],

@@ -1,0 +1,23 @@
+inherit_from: configs/simultaneous/train_simultaneous.yaml
+data:
+  classes: null
+  path: /scratch/roberson/data/simultaneous/simultaneous_training/gt_only
+  grid_resolution: 24
+model:
+  encoder_kwargs:
+    grid_resolution: 24
+training:
+  out_dir: /scratch/roberson/neuralblox/out_backbone/pointcloud/simultaneous_training
+  print_every: 3000
+  visualize_every: 3000
+  checkpoint_every: 1000
+  model_backbone_file: model.pt
+  model_merging_file: model_merging.pt
+  limited_gpu: true
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false
+  model_backbone_file: model.pt
+  model_merging_file: model_merging.pt
+
