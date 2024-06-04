@@ -3,6 +3,11 @@ data:
   classes: null
   path: /scratch/roberson/data/simultaneous/simultaneous_training/gt_only
   grid_resolution: 24
+  pointcloud_n: 50000
+  pointcloud_n_training: 16384
+  pointcloud_noise: 0.005
+  points_subsample: 16384
+  points_iou_subsample: 16384
 model:
   encoder_kwargs:
     grid_resolution: 24
@@ -13,7 +18,8 @@ training:
   checkpoint_every: 1000
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
-  limited_gpu: true
+  limited_gpu: false
+  
 test:
   threshold: 0.2
   eval_mesh: true

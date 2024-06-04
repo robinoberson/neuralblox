@@ -49,7 +49,7 @@ class ConvolutionalOccupancyNetwork(nn.Module):
         p_r = self.decode(p, c, **kwargs)
         return p_r
 
-    def encode_inputs(self, inputs):
+    def encode_inputs(self, inputs, limited_gpu = False):
         ''' Encodes the input.
 
         Args:
@@ -57,7 +57,7 @@ class ConvolutionalOccupancyNetwork(nn.Module):
         '''
 
         if self.encoder is not None:
-            c = self.encoder(inputs)
+            c = self.encoder(inputs, limited_gpu = limited_gpu)
         else: 
             # Return inputs?
             c = torch.empty(inputs.size(0), 0)

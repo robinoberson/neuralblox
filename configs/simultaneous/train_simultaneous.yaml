@@ -57,6 +57,7 @@ training:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
   limited_gpu: false
+  save_data_viz: false
 test:
   threshold: 0.2
   eval_mesh: true

@@ -208,9 +208,9 @@ class Trainer(BaseTrainer):
         fea_du, fea_d = self.unet(fea) #downsample and upsample 
         
         #save fea_du
-        folder = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down'
-        n_files = len(os.listdir(folder))
-        torch.save(fea_d, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/fea_d_'+str(n_files)+'.pt')
+        # folder = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down'
+        # n_files = len(os.listdir(folder))
+        # torch.save(fea_d, '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/fea_down/fea_d_'+str(n_files)+'.pt')
         
         # min_fea_du, max_fea_du = torch.min(fea_du), torch.max(fea_du)
         # min_fea_d, max_fea_d = torch.min(fea_d), torch.max(fea_d)

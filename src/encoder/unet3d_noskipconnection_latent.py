@@ -274,10 +274,19 @@ class Encoder(nn.Module):
                                          order=conv_layer_order,
                                          num_groups=num_groups)
 
-    def forward(self, x):
+    def forward(self, x, limited_gpu = False):
         if self.pooling is not None:
             x = self.pooling(x)
-        x = self.basic_module(x)
+        if limited_gpu:
+            x = x.to('cpu')
+            self.basic_module = self.basic_module.to('cpu')
+            
+            x = self.basic_module(x)
+            
+            self.basic_module = self.basic_module.to('cuda')
+            x = x.to('cuda')
+        else:
+            x = self.basic_module(x)
         return x
 
 
@@ -519,12 +528,12 @@ class Abstract3DUNet(nn.Module):
         
         return x
 
-    def forward(self, x, return_feature_maps=False):
+    def forward(self, x, return_feature_maps=False, limited_gpu = False):
         # encoder part
         encoders_features_shapes_return = []
 
         for encoder in self.encoders:
-            x = encoder(x)
+            x = encoder(x, limited_gpu = limited_gpu)
             # reverse the encoder outputs to be aligned with the decoder
             encoders_features_shapes_return.insert(0, x.shape)
 

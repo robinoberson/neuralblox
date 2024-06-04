@@ -1,5 +1,7 @@
 import os
 import torch
+from torch.profiler import profile, record_function, ProfilerActivity
+
 from src.common import (
     add_key, coord2index, normalize_coord
 )
@@ -8,6 +10,9 @@ import numpy as np
 import pickle
 import time
 import yaml
+from torch.nn import functional as F
+from torch.autograd import gradcheck
+
 
 torch.manual_seed(42)
 
@@ -35,6 +40,7 @@ class Trainer(BaseTrainer):
         self.model_merge = model_merge
         self.optimizer = optimizer
         self.device = device
+        self.device_og = device
         self.input_type = input_type
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
@@ -69,14 +75,15 @@ class Trainer(BaseTrainer):
         self.optimizer.zero_grad()
         
         p_in, p_query = self.get_inputs_from_batch(data_batch)
-        p_full = torch.cat((p_in, p_query), dim=-1)
+        p_full = torch.cat((p_in.view(-1, 4), p_query.view(-1, 4)), dim=0)
         #Step 1 get the bounding box of the scene
         self.vol_bound_all = self.get_crop_bound(p_in.view(-1, 4), self.input_crop_size, self.query_crop_size)
         
         inputs_distributed = self.distribute_inputs(p_in.unsqueeze(1), self.vol_bound_all)
         
         # Encode latents 
-        latent_map_sampled, latent_map_sampled_decoded = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
+        latent_map_sampled, _ = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
+            
         # Stack latents 
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
         # Merge latents
@@ -86,29 +93,22 @@ class Trainer(BaseTrainer):
         
         if self.limited_gpu: torch.cuda.empty_cache()
         # Compute gt latent
-        latent_map_gt, inputs_distributed_gt = self.get_latent_gt(points_gt)
-        p_stacked, p_n_stacked = self.get_query_points(self.input_crop_size)
         
-        logits_sampled = self.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
-        
-        # del latent_map_sampled_merged
-        if self.limited_gpu: torch.cuda.empty_cache()
-        
-        logits_gt = self.get_logits(latent_map_gt, p_stacked, p_n_stacked)
-        
-        if self.limited_gpu: torch.cuda.empty_cache()
+        # return latent_map_sampled_merged, p_query
 
-        if logits_gt.shape != logits_sampled.shape:
-            print(logits_gt.shape, logits_sampled.shape)
-            raise ValueError
+        p_query_distributed = self.distribute_query(p_query, self.vol_bound_all)
+        
+        logits_sampled = self.get_logits(latent_map_sampled_merged, p_query_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device), remove_padding=True)
+        occ = p_query_distributed[..., -1].squeeze(0)
+        
+        loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
         # compute cost
-        loss, losses = self.compute_loss_combined(logits_sampled, logits_gt, latent_map_sampled_merged, latent_map_gt)
         loss.backward()
         self.optimizer.step()
         
-        self.visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed)
+        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed)
         self.iteration += 1
-        return loss, losses
+        return loss, None
 
     def get_elevated_voxels(self, inputs):
         inputs_reshaped = inputs.reshape(-1, *inputs.shape[2:]).detach().cpu().numpy()
@@ -235,8 +235,8 @@ class Trainer(BaseTrainer):
         # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
         
     def get_inputs_from_batch(self, batch):
-        p_in_3D_full = batch.get('inputs').to(self.device)
-        p_in_occ_full = batch.get('inputs.occ').to(self.device).unsqueeze(-1)
+        p_in_3D_full = batch.get('inputs').to(self.device).squeeze(0)
+        p_in_occ_full = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
 
         p_in_3D = torch.empty(2, self.cfg['data']['pointcloud_n_training'], 3).to(self.device)
         p_in_occ = torch.empty(2, self.cfg['data']['pointcloud_n_training'], 1).to(self.device)
@@ -249,9 +249,7 @@ class Trainer(BaseTrainer):
         
         p_in_occ[0] = p_in_occ_full[index_1]
         p_in_occ[1] = p_in_occ_full[index_2]
-        
-        p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
-        
+                
         p_query_3D = batch.get('points').to(self.device)
         p_query_occ = batch.get('points.occ').to(self.device).unsqueeze(-1)
         
@@ -300,8 +298,22 @@ class Trainer(BaseTrainer):
         else:
             return tensor.reshape(n_in, H, W, D)
                 
-    def get_logits(self, latent_map_full, p_stacked, p_n_stacked):
+    def get_logits(self, latent_map_full, p_stacked, vol_bound, remove_padding):
+        n_inputs, n_crop, n_points, _ = p_stacked.shape
+        
         n_crops_total = latent_map_full.shape[0]
+        
+        if n_crops_total != n_inputs * n_crop:
+            raise ValueError
+    
+        if remove_padding:
+            vol_bound = self.remove_padding_single_dim(vol_bound).reshape(-1, *vol_bound.shape[-2:])
+        vol_bound = vol_bound.unsqueeze(0).repeat(n_inputs, 1, 1, 1)
+        
+        p_stacked = p_stacked.reshape(n_inputs * n_crop, n_points, 4)
+        vol_bound = vol_bound.reshape(n_inputs * n_crop, 2, 3)
+        
+        p_n_stacked = normalize_coord(p_stacked, vol_bound)
         
         fea_type = 'grid'
         if self.limited_gpu:
@@ -325,7 +337,7 @@ class Trainer(BaseTrainer):
             pi_in = p_stacked_batch[..., :3].clone()
             pi_in = {'p': pi_in}
             p_n = {}
-            p_n[fea_type] = p_n_stacked_batch.clone()
+            p_n[fea_type] = p_n_stacked_batch[..., :3].clone()
             pi_in['p_n'] = p_n
             c = {}
             latent_map_full_batch_decoded = self.unet.decode(latent_map_full_batch, self.features_shapes)
@@ -453,51 +465,96 @@ class Trainer(BaseTrainer):
             ind = coord2index(inputs_distributed_batch, vol_bound_batch, reso=self.reso, plane=fea_type)
             index[fea_type] = ind
             input_cur_batch = add_key(inputs_distributed_batch_3D, index, 'points', 'index', device=self.device)
-            fea, self.unet = self.model.encode_inputs(input_cur_batch)
             
-            latent_map_batch_decoded, latent_map_batch, self.features_shapes = self.unet(fea, True)
+            if self.unet is None:
+                fea, self.unet = self.model.encode_inputs(input_cur_batch, limited_gpu=self.limited_gpu)
+            else:
+                fea, _ = self.model.encode_inputs(input_cur_batch, limited_gpu=self.limited_gpu)
+                
+            _, latent_map_batch, self.features_shapes = self.unet(fea, True, limited_gpu=self.limited_gpu)
+            
+            # if self.limited_gpu: latent_map_batch = latent_map_batch.to('cpu')
 
             if latent_map is None:
                 latent_map = latent_map_batch  # Initialize latent_map with the first batch
-                latent_map_decoded = latent_map_batch_decoded
+                # latent_map_decoded = latent_map_batch_decoded
             else:
                 latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
-                if self.limited_gpu: 
-                    del latent_map_batch, fea, inputs_distributed_batch, inputs_distributed_batch_3D, vol_bound_batch, input_cur_batch, ind, index
-                    torch.cuda.empty_cache()
-                latent_map_decoded = torch.cat((latent_map_decoded, latent_map_batch_decoded), dim=0)
 
-            # Explicitly delete tensors to free memory
-            
-            if self.limited_gpu: 
-                del latent_map_batch_decoded
-                torch.cuda.empty_cache()
+
 
         latent_map_shape = latent_map.shape
-        latent_map_decoded_shape = latent_map_decoded.shape
-        return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:]), latent_map_decoded.reshape(n_inputs, n_crop, *latent_map_decoded_shape[1:])
+        
+        # latent_map_decoded_shape = latent_map_decoded.shape
+        # return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:]), latent_map_decoded.reshape(n_inputs, n_crop, *latent_map_decoded_shape[1:])
+        return latent_map.reshape(n_inputs, n_crop, *latent_map_shape[1:]), None
+    def distribute_query(self, query, vol_bound, remove_padding = True):
+        distributed_inputs = query.clone()
+        n_inputs = distributed_inputs.shape[0]
+        n_crops = vol_bound['n_crop']
+        
+        if remove_padding: 
+            H, W, D = self.vol_bound_all['axis_n_crop'][0], self.vol_bound_all['axis_n_crop'][1], self.vol_bound_all['axis_n_crop'][2]
+            n_crops = (H-2) * (W-2) * (D-2)
+        
+        distributed_inputs = distributed_inputs.repeat(1, n_crops, 1, 1)
 
-    def normalize_inputs(self, inputs, vol_bound, n_inputs):
-        vol_bound = torch.from_numpy(vol_bound).to(self.device)
+        # Convert vol_bound['input_vol'] to a torch tensor
+        vol_bound_tensor = torch.tensor(vol_bound['input_vol']).to(self.device)
+        if remove_padding: vol_bound_tensor = self.remove_padding_single_dim(vol_bound_tensor).reshape(-1, *vol_bound_tensor.shape[-2:])
         
-        coords = inputs[..., :3]
-        occ = inputs[..., 3].unsqueeze(-1)
+        # Permute dimensions
+        distributed_inputs = distributed_inputs.permute(1, 0, 2, 3) #from n_inputs, n_crop, n_points, 4 to n_crop, n_inputs, n_points, 4
+        distributed_inputs = distributed_inputs.reshape(distributed_inputs.shape[0], -1, 4)
+
+        # Create masks for each condition
+        mask_1 = distributed_inputs[:, :, 0] < vol_bound_tensor[:, 0, 0].unsqueeze(1)
+        mask_2 = distributed_inputs[:, :, 0] > vol_bound_tensor[:, 1, 0].unsqueeze(1)
+        mask_3 = distributed_inputs[:, :, 1] < vol_bound_tensor[:, 0, 1].unsqueeze(1)
+        mask_4 = distributed_inputs[:, :, 1] > vol_bound_tensor[:, 1, 1].unsqueeze(1)
+        mask_5 = distributed_inputs[:, :, 2] < vol_bound_tensor[:, 0, 2].unsqueeze(1)
+        mask_6 = distributed_inputs[:, :, 2] > vol_bound_tensor[:, 1, 2].unsqueeze(1)
+
+        # Combine masks
+        final_mask = mask_1 | mask_2 | mask_3 | mask_4 | mask_5 | mask_6
+
+        distributed_inputs = torch.cat([distributed_inputs, (~final_mask).unsqueeze(-1).float()], dim=-1)
         
-        bb_min = vol_bound[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
-        bb_max = vol_bound[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
+        # Reshape back to original shape
+        distributed_inputs = distributed_inputs.reshape(n_crops, n_inputs, -1, 5)
+        distributed_inputs = distributed_inputs.permute(1, 0, 2, 3)
+        
+        n_max = int(distributed_inputs[..., 4].sum(dim=2).max().item())
+        # print(f'Distributing inputs with n_max = {n_max}')
+        # Create a mask for selecting points with label 1
+        indexes_keep = distributed_inputs[..., 4] == 1
+
+        # Calculate the number of points to keep for each input and crop
+        n_points = distributed_inputs[..., 4].sum(dim=2).int()
+
+        # Create a mask for broadcasting
+        mask = torch.arange(n_max).expand(n_inputs, n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
+
+        bb_min = vol_bound_tensor[:, 0, :].unsqueeze(1).repeat(n_inputs, 1, 1) # Shape: (n_crops, 3, 1)
+        bb_max = vol_bound_tensor[:, 1, :].unsqueeze(1).repeat(n_inputs, 1, 1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
-        centers = (bb_min + bb_max) / 2.0
         
-        coords = (coords - centers) / bb_size + 0.5
-        # bb_min_inputs = torch.min(coords, dim=1).values
-        # bb_max_inputs = torch.max(coords, dim=1).values
-        # print("bb_min_inputs", bb_min_inputs, bb_size)
-        # print("bb_max_inputs", bb_max_inputs)
+        if self.rand_points_inputs.shape[0] < n_max:
+            n_repeat = np.ceil(n_max / self.rand_points_inputs.shape[0])
+            self.rand_points_inputs = self.rand_points_inputs.repeat(int(n_repeat), 1)
+        random_points_sel = self.rand_points_inputs[:n_max]
+        random_points = random_points_sel.repeat(n_inputs*n_crops,1, 1).to(device=self.device)
+        random_points *= bb_size  # Scale points to fit inside each bounding box
+        random_points += bb_min  # Translate points to be within each bounding box
         
-        inputs = torch.cat([coords, occ], dim=-1)
+        distributed_inputs_short = torch.zeros(n_inputs, n_crops, n_max, 4, device=self.device)
+        distributed_inputs_short[:, :, :, :3] = random_points.reshape(n_inputs, n_crops, n_max, 3)
         
-        return inputs
-        
+        # Assign values to the shortened tensor using advanced indexing and broadcasting
+        distributed_inputs_short[mask] = distributed_inputs[indexes_keep][..., :4]
+
+        return distributed_inputs_short
+
     def distribute_inputs(self, distributed_inputs_raw, vol_bound, remove_padding = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()

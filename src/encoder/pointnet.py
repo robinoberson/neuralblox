@@ -191,25 +191,32 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
         return fea_grid
 
-    def pool_local(self, index, c):
+    def pool_local(self, index, c, limited_gpu = False):
+        indexes = index['grid']
+        
+        if limited_gpu:
+            c = c.to('cpu')
+            indexes = indexes.to('cpu')
+            
         bs, fea_dim = c.size(0), c.size(2)
-        keys = index.keys()
 
-        c_out = 0
-        for key in keys:
-            # scatter plane features from points
-            if key == 'grid':
-                fea = self.scatter(c.permute(0, 2, 1), index[key])
+        fea = self.scatter(c.permute(0, 2, 1), indexes)
 
-            if self.scatter == scatter_max:
-                fea = fea[0]
+        if self.scatter == scatter_max:
+            fea = fea[0]
             # gather feature back to points
                 
-            fea = fea.gather(dim=2, index=index[key].expand(-1, fea_dim, -1))
-            c_out += fea
-        return c_out.permute(0, 2, 1)
+        fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
+        
+        if limited_gpu:
+            c = c.to('cuda')
+            indexes = indexes.to('cuda')
+            fea = fea.to('cuda')
+            
+        return fea.permute(0, 2, 1)
 
-    def forward(self, inputs):
+
+    def forward(self, inputs, limited_gpu = False):
         p = inputs['points']
         index = inputs['index']
         
@@ -228,26 +235,15 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             net = self.fc_pos(pp)
         else:
             net = self.fc_pos(p)
-            
-        #save p and index
-        # torch.save(p, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/p.pt')
-        # torch.save(index, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/index.pt')
-        
-        # torch.save(net, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/net.pt')
-        # torch.save(pp, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/pp.pt')
         
         net = self.blocks[0](net)
         for idx_block, block in enumerate(self.blocks[1:]):
-            pooled = self.pool_local(index, net)
+            pooled = self.pool_local(index, net, limited_gpu = limited_gpu)
             net = torch.cat([net, pooled], dim=2)
-            net = block(net)
-            # torch.save(net, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/net_{idx_block}.pt')
-            
+            net = block(net)            
 
         c = self.fc_c(net)
-        
-        # torch.save(c, f'/home/roberson/MasterThesis/master_thesis/Playground/BackboneEmpty/{dir}/c.pt')
-        
+                
         if 'grid' in self.plane_type:
             fea['grid'] = self.generate_grid_features(index['grid'], c)
 
