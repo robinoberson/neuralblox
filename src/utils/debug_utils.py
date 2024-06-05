@@ -289,7 +289,7 @@ def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=
     optimizer = optim.Adam(trainer.model_merge.parameters(), lr=lr, weight_decay=0)
     
     # Learning rate scheduler
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=300, factor=0.9)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=500, factor=0.95)
     
     # Initial learning rate
     init_lr = lr

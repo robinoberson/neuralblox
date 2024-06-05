@@ -174,7 +174,7 @@ def train_and_evaluate(model, input_tensor, output_tensor, device, num_epochs=15
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Learning rate scheduler
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=100, factor=0.8)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=300, factor=0.8)
     
     # Initial learning rate
     init_lr = lr
