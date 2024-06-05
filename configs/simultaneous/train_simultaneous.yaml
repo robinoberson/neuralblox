@@ -5,7 +5,8 @@ data:
   path: null
   pointcloud_n: 50000
   pointcloud_n_training: 32768
-  pointcloud_noise: 0.005
+  # pointcloud_noise: 0.005
+  pointcloud_noise: 0.00
   points_subsample: 65536
   points_iou_subsample: 65536
   points_file: points.npz

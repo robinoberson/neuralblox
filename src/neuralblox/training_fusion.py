@@ -34,6 +34,7 @@ class Trainer(BaseTrainer):
 
     '''
 
+
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
                  vis_dir=None, threshold=0.5, eval_sample=False, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False):
         self.model = model
@@ -62,7 +63,15 @@ class Trainer(BaseTrainer):
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
+    def check_model_device(self, model):
+        for name, param in model.named_parameters():
+            #print only if cpu 
+            if param.device == 'cpu':
+                print(f"Parameter {name} on device: {param.device}")
+        for name, module in model.named_children():
+            if param.device == 'cpu':
 
+                print(f"Module {name} on device: {next(module.parameters()).device}")
     def train_sequence_window(self, data_batch):
         t0 = time.time()
         
@@ -88,8 +97,8 @@ class Trainer(BaseTrainer):
         latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
         # Merge latents
         latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
-        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
-        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
         
         if self.limited_gpu: torch.cuda.empty_cache()
         # Compute gt latent
@@ -103,10 +112,16 @@ class Trainer(BaseTrainer):
         
         loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
         # compute cost
+        # print(f'Model')
+        # self.check_model_device(self.model)
+        # print(f'Model merge')
+        # self.check_model_device(self.model_merge)
+
         loss.backward()
         self.optimizer.step()
-        
-        # self.visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed)
+        return logits_sampled, p_query_distributed, inputs_distributed
+        self.visualize_logits(logits_sampled, p_query, inputs_distributed)
+
         self.iteration += 1
         return loss, None
 
@@ -159,11 +174,11 @@ class Trainer(BaseTrainer):
         
         return latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
     
-    def visualize_logits(self, logits_gt, logits_sampled, p_stacked, inputs_gt = None, inputs_distributed=None, force_viz = False):
+    def visualize_logits(self, logits_sampled, p_query, inputs_distributed=None, force_viz = False):
         geos = []
         
         file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/fusion/train_fusion_local.yaml'
-        file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
+        # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
 
         with open(file_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -172,25 +187,22 @@ class Trainer(BaseTrainer):
             return
 
         import open3d as o3d
-
+        p_stacked = p_query[..., :3]
+        
         p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
 
-        occ_gt = logits_gt.detach().cpu().numpy()
         occ_sampled = logits_sampled.detach().cpu().numpy()
 
-        values_gt = np.exp(occ_gt) / (1 + np.exp(occ_gt))
         values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
         
-        values_gt = values_gt.reshape(-1)
         values_sampled = values_sampled.reshape(-1)
 
         threshold = 0.5
 
-        values_gt[values_gt < threshold] = 0
-        values_gt[values_gt >= threshold] = 1
-
         values_sampled[values_sampled < threshold] = 0
         values_sampled[values_sampled >= threshold] = 1
+        
+        values_gt = p_query[..., -1].reshape(-1).detach().cpu().numpy()
 
         both_occ = np.logical_and(values_gt, values_sampled)
         
@@ -211,14 +223,6 @@ class Trainer(BaseTrainer):
             pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
             pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
             geos += [pcd_inputs]
-            
-        if inputs_gt is not None:
-            points_second = inputs_gt
-            pcd_inputs_gt = o3d.geometry.PointCloud()
-            inputs_reshaped = inputs_gt.reshape(-1, 4).detach().cpu().numpy()
-            pcd_inputs_gt.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-            pcd_inputs_gt.paint_uniform_color([0., 0.5, 1.0]) # blue
-            geos += [pcd_inputs_gt]
             
         colors = colors[mask]
         pcd.points = o3d.utility.Vector3dVector(p_full[mask])
@@ -465,15 +469,15 @@ class Trainer(BaseTrainer):
             ind = coord2index(inputs_distributed_batch, vol_bound_batch, reso=self.reso, plane=fea_type)
             index[fea_type] = ind
             input_cur_batch = add_key(inputs_distributed_batch_3D, index, 'points', 'index', device=self.device)
-            
             if self.unet is None:
                 fea, self.unet = self.model.encode_inputs(input_cur_batch, limited_gpu=self.limited_gpu)
             else:
                 fea, _ = self.model.encode_inputs(input_cur_batch, limited_gpu=self.limited_gpu)
-                
-            _, latent_map_batch, self.features_shapes = self.unet(fea, True, limited_gpu=self.limited_gpu)
-            
+            _, latent_map_batch, self.features_shapes = self.unet(fea, True)
             # if self.limited_gpu: latent_map_batch = latent_map_batch.to('cpu')
+            if self.limited_gpu: 
+                del fea
+                torch.cuda.empty_cache()
 
             if latent_map is None:
                 latent_map = latent_map_batch  # Initialize latent_map with the first batch

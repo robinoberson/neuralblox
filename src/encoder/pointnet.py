@@ -191,6 +191,30 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
         return fea_grid
 
+    # def pool_local(self, index, c, limited_gpu = False):
+    #     indexes = index['grid']
+        
+    #     if limited_gpu:
+    #         c = c.to('cpu', copy=True)
+    #         indexes = indexes.to('cpu', copy=True)
+            
+    #     bs, fea_dim = c.size(0), c.size(2)
+
+    #     fea = self.scatter(c.permute(0, 2, 1), indexes)
+
+    #     if self.scatter == scatter_max:
+    #         fea = fea[0]
+    #         # gather feature back to points
+                
+    #     fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
+        
+    #     if limited_gpu:
+    #         c = c.to('cuda', copy=True)
+    #         indexes = indexes.to('cuda', copy=True)
+    #         fea = fea.to('cuda', copy=True)
+                
+    #     return fea.permute(0, 2, 1)    
+    
     def pool_local(self, index, c, limited_gpu = False):
         indexes = index['grid']
         
@@ -212,7 +236,7 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             c = c.to('cuda')
             indexes = indexes.to('cuda')
             fea = fea.to('cuda')
-            
+                
         return fea.permute(0, 2, 1)
 
 
@@ -249,4 +273,6 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
         unet = self.unet3d
 
+        if limited_gpu:
+            del c, net, pooled, pp
         return fea['grid'], unet

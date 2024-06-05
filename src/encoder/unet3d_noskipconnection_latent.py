@@ -275,6 +275,7 @@ class Encoder(nn.Module):
                                          num_groups=num_groups)
 
     def forward(self, x, limited_gpu = False):
+        
         if self.pooling is not None:
             x = self.pooling(x)
         if limited_gpu:
@@ -287,6 +288,12 @@ class Encoder(nn.Module):
             x = x.to('cuda')
         else:
             x = self.basic_module(x)
+            
+        # for name, param in self.basic_module.named_parameters():
+        #     print(f"Parameter {name} on device: {param.device}")
+        # for name, module in self.basic_module.named_children():
+        #     print(f"Module {name} on device: {next(module.parameters()).device}")
+
         return x
 
 

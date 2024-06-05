@@ -81,34 +81,30 @@ train_loader = torch.utils.data.DataLoader(
 model = config.get_model(cfg, device=device, dataset=train_dataset)
 
 # Model for merging
-model_merging = layers.Conv3D_one_input().to(device)
+num_blocks=4
+num_channels=[256, 320, 416, 160, 128, 128, 128]
+model_merging = layers.Conv3D_one_input(num_blocks = num_blocks, num_channels = num_channels).to(device)
 
 checkpoint_io = CheckpointIO(out_dir, model=model)
 checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging)
 
 try:
-    checkpoint_io.load(os.path.join(os.getcwd(), cfg['training']['model_backbone_file']))
-    checkpoint_io_merging.load(os.path.join(os.getcwd(), cfg['training']['model_merging_file']))
+    checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
+    checkpoint_io_merging.load(cfg['training']['starting_model_merging_file'])
     
 except FileExistsError as e:
     print(f'No checkpoint file found! {e}')
-    load_dict = dict()
+    
+load_dict = dict()
     
 optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=learning_rate)
 trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
 
-epoch_it = load_dict.get('epoch_it', 0)
-it = load_dict.get('it', -1)
+epoch_it = 0
+it = 0
 
 print('Loading model from epoch %d, iteration %d' % (epoch_it, it))
 
-metric_val_best = load_dict.get(
-    'loss_val_best', -model_selection_sign * np.inf)
-
-if metric_val_best == np.inf or metric_val_best == -np.inf:
-    metric_val_best = -model_selection_sign * np.inf
-print('Current best validation metric (%s): %.8f'
-      % (model_selection_metric, metric_val_best))
 logger = SummaryWriter(os.path.join(out_dir, 'logs'))
 
 # Print model

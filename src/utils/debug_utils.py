@@ -16,6 +16,7 @@ def get_trainer(cfg_fusion_training, device):
     checkpoint_io = CheckpointIO(cfg_fusion_training['training']['out_dir'], model=model)
     checkpoint_io.load(cfg_fusion_training['training']['backbone_file'])
     
+    # model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
     model_merging = layers.Conv3D_one_input().to(device)
 
     model_merging_dir = cfg_fusion_training['training']['out_dir']
@@ -220,7 +221,7 @@ def save_visualization(trainer, dataloader, idx_config, cfg):
                 
             # Forward pass
             latent_map_sampled_merged = trainer.merge_latent_map(input_tensor) 
-            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
+            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, )
                         
             torch.save(outputs, os.path.join(vis_dir, f'logits_sampled_{batch_idx}.pt'))
             torch.save(output_tensor, os.path.join(vis_dir, f'logits_gt_{batch_idx}.pt'))
@@ -313,7 +314,7 @@ def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=
             
             # Forward pass
             latent_map_sampled_merged = trainer.merge_latent_map(input_tensor) 
-            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
+            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, trainer.vol_bound_all['input_vol'], device = trainer.device)
 
             loss = criterion(outputs, output_tensor)
             

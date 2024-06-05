@@ -1,11 +1,13 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: null
-  path: /scratch/roberson/data/simultaneous/simultaneous_training/gt_only
+  path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
+
   grid_resolution: 24
   pointcloud_n: 50000
   pointcloud_n_training: 16384
-  pointcloud_noise: 0.005
+  # pointcloud_noise: 0.005
+  pointcloud_noise: 0.0
   points_subsample: 16384
   points_iou_subsample: 16384
 model:
@@ -16,9 +18,11 @@ training:
   print_every: 3000
   visualize_every: 3000
   checkpoint_every: 1000
-  model_backbone_file: model.pt
-  model_merging_file: model_merging.pt
-  limited_gpu: false
+  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  model_backbone: model_backbone.pt
+  model_merging: model_merging.pt
+  limited_gpu: true
   
 test:
   threshold: 0.2

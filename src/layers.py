@@ -79,7 +79,7 @@ class ResidualBlock(nn.Module):
 
         return out
 class Conv3D_one_input(nn.Module):
-    def __init__(self, num_blocks = 1, num_channels = [256, 416, 416, 128]):
+    def __init__(self, num_blocks = 4, num_channels = [256, 448, 480, 192, 192, 192, 128]):
         super(Conv3D_one_input, self).__init__()
 
         assert num_channels[0] == 256 and num_channels[-1] == 128, "Input must have 256 channels and output must have 128 channels"
