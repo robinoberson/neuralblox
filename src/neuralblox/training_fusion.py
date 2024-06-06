@@ -209,8 +209,11 @@ class Trainer(BaseTrainer):
         file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
         # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
 
-        with open(file_path, 'r') as f:
-            config = yaml.safe_load(f)
+        try:
+            with open(file_path, 'r') as f:
+                config = yaml.safe_load(f)
+        except:
+            return
             
         if not(force_viz or config['visualization']):
             return
