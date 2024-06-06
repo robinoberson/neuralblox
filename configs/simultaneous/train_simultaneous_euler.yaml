@@ -19,7 +19,7 @@ training:
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
-  limited_gpu: true
+  limited_gpu: false
   save_data_viz: true
   log_comet: true
 test:
