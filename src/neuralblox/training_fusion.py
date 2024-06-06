@@ -255,16 +255,8 @@ class Trainer(BaseTrainer):
         # o3d.io.write_point_cloud("/media/roberson/T7/visualization/test_inputs.ply", pcd_inputs)
         
     def get_inputs_from_batch(self, batch):
-        p_in_3D_full = batch.get('inputs').to(self.device).squeeze(0)
-        p_in_occ_full = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
-        
-        p_in_3D = torch.empty(p_in_3D_full.shape[0], self.cfg['data']['pointcloud_n_training'], 3).to(self.device)
-        p_in_occ = torch.empty(p_in_occ_full.shape[0], self.cfg['data']['pointcloud_n_training'], 1).to(self.device)
-        
-        for i in range(p_in_3D_full.shape[0]):
-            indices = torch.randint(0, p_in_3D_full.shape[1], (self.cfg['data']['pointcloud_n_training'],))
-            p_in_3D[i] = p_in_3D_full[i][indices]
-            p_in_occ[i] = p_in_occ_full[i][indices]
+        p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
+        p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
                 
         p_query_3D = batch.get('points').to(self.device)
         p_query_occ = batch.get('points.occ').to(self.device).unsqueeze(-1)

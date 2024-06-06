@@ -4,12 +4,8 @@ data:
   # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
   path: /scratch/roberson/data/simultaneous/simultaneous_training/gt_only
   grid_resolution: 24
-  pointcloud_n: 50000
-  pointcloud_n_training: 16384
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.0
-  points_subsample: 16384
-  points_iou_subsample: 16384
 model:
   encoder_kwargs:
     grid_resolution: 24

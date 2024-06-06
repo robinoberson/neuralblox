@@ -3,8 +3,6 @@ data:
   classes: null
   path: /cluster/scratch/roberson/data/simultaneous/gt_only
   grid_resolution: 24
-  pointcloud_n: 50000
-  pointcloud_n_training: 16384
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.0
   points_subsample: 16384
