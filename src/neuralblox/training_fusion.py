@@ -60,6 +60,16 @@ class Trainer(BaseTrainer):
         self.cfg = cfg
         self.rand_points_inputs = (torch.load('pretrained_models/fusion/empty_inputs.pt').to(self.device) + 0.56) / 1.12
         # self.rand_points_inputs = torch.rand(20000, 3) 
+        
+        current_dir = os.getcwd()
+        
+        if 'robin' in current_dir:
+            self.location = 'home'
+        elif 'roberson' in current_dir:
+            self.location = 'local'
+        else:
+            self.location = 'euler'
+        
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -193,7 +203,10 @@ class Trainer(BaseTrainer):
     def visualize_logits(self, logits_sampled, p_query, inputs_distributed=None, force_viz = False):
         geos = []
         
-        file_path = '/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_local.yaml'
+        current_dir = os.getcwd()
+
+            
+        file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
         # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
 
         with open(file_path, 'r') as f:
