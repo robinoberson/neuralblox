@@ -46,7 +46,6 @@ device = torch.device("cuda" if is_cuda else "cpu")
 t0 = time.time()
 
 # Shorthands
-out_dir = cfg['training']['out_dir']
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 learning_rate = cfg['training']['lr']
@@ -64,8 +63,8 @@ else:
                      'either maximize or minimize.')
 
 # Output directory
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
+if not os.path.exists(cfg['training']['out_dir']):
+    os.makedirs(cfg['training']['out_dir'])
     
 # Dataset
 train_dataset = config.get_dataset('train', cfg)
@@ -81,12 +80,12 @@ train_loader = torch.utils.data.DataLoader(
 model = config.get_model(cfg, device=device, dataset=train_dataset)
 
 # Model for merging
-num_blocks=4
-num_channels=[256, 320, 416, 160, 128, 128, 128]
-model_merging = layers.Conv3D_one_input(num_blocks = num_blocks, num_channels = num_channels).to(device)
+# num_blocks=4
+# num_channels=[256, 320, 416, 160, 128, 128, 128]
+model_merging = layers.Conv3D_one_input().to(device)
 
-checkpoint_io = CheckpointIO(out_dir, model=model)
-checkpoint_io_merging = CheckpointIO(out_dir, model=model_merging)
+checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
+checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
 
 try:
     checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
@@ -105,8 +104,6 @@ it = 0
 
 print('Loading model from epoch %d, iteration %d' % (epoch_it, it))
 
-logger = SummaryWriter(os.path.join(out_dir, 'logs'))
-
 # Print model
 nparameters = sum(p.numel() for p in model.parameters())
 nparameters_merging = sum(p.numel() for p in model_merging.parameters())
@@ -120,24 +117,26 @@ prev_lr = -1
 
 while True:
     epoch_it += 1
-    print(epoch_it)
+    # print(epoch_it)
     for batch in train_loader:
         it += 1
         
         loss, losses = trainer.train_sequence_window(batch)
         
         scheduler.step(loss)
+        
         for param_group in optimizer.param_groups:
             current_lr = param_group['lr']
             if current_lr != prev_lr:
                 print("Learning rate changed to:", current_lr)
                 prev_lr = current_lr
-        
-        logger.add_scalar('train/loss', loss, it)
+                if log_comet:
+                    experiment.log_metric("learning_rate", current_lr, step=it)
+                    
         if log_comet: 
             experiment.log_metric('train_loss', loss, step=it)
-            for idx_elem, elem in enumerate(losses):
-                experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
+            # for idx_elem, elem in enumerate(losses):
+            #     experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
 
         # Print output
         if print_every > 0 and (it % print_every) == 0:
@@ -153,31 +152,26 @@ while True:
         # Save checkpoint
         if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
             print('Saving checkpoint')
-            checkpoint_io_merging.save('model_merging.pt', epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
+            checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
+            checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
+            
             if cfg['training']['save_data_viz']: 
-                print('Saving data for visualizing in %s' % out_dir)
-                latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed = trainer.save_data_visualization(batch, points_gt)
+                logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
             
                 #dump all files 
-                path = os.path.join(out_dir, 'data_viz')
+                path = os.path.join(cfg['training']['out_dir'], 'data_viz')
                 if not os.path.exists(path):
                     os.makedirs(path)
                 
                 with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
-                    pickle.dump([latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed], f)
-                del latent_map_gt, latent_map_sampled_merged, logits_gt, logits_sampled, p_stacked, p_n_stacked, inputs_distributed
+                    pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
+                print(f'Saved {os.path.join(path, f"data_viz_{it}.pkl")}')
+                del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
                 torch.cuda.empty_cache()
+                
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
-            checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
+            checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it)
+            checkpoint_io.save('model_backbone_%d.pt' % it, epoch_it=epoch_it, it=it)
         
-
-        # Exit if necessary
-        if exit_after > 0 and (time.time() - t0) >= exit_after:
-            print('Time limit reached. Exiting.')
-            checkpoint_io_merging.save('model_merging.pt', epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
-            exit(3)

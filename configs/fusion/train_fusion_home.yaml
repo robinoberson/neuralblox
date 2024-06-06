@@ -15,6 +15,9 @@ training:
   checkpoint_every: 50
   log_comet: false 
   save_data_viz: false
-  starting_model: model_0.pt
+  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  model_backbone: model_backbone.pt
+  model_merging: model_merging.pt
   # print_every: 3
 visualization: true

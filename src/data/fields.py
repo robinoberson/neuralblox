@@ -307,9 +307,11 @@ class PointCloudField(Field):
 
         points = pointcloud_dict['points'].astype(np.float32)
         occupancies = pointcloud_dict['occupancies']
-        if self.unpackbits:
-            occupancies = np.unpackbits(occupancies)[:points.shape[0]]
         
+        if self.unpackbits:
+            occupancies_unpacked = np.unpackbits(occupancies).reshape(points.shape[0], -1)
+            occupancies = occupancies_unpacked[:, :points.shape[1]]
+            
         occupancies = occupancies.astype(np.float32)
         #normals = pointcloud_dict['normals'].astype(np.float32)
 

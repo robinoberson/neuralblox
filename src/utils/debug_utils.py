@@ -9,27 +9,14 @@ import torch.optim as optim
 import random
 # from src.layers import Conv3D_one_input, CombinedLoss
 import numpy as np
-def get_trainer(cfg_fusion_training, device):
-    
+def get_trainer(cfg, device, model_merging):
 
-    model = config.get_model(cfg_fusion_training, device=device)
-    checkpoint_io = CheckpointIO(cfg_fusion_training['training']['out_dir'], model=model)
-    checkpoint_io.load(cfg_fusion_training['training']['backbone_file'])
-    
-    # model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
-    model_merging = layers.Conv3D_one_input().to(device)
-
-    model_merging_dir = cfg_fusion_training['training']['out_dir']
-
-    checkpoint_io_merging = CheckpointIO(model_merging_dir, model=model_merging)
-    try:
-        path_model = os.path.join(model_merging_dir, cfg_fusion_training['training']['starting_model'])
-        _ = checkpoint_io_merging.load(path_model)
-    except FileExistsError as e:
-        print(f'No checkpoint file found! {e}')
-        
+    model = config.get_model(cfg, device=device)
+    checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
+    checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
+     
     optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=0.01)
-    trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg_fusion_training, device=device)
+    trainer = config.get_trainer_overfit(model, model_merging, optimizer, cfg, device=device)
     
     trainer.model_merge.to(device)
     trainer.unet = trainer.model.encoder.unet3d
@@ -38,18 +25,30 @@ def get_trainer(cfg_fusion_training, device):
 
     trainer.features_shapes = encoder_feature_shapes
     
-    return trainer, checkpoint_io_merging
+    return trainer
 
-def get_train_loader(cfg_path_fusion_training, cfg_path_default, shuffle_bool = False):
-    cfg_fusion_training = config.load_config(cfg_path_fusion_training, cfg_path_default)
+def get_checkpoint_io_merging(cfg, model_merging):
+    model_merging_dir = cfg['training']['out_dir']
 
-    batch_size_fusion = cfg_fusion_training['training']['batch_size']
-    train_dataset_fusion = config.get_dataset('train', cfg_fusion_training)
+    checkpoint_io_merging = CheckpointIO(model_merging_dir, model=model_merging)
+    try:
+        path_model = os.path.join(model_merging_dir, cfg['training']['starting_model_merging_file'])
+        _ = checkpoint_io_merging.load(path_model)
+    except FileExistsError as e:
+        print(f'No checkpoint file found! {e}')
+        
+    return checkpoint_io_merging
+        
+def get_train_loader(cfg_path, cfg_path_default, shuffle_bool = False):
+    cfg = config.load_config(cfg_path, cfg_path_default)
+
+    batch_size_fusion = cfg['training']['batch_size']
+    train_dataset_fusion = config.get_dataset('train', cfg)
 
     batch_sampler = data_src.CategoryBatchSampler(train_dataset_fusion, batch_size=batch_size_fusion, drop_last=True)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset_fusion, num_workers=cfg_fusion_training['training']['n_workers'],
+        train_dataset_fusion, num_workers=cfg['training']['n_workers'],
         collate_fn=data_src.collate_remove_none,
         batch_sampler=batch_sampler,
         worker_init_fn=data_src.worker_init_fn,
@@ -86,9 +85,9 @@ def get_gt_points(batch, device, cfg):
     
     return points_gt
 
-def plot_batch(batch, device, cfg_fusion_training):
+def plot_batch(batch, device, cfg):
     
-    points_gt = get_gt_points(batch, device, cfg_fusion_training)
+    points_gt = get_gt_points(batch, device, cfg)
     
     points_full = batch['inputs'].reshape(-1, 3).cpu().numpy()
     points_occ_full = batch['inputs.occ'].reshape(-1).cpu().numpy()
@@ -121,9 +120,9 @@ def plot_batch(batch, device, cfg_fusion_training):
 
     o3d.visualization.draw_geometries([pcd_1, pcd_0, pcd_gt])
     
-def get_batch_pcd(batch, device, cfg_fusion_training):
+def get_batch_pcd(batch, device, cfg):
     
-    points_gt = get_gt_points(batch, device, cfg_fusion_training)
+    points_gt = get_gt_points(batch, device, cfg)
     
     points_full = batch['inputs'].reshape(-1, 3).cpu().numpy()
     points_occ_full = batch['inputs.occ'].reshape(-1).cpu().numpy()
@@ -221,14 +220,12 @@ def save_visualization(trainer, dataloader, idx_config, cfg):
                 
             # Forward pass
             latent_map_sampled_merged = trainer.merge_latent_map(input_tensor) 
-            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, )
+            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
                         
             torch.save(outputs, os.path.join(vis_dir, f'logits_sampled_{batch_idx}.pt'))
             torch.save(output_tensor, os.path.join(vis_dir, f'logits_gt_{batch_idx}.pt'))
             torch.save(p_stacked, os.path.join(vis_dir, f'p_stacked_{batch_idx}.pt'))
             torch.save(p_in, os.path.join(vis_dir, f'p_in_{batch_idx}.pt'))
-        
-
 
 def visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed=None, show=False):
     import open3d as o3d
@@ -280,6 +277,57 @@ def visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed=No
     if show: o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
     return pcd, pcd_inputs
 
+def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, show=False):
+    geos = []
+    import open3d as o3d
+
+    p_stacked = p_query[..., :3]
+    
+    p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+
+    occ_sampled = logits_sampled.detach().cpu().numpy()
+
+    values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+    
+    values_sampled = values_sampled.reshape(-1)
+
+    threshold = 0.5
+
+    values_sampled[values_sampled < threshold] = 0
+    values_sampled[values_sampled >= threshold] = 1
+    
+    values_gt = p_query[..., -1].reshape(-1).detach().cpu().numpy()
+
+    both_occ = np.logical_and(values_gt, values_sampled)
+    
+    pcd = o3d.geometry.PointCloud()
+    colors = np.zeros((values_gt.shape[0], 3))
+    colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
+    colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
+    colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
+    
+    mask = np.any(colors != [0, 0, 0], axis=1)
+    # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+    if inputs_distributed is not None:
+        points_second = inputs_distributed
+        pcd_inputs = o3d.geometry.PointCloud()
+        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+        pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
+        geos += [pcd_inputs]
+        
+    colors = colors[mask]
+    pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+    bb_min_points = np.min(p_full[mask], axis=0)
+    bb_max_points = np.max(p_full[mask], axis=0)
+    print(bb_min_points, bb_max_points)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+    
+    geos += [pcd, base_axis]
+    if show: o3d.visualization.draw_geometries(geos)
+    return pcd, pcd_inputs
+
 def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=0.001, save_checkpoint=False, checkpoint_io_merging=None, experiment = None, debug = False):
     # Move model to the device
     log_comet = cfg['training']['log_comet']
@@ -290,7 +338,7 @@ def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=
     optimizer = optim.Adam(trainer.model_merge.parameters(), lr=lr, weight_decay=0)
     
     # Learning rate scheduler
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=300, factor=0.9)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=500, factor=0.95)
     
     # Initial learning rate
     init_lr = lr
@@ -314,7 +362,7 @@ def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=
             
             # Forward pass
             latent_map_sampled_merged = trainer.merge_latent_map(input_tensor) 
-            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, trainer.vol_bound_all['input_vol'], device = trainer.device)
+            outputs = trainer.get_logits(latent_map_sampled_merged, p_stacked, p_n_stacked)
 
             loss = criterion(outputs, output_tensor)
             
@@ -355,8 +403,11 @@ def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=
         
         if (epoch+1) % 10 == 0:
             print(f'Epoch [{epoch + 1}, {iteration}/{num_iter}], Mean Loss: {mean_epoch_loss:.4f}')
+            
         if (epoch+1) % 100 == 0:
             save_visualization(trainer, dataloader, idx_config, cfg)
+            if save_checkpoint and checkpoint_io_merging is not None:
+                checkpoint_io_merging.save(f'model_merging_{idx_config}.pt', epoch_it=epoch, it=iteration)
 
         if log_comet: experiment.log_metric(f'epoch_loss_{idx_config}', mean_epoch_loss, step=epoch)
     

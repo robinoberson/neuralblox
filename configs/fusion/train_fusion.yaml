@@ -58,8 +58,9 @@ training:
   limited_gpu: false
   log_comet: true
   save_data_viz: true
-  backbone_file: model.pt
-  starting_model: model_merging.pt
+  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  model_merging: model_merging.pt
 
 test:
   threshold: 0.01

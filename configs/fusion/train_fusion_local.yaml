@@ -15,12 +15,17 @@ data:
   # path_gt: /media/roberson/T7/data/fusion_debug/single_box_gt
 training:
   # out_dir: /home/robin/Dev/MasterThesis/data/output_fusion/reduced_scenes
+  checkpoint_every: 5
+  print_every: 2
   out_dir: /scratch/roberson/neuralblox/out_fusion/temp_overfit
   # backbone_file: /home/robin/Dev/MasterThesis/data/output_backbone/models_backbone/aug_model_130000.pt
-  backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
+  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  model_backbone: model_backbone.pt
+  model_merging: model_merging.pt
   learning_rate: 0.01
   limited_gpu: true
   checkpoint_every: 30
-  log_comet: true 
+  log_comet: false 
   # print_every: 3
 visualization: true

@@ -52,11 +52,13 @@ training:
   reset_training: true
   monitor_gpu_usage: false 
   log_comet: false
-  lr: 0.01
+  lr: 0.001
   lr_reduce_factor: 0.93
   lr_patience: 5000
-  model_backbone_file: model.pt
-  model_merging_file: model_merging.pt
+  starting_model_backbone_file: model_backbone.pt
+  starting_model_merging_file: model_merging.pt
+  model_backbone: model_backbone.pt
+  model_merging: model_merging.pt
   limited_gpu: false
   save_data_viz: false
 test:

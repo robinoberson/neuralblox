@@ -7,6 +7,9 @@ from src.common import coordinate2index, normalize_3d_coordinate, \
 from src.encoder.unet3d_noskipconnection import UNet3D
 from src.encoder.unet3d_noskipconnection_latent import UNet3D_noskipconnection_latent
 import math
+import time
+
+
 class LocalPoolPointnet(nn.Module):
     ''' PointNet-based encoder network with ResNet blocks for each point.
         Number of input points are fixed.
@@ -190,32 +193,9 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
 
         return fea_grid
-
-    # def pool_local(self, index, c, limited_gpu = False):
-    #     indexes = index['grid']
-        
-    #     if limited_gpu:
-    #         c = c.to('cpu', copy=True)
-    #         indexes = indexes.to('cpu', copy=True)
-            
-    #     bs, fea_dim = c.size(0), c.size(2)
-
-    #     fea = self.scatter(c.permute(0, 2, 1), indexes)
-
-    #     if self.scatter == scatter_max:
-    #         fea = fea[0]
-    #         # gather feature back to points
-                
-    #     fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
-        
-    #     if limited_gpu:
-    #         c = c.to('cuda', copy=True)
-    #         indexes = indexes.to('cuda', copy=True)
-    #         fea = fea.to('cuda', copy=True)
-                
-    #     return fea.permute(0, 2, 1)    
     
     def pool_local(self, index, c, limited_gpu = False):
+        self.t0 = time.time()
         indexes = index['grid']
         
         if limited_gpu:
@@ -226,6 +206,7 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
         fea = self.scatter(c.permute(0, 2, 1), indexes)
 
+        
         if self.scatter == scatter_max:
             fea = fea[0]
             # gather feature back to points
@@ -239,8 +220,14 @@ class PatchLocalPoolPointnetLatent(nn.Module):
                 
         return fea.permute(0, 2, 1)
 
-
+    def print_time(self, description):
+        t1 = time.time()
+        print(f'Time elapsed in pooled: {t1 - self.t0:.3f}, {description}')
+        self.t0 = time.time()
+        
     def forward(self, inputs, limited_gpu = False):
+        self.t0 = time.time()
+        
         p = inputs['points']
         index = inputs['index']
         
@@ -259,18 +246,20 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             net = self.fc_pos(pp)
         else:
             net = self.fc_pos(p)
+            
         
         net = self.blocks[0](net)
         for idx_block, block in enumerate(self.blocks[1:]):
+            
             pooled = self.pool_local(index, net, limited_gpu = limited_gpu)
             net = torch.cat([net, pooled], dim=2)
-            net = block(net)            
 
+            net = block(net)     
         c = self.fc_c(net)
                 
         if 'grid' in self.plane_type:
             fea['grid'] = self.generate_grid_features(index['grid'], c)
-
+            
         unet = self.unet3d
 
         if limited_gpu:

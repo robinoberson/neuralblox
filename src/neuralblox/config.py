@@ -1,7 +1,7 @@
 from torch import nn
 import os
 from src.encoder import encoder_dict
-from src.neuralblox import models, training, training_fusion
+from src.neuralblox import models, training, training_fusion, training_fusion_old
 from src.neuralblox import generation, generation_fusion, generation_fusion_neighbors
 from src import data
 from src.common import decide_total_volume_range, update_reso
@@ -176,6 +176,41 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device, **kwargs):
 
     return trainer
 
+def get_trainer_overfit(model, model_merge, optimizer, cfg, device, **kwargs):
+    ''' Returns the trainer object.
+
+    Args:
+        model (nn.Module): the Occupancy Network model
+        optimizer (optimizer): pytorch optimizer object
+        cfg (dict): imported yaml config
+        device (device): pytorch device
+    '''
+    threshold = cfg['test']['threshold']
+    out_dir = cfg['training']['out_dir']
+    vis_dir = os.path.join(out_dir, 'vis')
+    input_type = cfg['data']['input_type']
+    query_n = cfg['data']['points_subsample']
+    unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
+    unet_depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] - 1
+    limited_gpu = cfg['training']['limited_gpu']
+    input_crop_size = cfg['data']['input_vol']
+    query_crop_size = cfg['data']['query_vol']
+
+    trainer = training_fusion_old.TrainerOld(
+        model, model_merge, optimizer, 
+        cfg = cfg,
+        device=device, input_type=input_type,
+        vis_dir=vis_dir, threshold=threshold,
+        eval_sample=cfg['training']['eval_sample'],
+        query_n = query_n,
+        unet_hdim = unet_hdim,
+        unet_depth = unet_depth,
+        limited_gpu = limited_gpu,
+        input_crop_size = input_crop_size,
+        query_crop_size = query_crop_size
+    )
+
+    return trainer
 
 def get_generator(model, cfg, device, **kwargs):
     ''' Returns the generator object.

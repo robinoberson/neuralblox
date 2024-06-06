@@ -49,9 +49,20 @@ class SubsamplePointcloud(object):
         occ = data['occ']
         #normals = data['normals']
 
-        indices = np.random.randint(points.shape[0], size=self.N)
-        data_out[None] = points[indices, :]
-        data_out['occ'] = occ[indices]
+        points_out = np.zeros((points.shape[0], self.N, 3), dtype=np.float32)
+        occ_out = np.zeros((points.shape[0], self.N), dtype=np.float32)
+        
+        for i in range(points.shape[0]):
+            points_i = points[i, :]
+            occ_i = occ[i, :]
+            
+            indices = np.random.randint(points_i.shape[0], size=self.N)
+            
+            points_out[i, :] = points_i[indices, :]
+            occ_out[i, :] = occ_i[indices]
+            
+        data_out[None] = points_out
+        data_out['occ'] = occ_out
         #data_out['normals'] = normals[indices, :]
 
         return data_out
