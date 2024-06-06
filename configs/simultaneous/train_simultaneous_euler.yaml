@@ -16,7 +16,7 @@ training:
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt/model_merging_1000.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
-  limited_gpu: false
+  limited_gpu: true
   save_data_viz: true
   log_comet: true
 test:
@@ -26,5 +26,3 @@ test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
 visualization: false
-
-
