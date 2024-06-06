@@ -116,6 +116,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=150)
 prev_lr = -1
 
 while True:
+    torch.cuda.empty_cache()
     epoch_it += 1
     # print(epoch_it)
     for batch in train_loader:
@@ -157,6 +158,7 @@ while True:
         
     # Save checkpoint
     if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
+        torch.cuda.empty_cache()
         print('Saving checkpoint')
         checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
         checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
