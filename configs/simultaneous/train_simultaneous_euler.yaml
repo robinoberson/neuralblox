@@ -12,8 +12,8 @@ model:
     grid_resolution: 24
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_may23/aug_model_20000.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt/model_backbone_1000.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt/model_merging_1000.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
   limited_gpu: false
