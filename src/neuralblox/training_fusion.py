@@ -83,12 +83,12 @@ class Trainer(BaseTrainer):
 
                 print(f"Module {name} on device: {next(module.parameters()).device}")
     def print_timing(self, operation):
-        pass
-        # t1 = time.time()
-        # print(f'Time elapsed, {self.timing_counter}: {t1 - self.t0:.3f}, {operation}')
+        # pass
+        t1 = time.time()
+        print(f'Time elapsed, {self.timing_counter}: {t1 - self.t0:.3f}, {operation}')
 
-        # self.t0 = time.time()
-        # self.timing_counter += 1
+        self.t0 = time.time()
+        self.timing_counter += 1
         
     def train_sequence_window(self, data_batch):
         self.t0 = time.time()

@@ -42,11 +42,12 @@ training:
   batch_size: 1
   model_selection_metric: iou
   model_selection_mode: maximize
-  print_every: 1000
   visualize_every: 10000
   validate_loss_every: 5000
-  checkpoint_every: 500
-  backup_every: 10000
+  checkpoint_every_epoch: 2
+  print_every: 100
+  backup_every: 1000
+
   n_workers: 8
   n_workers_val: 4
   reset_training: true

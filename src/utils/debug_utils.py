@@ -311,7 +311,7 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, s
     if inputs_distributed is not None:
         points_second = inputs_distributed
         pcd_inputs = o3d.geometry.PointCloud()
-        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()[::100]
         pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
         pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
         geos += [pcd_inputs]

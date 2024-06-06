@@ -50,7 +50,7 @@ batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 learning_rate = cfg['training']['lr']
 print_every = cfg['training']['print_every']
-checkpoint_every = cfg['training']['checkpoint_every']
+checkpoint_every = cfg['training']['checkpoint_every_epoch']
 
 model_selection_metric = cfg['training']['model_selection_metric']
 
@@ -149,29 +149,33 @@ while True:
                     lr = param_group['lr']
                     experiment.log_metric("learning_rate", lr, step=it)
 
-        # Save checkpoint
-        if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
-            print('Saving checkpoint')
-            checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
-            checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
-            
-            if cfg['training']['save_data_viz']: 
-                logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
-            
-                #dump all files 
-                path = os.path.join(cfg['training']['out_dir'], 'data_viz')
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                
-                with open(os.path.join(path, f'data_viz_{it}.pkl'), 'wb') as f:
-                    pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
-                print(f'Saved {os.path.join(path, f"data_viz_{it}.pkl")}')
-                del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
-                torch.cuda.empty_cache()
-                
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
             print('Backup checkpoint')
             checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it)
             checkpoint_io.save('model_backbone_%d.pt' % it, epoch_it=epoch_it, it=it)
         
+    # Save checkpoint
+    if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
+        print('Saving checkpoint')
+        checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
+        checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
+        if cfg['training']['save_data_viz']: 
+
+            with torch.no_grad():
+                trainer.model.eval()
+                trainer.model_merge.eval()
+                
+                for batch_idx, batch in enumerate(train_loader):
+                    logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
+                
+                    #dump all files 
+                    path = os.path.join(cfg['training']['out_dir'], 'data_viz')
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    
+                    with open(os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
+                        pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
+                    print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
+                    del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
+                    torch.cuda.empty_cache()
