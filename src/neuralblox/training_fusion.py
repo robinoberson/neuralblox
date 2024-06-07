@@ -158,7 +158,46 @@ class Trainer(BaseTrainer):
 
         self.iteration += 1
         self.print_timing('Finish')
-        return loss, None
+        return loss
+    
+    def validate_sequence_window(self, data_batch):
+        self.t0 = time.time()
+        self.timing_counter = 0
+        
+        n_inputs = 2
+        
+        if self.limited_gpu: torch.cuda.empty_cache()
+        
+        self.model.eval()
+        self.model_merge.eval()
+                
+        p_in, p_query = self.get_inputs_from_batch(data_batch)
+        p_full = torch.cat((p_in.view(-1, 4), p_query.view(-1, 4)), dim=0)
+        #Step 1 get the bounding box of the scene
+        self.vol_bound_all = self.get_crop_bound(p_in.view(-1, 4), self.input_crop_size, self.query_crop_size)
+
+        
+        inputs_distributed = self.distribute_inputs(p_in.unsqueeze(1), self.vol_bound_all)
+        # Encode latents 
+        latent_map_sampled, _ = self.encode_latent_map(inputs_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device))
+                  
+        # Stack latents 
+        latent_map_sampled_stacked = self.stack_latents_safe(latent_map_sampled, self.vol_bound_all)
+        # Merge latents
+        latent_map_sampled_merged = self.merge_latent_map(latent_map_sampled_stacked) 
+        # n_crops = latent_map_sampled_stacked.shape[0] * latent_map_sampled_stacked.shape[1] * latent_map_sampled_stacked.shape[2]
+        # latent_map_sampled_merged = latent_map_sampled_stacked.reshape(n_crops, *latent_map_sampled_stacked.shape[-4:])[:,:128, 6:12, 6:12, 6:12]
+        
+        if self.limited_gpu: torch.cuda.empty_cache()        
+
+        p_query_distributed = self.distribute_query(p_query, self.vol_bound_all)
+        
+        
+        logits_sampled = self.get_logits(latent_map_sampled_merged, p_query_distributed, torch.tensor(self.vol_bound_all['input_vol'], device = self.device), remove_padding=True)
+        occ = p_query_distributed[..., -1].squeeze(0)
+                
+        loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
+        return loss
 
     def get_elevated_voxels(self, inputs):
         inputs_reshaped = inputs.reshape(-1, *inputs.shape[2:]).detach().cpu().numpy()

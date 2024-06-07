@@ -372,25 +372,25 @@ def get_data_fields(mode, cfg):
             )
 
     
-    if mode in ('val', 'test'):
-        points_iou_file = cfg['data']['points_iou_file']
-        voxels_file = cfg['data']['voxels_file']
-        if points_iou_file is not None:
-            if input_type == 'pointcloud_crop':
-                fields['points_iou'] = data.PatchPointsField(
-                points_iou_file,
-                transform=points_transform_iou,
-                unpackbits=cfg['data']['points_unpackbits'],
-                multi_files=cfg['data']['multi_files']
-                )
-            else:
-                fields['points_iou'] = data.PointsField(
-                    points_iou_file,
-                    transform=points_transform_iou,
-                    unpackbits=cfg['data']['points_unpackbits'],
-                    multi_files=cfg['data']['multi_files']
-                )
-        if voxels_file is not None:
-            fields['voxels'] = data.VoxelsField(voxels_file)
+    # if mode in ('val', 'test'):
+    #     points_iou_file = cfg['data']['points_iou_file']
+    #     voxels_file = cfg['data']['voxels_file']
+    #     if points_iou_file is not None:
+    #         if input_type == 'pointcloud_crop':
+    #             fields['points_iou'] = data.PatchPointsField(
+    #             points_iou_file,
+    #             transform=points_transform_iou,
+    #             unpackbits=cfg['data']['points_unpackbits'],
+    #             multi_files=cfg['data']['multi_files']
+    #             )
+    #         else:
+    #             fields['points_iou'] = data.PointsField(
+    #                 points_iou_file,
+    #                 transform=points_transform_iou,
+    #                 unpackbits=cfg['data']['points_unpackbits'],
+    #                 multi_files=cfg['data']['multi_files']
+    #             )
+    #     if voxels_file is not None:
+    #         fields['voxels'] = data.VoxelsField(voxels_file)
 
     return fields

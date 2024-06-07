@@ -50,7 +50,8 @@ batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
 learning_rate = cfg['training']['lr']
 print_every = cfg['training']['print_every']
-checkpoint_every = cfg['training']['checkpoint_every_epoch']
+checkpoint_interval = 60 * cfg['training']['checkpoint_interval_minutes']
+
 
 model_selection_metric = cfg['training']['model_selection_metric']
 
@@ -68,6 +69,7 @@ if not os.path.exists(cfg['training']['out_dir']):
     
 # Dataset
 train_dataset = config.get_dataset('train', cfg)
+val_dataset = config.get_dataset('val', cfg)
 
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, 
@@ -76,6 +78,15 @@ train_loader = torch.utils.data.DataLoader(
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
+val_loader = torch.utils.data.DataLoader(
+    val_dataset, batch_size=batch_size, 
+    num_workers=cfg['training']['n_workers'], 
+    shuffle=False,
+    collate_fn=data.collate_remove_none,
+    worker_init_fn=data.worker_init_fn)
+
+print(f'Number of training samples: {len(train_dataset)}')
+print(f'Number of validation samples: {len(val_dataset)}')
 # Model
 model = config.get_model(cfg, device=device, dataset=train_dataset)
 
@@ -111,18 +122,19 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=150)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 
 prev_lr = -1
+last_checkpoint_time = time.time()
 
 while True:
     torch.cuda.empty_cache()
     epoch_it += 1
     # print(epoch_it)
-    for batch in train_loader:
+    for idx_batch, batch in enumerate(train_loader):
         it += 1
         
-        loss, losses = trainer.train_sequence_window(batch)
+        loss = trainer.train_sequence_window(batch)
         
         scheduler.step(loss)
         
@@ -136,9 +148,7 @@ while True:
                     
         if log_comet: 
             experiment.log_metric('train_loss', loss, step=it)
-            # for idx_elem, elem in enumerate(losses):
-            #     experiment.log_metric(f'train_loss_{idx_elem}', elem, step=it)
-
+        
         # Print output
         if print_every > 0 and (it % print_every) == 0:
             t = datetime.datetime.now()
@@ -157,9 +167,17 @@ while True:
             checkpoint_io.save('model_backbone_%d.pt' % it, epoch_it=epoch_it, it=it)
         
     # Save checkpoint
-    if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
-        torch.cuda.empty_cache()
+    current_time = time.time()
+    if (current_time - last_checkpoint_time) >= checkpoint_interval:
+        last_checkpoint_time = current_time
+
         print('Saving checkpoint')
+
+        path = os.path.join(cfg['training']['out_dir'], 'data_viz')
+        if not os.path.exists(path):
+            os.makedirs(path)
+            
+        torch.cuda.empty_cache()
         checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
         checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
         if cfg['training']['save_data_viz']: 
@@ -169,15 +187,36 @@ while True:
                 trainer.model_merge.eval()
                 
                 for batch_idx, batch in enumerate(train_loader):
+                    if batch_idx > 10 :
+                        break
                     logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
                 
                     #dump all files 
-                    path = os.path.join(cfg['training']['out_dir'], 'data_viz')
-                    if not os.path.exists(path):
-                        os.makedirs(path)
+
                     
-                    with open(os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
+                    with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
                         pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
-                    print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
+                    # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
                     del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
                     torch.cuda.empty_cache()
+                
+                val_loss = 0
+                for batch_idx, batch in enumerate(val_loader):
+                    val_loss += trainer.validate_sequence_window(batch)
+                    if batch_idx > 10 :
+                        continue 
+                    
+                    logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
+                    #dump all files 
+                    
+                    with open(os.path.join(path, f"data_viz_val_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
+                        pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
+                    # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
+                    del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
+                    torch.cuda.empty_cache()
+                    
+                val_loss = val_loss / len(val_loader)
+                print(f'val_loss = {val_loss}, {len(val_loader)}')
+
+                if log_comet: 
+                    experiment.log_metric('val_loss', val_loss, step=it)

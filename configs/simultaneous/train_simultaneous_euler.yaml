@@ -5,8 +5,6 @@ data:
   grid_resolution: 24
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.0
-  points_subsample: 16384
-  points_iou_subsample: 16384
 model:
   encoder_kwargs:
     grid_resolution: 24
@@ -14,8 +12,6 @@ training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot
   starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt/model_backbone_25000.pt
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt/model_merging_25000.pt
-  model_backbone: model_backbone.pt
-  model_merging: model_merging.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: true

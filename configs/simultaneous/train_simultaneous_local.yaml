@@ -10,12 +10,9 @@ model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  checkpoint_every_epoch: 2
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_box
   starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/None.pt
-  model_backbone: model_backbone.pt
-  model_merging: model_merging.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: false
