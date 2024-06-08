@@ -302,16 +302,19 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, s
     
     pcd = o3d.geometry.PointCloud()
     colors = np.zeros((values_gt.shape[0], 3))
-    colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
-    colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
-    colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
+    # colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
+    # colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
+    # colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
+    
+    colors[values_sampled == 1] = [1.0, 0.0, 0.0] # blue
+    colors[both_occ == 1] = [1.0, 0.0, 0.0] # purple
     
     mask = np.any(colors != [0, 0, 0], axis=1)
     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
     if inputs_distributed is not None:
         points_second = inputs_distributed
         pcd_inputs = o3d.geometry.PointCloud()
-        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()[::100]
+        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()[::1]
         pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
         pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
         geos += [pcd_inputs]

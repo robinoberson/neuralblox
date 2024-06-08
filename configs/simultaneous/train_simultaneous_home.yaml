@@ -1,13 +1,13 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: null
-  path: /cluster/scratch/roberson/data/backbone/window_size_mixed_0.6_1.6_empty_full
+  path: /home/robin/Dev/MasterThesis/data/output_fusion/test_full_scenes_test
   grid_resolution: 24
 model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_backbone/pointcloud/window_size_mixed_0.6_1.6_empty_new_reso24_june
+  out_dir: /home/robin/Dev/MasterThesis/neuralblox/out_simultaneous/simultaneous_training_box
   starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
   model_backbone: model_backbone.pt
