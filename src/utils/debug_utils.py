@@ -306,8 +306,8 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, s
     # colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
     # colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
     
-    colors[values_sampled == 1] = [1.0, 0.0, 0.0] # blue
-    colors[both_occ == 1] = [1.0, 0.0, 0.0] # purple
+    colors[values_sampled == 1] = [0.0, 0.0, 1.0] # blue
+    colors[both_occ == 1] = [0.0, 0.0, 1.0] # purple
     
     mask = np.any(colors != [0, 0, 0], axis=1)
     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
