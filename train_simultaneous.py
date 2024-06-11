@@ -186,6 +186,8 @@ while True:
                 trainer.model.eval()
                 trainer.model_merge.eval()
                 
+                print(f'Saving {os.path.join(path, f"data_viz_batch_idx_{epoch_it}.pkl")}')
+
                 for batch_idx, batch in enumerate(train_loader):
                     if batch_idx > 10 :
                         break
@@ -193,7 +195,6 @@ while True:
                 
                     #dump all files 
 
-                    
                     with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
                         pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
                     # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
