@@ -312,12 +312,13 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, s
     mask = np.any(colors != [0, 0, 0], axis=1)
     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
     if inputs_distributed is not None:
-        points_second = inputs_distributed
-        pcd_inputs = o3d.geometry.PointCloud()
-        inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()[::1]
-        pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-        pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
-        geos += [pcd_inputs]
+        for i in range(inputs_distributed.shape[0]):
+            
+            pcd_inputs = o3d.geometry.PointCloud()
+            inputs_reshaped = inputs_distributed[i].reshape(-1, 4).detach().cpu().numpy()[::10]
+            pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+            pcd_inputs.paint_uniform_color([1., 0.5 * i, 0]) 
+            geos += [pcd_inputs]
         
     colors = colors[mask]
     pcd.points = o3d.utility.Vector3dVector(p_full[mask])

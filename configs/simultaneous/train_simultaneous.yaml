@@ -44,7 +44,7 @@ training:
   model_selection_mode: maximize
   visualize_every: 10000
   validate_loss_every: 5000
-  checkpoint_interval_minutes: 30
+  : 30
   print_every: 100
   backup_every: 1000
 
@@ -55,13 +55,13 @@ training:
   log_comet: false
   lr: 0.001
   lr_reduce_factor: 0.93
-  lr_patience: 1000
+  lr_patience: 2000
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
-  limited_gpu: false
-  save_data_viz: false
+  limited_gpu: true
+  save_data_viz: true
 test:
   threshold: 0.2
   eval_mesh: true
