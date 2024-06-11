@@ -193,30 +193,49 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
 
         return fea_grid
-    
-    def pool_local(self, index, c, limited_gpu = False):
+    def pool_local(self, index, c, limited_gpu=False):
+        # Memory efficient version
+        
+        indexes = index['grid']
+        n_batch, n_points, n_features = c.shape
+        
+        unique_indexes, inverse_indices = torch.unique(indexes.reshape(-1), return_inverse=True)
+        n_unique_indexes = len(unique_indexes)
+        
+        sum_tensor_flat = torch.zeros(n_batch, n_features, n_unique_indexes, dtype=torch.float).reshape(-1).to(c.device)
+        count_tensor_flat = torch.zeros(n_batch, n_features, n_unique_indexes, dtype=torch.float).reshape(-1).to(c.device)
+        
+        feature_indices = torch.arange(n_features).repeat_interleave(n_points).to(c.device)
+        base_indices = feature_indices * n_unique_indexes
+        
+        inverse_indices_expanded = inverse_indices.view(n_batch, 1, n_points).expand(-1, n_features, -1)
+        base_indices_expanded = base_indices.view(1, n_features, n_points).expand(n_batch, -1, -1).to(c.device)
+        batch_offset = (torch.arange(n_batch) * n_features * n_unique_indexes).view(n_batch, 1, 1).to(c.device)
+        
+        inverse_indices_flat = (inverse_indices_expanded + base_indices_expanded + batch_offset).reshape(-1)
+        
+        sum_tensor_flat.index_add_(0, inverse_indices_flat, c.permute(0, 2, 1).reshape(-1))
+        count_tensor_flat.index_add_(0, inverse_indices_flat, torch.ones_like(c.permute(0, 2, 1)).reshape(-1))
+        
+        mean_values = sum_tensor_flat / count_tensor_flat
+        final_tensor = mean_values[inverse_indices_flat].view(n_batch, n_features, n_points)
+
+        return final_tensor.permute(0, 2, 1)
+                
+    def pool_local_fast(self, index, c, limited_gpu = False):
         self.t0 = time.time()
         indexes = index['grid']
-        
-        if limited_gpu:
-            c = c.to('cpu')
-            indexes = indexes.to('cpu')
             
         bs, fea_dim = c.size(0), c.size(2)
-
-        fea = self.scatter(c.permute(0, 2, 1), indexes)
-
         
+        fea = torch.empty(bs, fea_dim, 2 * self.reso_grid ** 3, requires_grad=True).to(c.device)
+
         if self.scatter == scatter_max:
-            fea = fea[0]
-            # gather feature back to points
+            fea, _ = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
+        else: 
+            fea = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
                 
         fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
-        
-        if limited_gpu:
-            c = c.to('cuda')
-            indexes = indexes.to('cuda')
-            fea = fea.to('cuda')
                 
         return fea.permute(0, 2, 1)
 

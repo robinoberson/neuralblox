@@ -508,7 +508,7 @@ class Trainer(BaseTrainer):
         vol_bound = vol_bound.reshape(n_inputs * n_crop, 2, 3)
 
         if self.limited_gpu:
-            n_voxels_max = 20
+            n_voxels_max = 40
         else:
             n_voxels_max = 1000
         
