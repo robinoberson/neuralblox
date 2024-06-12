@@ -44,7 +44,7 @@ training:
   model_selection_mode: maximize
   visualize_every: 10000
   validate_loss_every: 5000
-  : 30
+  checkpoint_interval_minutes: 30
   print_every: 100
   backup_every: 1000
 
