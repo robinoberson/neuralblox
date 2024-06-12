@@ -11,16 +11,22 @@ model:
     grid_resolution: 24
 training:
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_box
-  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/None.pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: false
 test:
-  threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
-visualization: false
+generation:
+  threshold: 0.02
+  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
+  generator_type: neighbors
+  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
+  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
+  resolution_0: 50
 
+visualization: true

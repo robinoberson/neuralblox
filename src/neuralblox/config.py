@@ -3,8 +3,10 @@ import os
 from src.encoder import encoder_dict
 from src.neuralblox import models, training, training_fusion, training_fusion_old
 from src.neuralblox import generation, generation_fusion, generation_fusion_neighbors
-from src import data
+from src import data, config, layers
 from src.common import decide_total_volume_range, update_reso
+from src.checkpoints import CheckpointIO
+import torch.optim as optim
 
 def get_model(cfg, device=None, dataset=None, **kwargs):
     ''' Return the Occupancy Network model.
@@ -312,7 +314,7 @@ def get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points
             model,
             model_merge,
             trainer,
-            threshold=cfg['test']['threshold'],
+            threshold=cfg['generation']['threshold'],
             device=device,
             resolution0=cfg['generation']['resolution_0'],
             upsampling_steps=cfg['generation']['upsampling_steps'],
@@ -344,6 +346,55 @@ def get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points
         
     return generator
 
+def get_generator_simultaneous(cfg, device):
+    ''' Returns the generator object.
+
+    Args:
+        model (nn.Module): the backbone encoder and decoder which are used
+        model_merge : the fusion network
+        sample_points : points sampled to define scene ranges
+        cfg (dict): config dictionary
+        device (device): pytorch device
+    '''
+
+    grid_reso = cfg['data']['grid_resolution']
+    input_vol_size = cfg['data']['input_vol']
+    query_vol_size = cfg['data']['query_vol']
+
+    vol_bound = {'query_crop_size': query_vol_size,
+                    'input_crop_size': input_vol_size,
+                    'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
+                    'reso': grid_reso}          
+    model = config.get_model(cfg, device=device)
+    model_merging = layers.Conv3D_one_input().to(device)
+
+    checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
+    checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
+
+    try:
+        checkpoint_io.load(cfg['generation']['model_backbone_file'])
+        checkpoint_io_merging.load(cfg['generation']['model_merging_file'])
+        
+    except FileExistsError as e:
+        print(f'No checkpoint file found! {e}')
+        return None
+    
+    optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
+    trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
+    
+    generator = generation_fusion_neighbors.Generator3DNeighbors(
+            model,
+            model_merging,
+            trainer,
+            threshold=cfg['generation']['threshold'],
+            device=device,
+            resolution0=cfg['generation']['resolution_0'],
+            upsampling_steps=cfg['generation']['upsampling_steps'],
+            padding=cfg['data']['padding'],
+            vol_bound=vol_bound,
+        )
+        
+    return generator
 def get_data_fields(mode, cfg):
     ''' Returns the data fields.
 

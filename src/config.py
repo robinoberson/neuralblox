@@ -143,6 +143,19 @@ def get_generator_fusion(model, model_merge, trainer, cfg, sample_points = None,
     generator = method_dict[method].config.get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points=sample_points)
     return generator
 
+def get_generator_simultaneous(cfg, device):
+    ''' Returns a generator instance.
+
+    Args:
+        model (nn.Module): the backbone encoder and decoder which are used
+        model_merge : the fusion network
+        sample_points : points sampled to define scene ranges
+        cfg (dict): config dictionary
+        device (device): pytorch device
+    '''
+    method = cfg['method']
+    generator = method_dict[method].config.get_generator_simultaneous(cfg, device)
+    return generator
 # Datasets
 def get_dataset(mode, cfg, return_idx=False):
     ''' Returns the dataset.

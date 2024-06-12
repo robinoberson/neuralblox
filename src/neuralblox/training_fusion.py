@@ -73,15 +73,7 @@ class Trainer(BaseTrainer):
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
-    def check_model_device(self, model):
-        for name, param in model.named_parameters():
-            #print only if cpu 
-            if param.device == 'cpu':
-                print(f"Parameter {name} on device: {param.device}")
-        for name, module in model.named_children():
-            if param.device == 'cpu':
-
-                print(f"Module {name} on device: {next(module.parameters()).device}")
+            
     def print_timing(self, operation):
         pass
         # t1 = time.time()
@@ -93,9 +85,7 @@ class Trainer(BaseTrainer):
     def train_sequence_window(self, data_batch):
         self.t0 = time.time()
         self.timing_counter = 0
-        
-        n_inputs = 2
-        
+                
         if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.train()
@@ -105,7 +95,6 @@ class Trainer(BaseTrainer):
         self.print_timing('Initialization')
         
         p_in, p_query = self.get_inputs_from_batch(data_batch)
-        p_full = torch.cat((p_in.view(-1, 4), p_query.view(-1, 4)), dim=0)
         #Step 1 get the bounding box of the scene
         self.vol_bound_all = self.get_crop_bound(p_in.view(-1, 4), self.input_crop_size, self.query_crop_size)
 
@@ -400,7 +389,7 @@ class Trainer(BaseTrainer):
             pi_in = p_stacked_batch[..., :3].clone()
             pi_in = {'p': pi_in}
             p_n = {}
-            p_n[fea_type] = p_n_stacked_batch[..., :3].clone()
+            p_n['grid'] = p_n_stacked_batch[..., :3].clone()
             pi_in['p_n'] = p_n
             c = {}
             latent_map_full_batch_decoded = self.unet.decode(latent_map_full_batch, self.features_shapes)

@@ -70,8 +70,16 @@ test:
   model_merging_file: model_merging.pt
 
 generation:
-  vis_n_outputs: 2
+  threshold: 0.02
+  generation_dir: generation
+  generator_type: neighbors
+  model_backbone_file: model.pt
+  model_merging_file: model_merging.pt
   refine: false
   n_x: 128
   n_z: 1
-  resolution_0: 100
+  vis_n_outputs: 2
+  sliding_window: True
+  resolution_0: 30
+  voxel_threshold: 0.001
+
