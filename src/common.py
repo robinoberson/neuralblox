@@ -401,8 +401,8 @@ def normalize_coord(p, vol_range, plane='xz'):
         # coord[:, :, dim] = coord[:, :, dim] * range_diff[:, dim].unsqueeze(1) + vol_range[:, 0, dim].unsqueeze(1)
         coord[..., dim] = (coord[..., dim] - vol_range[:, 0, dim].unsqueeze(1)) / (range_diff[:, dim].unsqueeze(1))
 
-    # bb_min_coord = torch.min(coord, dim=-2)[0]
-    # bb_max_coord = torch.max(coord, dim=-2)[0]
+    bb_min_coord = torch.min(coord, dim=-2)[0]
+    bb_max_coord = torch.max(coord, dim=-2)[0]
     
     if torch.max(coord) > 1.0 or torch.min(coord) < 0.0:
         print('Problem with coord')

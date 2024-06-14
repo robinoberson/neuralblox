@@ -99,12 +99,20 @@ class Generator3DNeighbors(object):
                 raise ValueError('inputs should be a tensor with shape (2, n, 4)')
             
             self.trainer.vol_bound_all = self.trainer.get_crop_bound(inputs.view(-1, 4), self.trainer.input_crop_size, self.trainer.query_crop_size)
-
+            t0 = time.time()
+            t00 = time.time()
             inputs_distributed = self.trainer.distribute_inputs(inputs.unsqueeze(1), self.trainer.vol_bound_all)
+            print('time to distribute inputs', time.time() - t0)
+            t0 = time.time()
             latent_map_sampled, _ = self.trainer.encode_latent_map(inputs_distributed, torch.tensor(self.trainer.vol_bound_all['input_vol'], device = self.device))
+            print('time to encode latent map', time.time() - t0)
+            t0 = time.time()
             latent_map_sampled_stacked = self.trainer.stack_latents_safe(latent_map_sampled, self.trainer.vol_bound_all)
+            print('time to stack latents', time.time() - t0)
+            t0 = time.time()
             latent_map_sampled_merged = self.trainer.merge_latent_map(latent_map_sampled_stacked) 
-        
+            print('time to encode latent map', time.time() - t0)
+            print(f'time to encode latent map {time.time() - t00}')
         return latent_map_sampled_merged, inputs_distributed
     
     def generate_logits(self, latent_map_sampled_merged, p_query, inputs_distributed, visualize=False):
