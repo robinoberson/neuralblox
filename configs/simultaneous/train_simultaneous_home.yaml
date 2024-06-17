@@ -1,15 +1,15 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: null
-  path: /home/robin/Dev/MasterThesis/data/output_fusion/test_full_scenes_test
+  path: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/gt_robot
   grid_resolution: 24
 model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  out_dir: /home/robin/Dev/MasterThesis/neuralblox/out_simultaneous/simultaneous_training_box
-  starting_model_backbone_file: /scratch2/roberson/neuralblox/out_backbone/pointcloud/trained_models/aug_model_20000.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_fusion/temp_overfit/model_merging_0.pt
+  out_dir: /home/robin/Dev/MasterThesis/neuralblox/out_simultaneous/sequential_training
+  starting_model_backbone_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_backbone.pt
+  starting_model_merging_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_merging.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
 test:
@@ -18,4 +18,11 @@ test:
   eval_pointcloud: false
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
+generation:
+  threshold: 0.02
+  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
+  generator_type: neighbors
+  model_backbone_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_backbone.pt
+  model_merging_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_merging.pt
+  resolution_0: 50
 
