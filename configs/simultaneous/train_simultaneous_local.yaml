@@ -17,9 +17,9 @@ training:
   save_data_viz: true
   log_comet: false
 
-  checkpoint_interval_minutes: 0
+  # checkpoint_interval_minutes: 0
   # backup_every: 1
-  print_every: 1
+  # print_every: 1
 test:
   eval_mesh: true
   eval_pointcloud: false

@@ -13,6 +13,8 @@ import time
 import yaml
 from torch.nn import functional as F
 from torch.autograd import gradcheck
+import torch.profiler
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 torch.manual_seed(42)
@@ -123,8 +125,17 @@ class SequentialTrainer(BaseTrainer):
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
-        
+           
+    def print_timing(self, operation):
+        return 
+        t1 = time.time()
+        print(f'Time elapsed, {self.timing_counter}: {t1 - self.t0:.3f}, {operation}')
+
+        self.t0 = time.time()
+        self.timing_counter += 1
     def train_sequence_window(self, data_batch):
+        self.t0 = time.time()
+        self.timing_counter = 0
         
         if self.limited_gpu: torch.cuda.empty_cache()
         
@@ -135,23 +146,23 @@ class SequentialTrainer(BaseTrainer):
         p_in, p_query = self.get_inputs_from_batch(data_batch)
         p_query_distributed, centers_query = self.get_distributed_inputs(p_query)
         
+        
         n_sequence = p_in.shape[0]
         
         total_loss = 0
         for i in range(n_sequence):
+            self.timing_counter = 0
+
             inputs_frame = p_in[i]
-            print(i)
             if i == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
-                
             else:
                 latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
             
             p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
             # tup.append([p_stacked, latents, centers])
             # return p_stacked, latents, centers
-            
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
             loss.backward()
@@ -161,7 +172,6 @@ class SequentialTrainer(BaseTrainer):
             self.iteration += 1
 
             total_loss += loss.item()
-            
         return total_loss
     def fuse_cold_start(self, inputs_frame):
         latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
@@ -200,7 +210,7 @@ class SequentialTrainer(BaseTrainer):
         p_n_stacked = normalize_coord(p_stacked, vol_bound)
 
         if self.limited_gpu:
-            n_batch_max = 10
+            n_batch_max = 25
         else:
             n_batch_max = 1000
 
@@ -256,23 +266,23 @@ class SequentialTrainer(BaseTrainer):
         return latent_map
     
     def encode_distributed_inputs(self, inputs_frame):
+        self.t0 = time.time()
         inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame)
-        
+        self.print_timing('Get distributed inputs')
         neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
-
+        self.print_timing('Compute neighbours')
         
         inputs_frame_distributed_empty, centers_frame_empty = self.get_empty_neighbours(neighbouring_centers, centers_frame_occupied)
-
+        self.print_timing('Get empty neighbours')
         inputs_frame_distributed = torch.cat((inputs_frame_distributed_occupied, inputs_frame_distributed_empty), axis = 0)
         centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0)
-                
+        self.print_timing('Concatenate')
         latents_frame = self.encode_distributed(inputs_frame_distributed, centers_frame)
-        
+        self.print_timing('Encode distributed')
         return latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
     
     def fuse_inputs(self, inputs_frame):
         latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
-        
         voxel_grid_temp = VoxelGrid()
 
         for idx, (center, points, encoded_latent) in enumerate(zip(centers_frame, inputs_frame_distributed, latents_frame)):
@@ -282,17 +292,14 @@ class SequentialTrainer(BaseTrainer):
             else:
                 voxel_grid_temp.add_voxel(center, points, encoded_latent, overwrite = True)
                 self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
-                    
         #stack the latents
         latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp)
         # stacked_points = self.stack_points(centers_frame_occupied, voxel_grid_temp)
         # return stacked_points, centers_frame_occupied
-    
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
-        
         for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
             self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
-            
+        
         return latent_map_stacked_merged, centers_frame_occupied
         # return stacked_points, centers_frame_occupied
         
