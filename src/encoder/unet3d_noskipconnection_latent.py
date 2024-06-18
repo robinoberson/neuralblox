@@ -535,7 +535,7 @@ class Abstract3DUNet(nn.Module):
         
         return x
 
-    def forward(self, x, return_feature_maps=False, limited_gpu = False):
+    def forward(self, x, return_feature_maps=False, decode = True, limited_gpu = False):
         # encoder part
         encoders_features_shapes_return = []
 
@@ -550,19 +550,22 @@ class Abstract3DUNet(nn.Module):
 
         encoders_features_shapes_return = encoders_features_shapes_return[1:]
         
-        # decoder part
-        for decoder, encoders_features_shapes in zip(self.decoders, encoders_features_shapes_return):
-            # pass the output from the corresponding encoder and the output
-            # of the previous decoder
-            x = decoder(encoders_features_shapes, x)
+        if decode:
+            # decoder part
+            for decoder, encoders_features_shapes in zip(self.decoders, encoders_features_shapes_return):
+                # pass the output from the corresponding encoder and the output
+                # of the previous decoder
+                x = decoder(encoders_features_shapes, x)
 
-        x = self.final_conv(x)
+            x = self.final_conv(x)
 
-        # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs
-        # logits and it's up to the user to normalize it before visualising with tensorboard or computing validation metric
-        if self.testing and self.final_activation is not None:
-            x = self.final_activation(x)
-
+            # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs
+            # logits and it's up to the user to normalize it before visualising with tensorboard or computing validation metric
+            if self.testing and self.final_activation is not None:
+                x = self.final_activation(x)
+        else: 
+            x = None
+            
         if return_feature_maps:
             return x, latent_code, encoders_features_shapes_return
         else:

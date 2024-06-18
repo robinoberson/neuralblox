@@ -1,7 +1,7 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: null
-  path: /cluster/scratch/roberson/data/simultaneous/gt_robot
+  path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot
   grid_resolution: 24
   pointcloud_noise: 0.005
   # pointcloud_noise: 0.0

@@ -1,6 +1,6 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
-  classes: null
+  classes: ['2024-03-27_11-27-52']
   # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
   path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot
   grid_resolution: 24
@@ -10,12 +10,16 @@ model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  out_dir: /scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_box
+  out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: false
+
+  checkpoint_interval_minutes: 0
+  # backup_every: 1
+  print_every: 1
 test:
   eval_mesh: true
   eval_pointcloud: false
@@ -29,4 +33,4 @@ generation:
   model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   resolution_0: 50
 
-visualization: true
+visualization: false

@@ -56,6 +56,10 @@ class VoxelGrid:
         h = self.hasher.compute_hash(center)
         points = self.points_table.get(h, None)
         return points
+    
+    def detach_latents(self):
+        self.latents_table = {k: v.detach() for k, v in self.latents_table.items()}
+        
     def reset(self):
         self.points_table = {}
         self.centers_table = {}
@@ -116,7 +120,6 @@ class SequentialTrainer(BaseTrainer):
             self.location = 'local'
         else:
             self.location = 'euler'
-        
 
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
@@ -134,7 +137,7 @@ class SequentialTrainer(BaseTrainer):
         
         n_sequence = p_in.shape[0]
         
-        tup = []
+        total_loss = 0
         for i in range(n_sequence):
             inputs_frame = p_in[i]
             print(i)
@@ -151,17 +154,21 @@ class SequentialTrainer(BaseTrainer):
             
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
-            # loss.backward()
+            loss.backward()
+            self.visualize_logits(logits_sampled, p_stacked)
+            self.voxel_grid.detach_latents()
             self.optimizer.step()
             self.iteration += 1
 
-        return loss
+            total_loss += loss.item()
+            
+        return total_loss
     def fuse_cold_start(self, inputs_frame):
         latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
         for center, points, encoded_latent in zip(centers_frame, inputs_frame_distributed, latents_frame):
             self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = False)
             
-        latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied)
+        latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied, self.voxel_grid)
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
 
         for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
@@ -289,8 +296,8 @@ class SequentialTrainer(BaseTrainer):
         return latent_map_stacked_merged, centers_frame_occupied
         # return stacked_points, centers_frame_occupied
         
-    def stack_latents_cold_start(self, centers_frame_occupied):
-        c, h, w, d = self.voxel_grid.latent_shape 
+    def stack_latents_cold_start(self, centers_frame_occupied, voxel_grid):
+        c, h, w, d = voxel_grid.latent_shape 
         
         latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d).to(device=self.device)
         
@@ -301,7 +308,7 @@ class SequentialTrainer(BaseTrainer):
             stacked_voxel_frame = None
             
             for idx_offset, offset in enumerate(offsets):
-                latent = self.voxel_grid.get_latent(center + offset)
+                latent = voxel_grid.get_latent(center + offset)
                 if latent is None:
                     print('latent_existing is None, problem in cold start')
                     
@@ -469,7 +476,7 @@ class SequentialTrainer(BaseTrainer):
             else:
                 fea, _ = self.model.encode_inputs(input_cur_batch)
                 
-            _, latent_map_batch, self.features_shapes = self.unet(fea, True)
+            _, latent_map_batch, self.features_shapes = self.unet(fea, return_feature_maps=True, decode = False, limited_gpu = False)
             # if self.limited_gpu: latent_map_batch = latent_map_batch.to('cpu')
             if self.limited_gpu: 
                 del fea
@@ -609,3 +616,107 @@ class SequentialTrainer(BaseTrainer):
         centers_frame_occupied = centers[voxels_occupied]
 
         return inputs_frame_occupied, centers_frame_occupied
+    
+    def visualize_logits(self, logits_sampled, p_query, inputs_distributed=None, force_viz = False):
+        geos = []
+        
+        current_dir = os.getcwd()
+            
+        file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
+        # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
+
+        try:
+            with open(file_path, 'r') as f:
+                config = yaml.safe_load(f)
+        except:
+            return
+            
+        if not(force_viz or config['visualization']):
+            return
+
+        import open3d as o3d
+        p_stacked = p_query[..., :3]
+        
+        p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
+
+        occ_sampled = logits_sampled.detach().cpu().numpy()
+
+        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+        
+        values_sampled = values_sampled.reshape(-1)
+
+        threshold = 0.5
+
+        values_sampled[values_sampled < threshold] = 0
+        values_sampled[values_sampled >= threshold] = 1
+        
+        values_gt = p_query[..., -1].reshape(-1).detach().cpu().numpy()
+
+        both_occ = np.logical_and(values_gt, values_sampled)
+        
+        pcd = o3d.geometry.PointCloud()
+        colors = np.zeros((values_gt.shape[0], 3))
+        colors[values_gt == 1] = [1, 0, 0] # red
+        colors[values_sampled == 1] = [0, 0, 1] # blue
+        colors[both_occ == 1] = [0, 1, 0] # green
+        
+        mask = np.any(colors != [0, 0, 0], axis=1)
+        # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
+        if inputs_distributed is not None:
+            points_second = inputs_distributed
+            pcd_inputs = o3d.geometry.PointCloud()
+            inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
+            pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
+            pcd_inputs.paint_uniform_color([1., 0.5, 0]) # blue
+            geos += [pcd_inputs]
+            
+        colors = colors[mask]
+        pcd.points = o3d.utility.Vector3dVector(p_full[mask])
+        bb_min_points = np.min(p_full[mask], axis=0)
+        bb_max_points = np.max(p_full[mask], axis=0)
+        # print(bb_min_points, bb_max_points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        
+        geos += [pcd, base_axis]
+        o3d.visualization.draw_geometries(geos)
+    
+    def validate_sequence(self, data_batch):        
+        if self.limited_gpu: torch.cuda.empty_cache()
+        
+        self.model.eval()
+        self.model_merge.eval()
+        total_loss = 0
+        with torch.no_grad():
+            p_in, p_query = self.get_inputs_from_batch(data_batch)
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query)
+            
+            n_sequence = p_in.shape[0]
+            
+            tup = []
+            for i in range(n_sequence):
+                tup_seq = []
+                inputs_frame = p_in[i]
+                print(i)
+                if i == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
+                    
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
+                
+                p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                # return p_stacked, latents, centers
+                
+                logits_sampled = self.get_logits(p_stacked, latents, centers)
+                tup_seq += [p_stacked, latents, inputs_frame, logits_sampled]
+
+                loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
+                total_loss += loss.item()
+                tup_seq += [loss.item()]
+                
+                tup.append(tup_seq)    
+                            
+        tup.append(total_loss)
+        
+        return tup

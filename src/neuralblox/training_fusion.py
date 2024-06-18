@@ -232,7 +232,6 @@ class Trainer(BaseTrainer):
         geos = []
         
         current_dir = os.getcwd()
-
             
         file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
         # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'

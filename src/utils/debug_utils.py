@@ -277,7 +277,7 @@ def visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed=No
     if show: o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
     return pcd, pcd_inputs
 
-def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, show=False):
+def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed = None, show=False):
     geos = []
     import open3d as o3d
 
@@ -331,7 +331,7 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed, s
     
     geos += [pcd, base_axis]
     if show: o3d.visualization.draw_geometries(geos)
-    return pcd, pcd_inputs
+    return pcd
 
 def train_and_evaluate(trainer, dataloader, cfg, idx_config, num_iter=15000, lr=0.001, save_checkpoint=False, checkpoint_io_merging=None, experiment = None, debug = False):
     # Move model to the device

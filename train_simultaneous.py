@@ -108,7 +108,7 @@ except FileExistsError as e:
 load_dict = dict()
     
 optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=learning_rate)
-trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
+trainer = config.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
 
 epoch_it = 0
 it = 0
@@ -191,33 +191,31 @@ while True:
                 for batch_idx, batch in enumerate(train_loader):
                     if batch_idx > 10 :
                         break
-                    logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
+                    tup = trainer.validate_sequence(batch)
                 
                     #dump all files 
-
                     with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
-                        pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
+                        pickle.dump(tup, f)
                     # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
-                    del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
-                    torch.cuda.empty_cache()
-                
+
+                tup = []
                 val_loss = 0
                 for batch_idx, batch in enumerate(val_loader):
-                    val_loss += trainer.validate_sequence_window(batch)
-                    if batch_idx > 10 :
+                    if batch_idx > 10:
                         continue 
                     
-                    logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int = trainer.save_data_visualization(batch)
-                    #dump all files 
+                    tup = trainer.validate_sequence(batch)                    #dump all files 
+                    val_loss += tup[-1]
                     
                     with open(os.path.join(path, f"data_viz_val_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
-                        pickle.dump([logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int], f)
+                        pickle.dump(tup, f)
                     # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
-                    del logits_sampled, p_query_distributed, inputs_distributed, latent_map_sampled_int
-                    torch.cuda.empty_cache()
+            
                     
                 val_loss = val_loss / len(val_loader)
                 print(f'val_loss = {val_loss}, {len(val_loader)}')
 
                 if log_comet: 
                     experiment.log_metric('val_loss', val_loss, step=it)
+    else:
+        print('Not time to save checkpoint')
