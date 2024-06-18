@@ -697,7 +697,7 @@ class SequentialTrainer(BaseTrainer):
             for i in range(n_sequence):
                 tup_seq = []
                 inputs_frame = p_in[i]
-                print(i)
+                # print(i)
                 if i == 0:
                     self.voxel_grid.reset()
                     latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
