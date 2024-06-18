@@ -15,6 +15,7 @@ from torch.nn import functional as F
 from torch.autograd import gradcheck
 import torch.profiler
 from torch.profiler import profile, record_function, ProfilerActivity
+import copy
 
 
 torch.manual_seed(42)
@@ -67,6 +68,8 @@ class VoxelGrid:
         self.centers_table = {}
         self.latents_table = {}
         self.latent_shape = None
+    def copy(self):
+        return copy.deepcopy(self)
         
 class SequentialTrainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -127,7 +130,6 @@ class SequentialTrainer(BaseTrainer):
             os.makedirs(vis_dir)
            
     def print_timing(self, operation):
-        return 
         t1 = time.time()
         print(f'Time elapsed, {self.timing_counter}: {t1 - self.t0:.3f}, {operation}')
 
@@ -268,17 +270,12 @@ class SequentialTrainer(BaseTrainer):
     def encode_distributed_inputs(self, inputs_frame):
         self.t0 = time.time()
         inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame)
-        self.print_timing('Get distributed inputs')
         neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
-        self.print_timing('Compute neighbours')
         
         inputs_frame_distributed_empty, centers_frame_empty = self.get_empty_neighbours(neighbouring_centers, centers_frame_occupied)
-        self.print_timing('Get empty neighbours')
         inputs_frame_distributed = torch.cat((inputs_frame_distributed_occupied, inputs_frame_distributed_empty), axis = 0)
         centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0)
-        self.print_timing('Concatenate')
         latents_frame = self.encode_distributed(inputs_frame_distributed, centers_frame)
-        self.print_timing('Encode distributed')
         return latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
     
     def fuse_inputs(self, inputs_frame):
@@ -309,13 +306,20 @@ class SequentialTrainer(BaseTrainer):
         latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d).to(device=self.device)
         
         offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device = self.device)
-        
+        latent_cache = {}
+
         for idx_center, center in enumerate(centers_frame_occupied):
             
             stacked_voxel_frame = None
             
             for idx_offset, offset in enumerate(offsets):
-                latent = voxel_grid.get_latent(center + offset)
+                center_with_offset = center + offset
+            
+                if center_with_offset not in latent_cache:
+                    latent_cache[center_with_offset] = voxel_grid.get_latent(center_with_offset)
+                
+                latent = latent_cache[center_with_offset]
+                
                 if latent is None:
                     print('latent_existing is None, problem in cold start')
                     
@@ -331,35 +335,41 @@ class SequentialTrainer(BaseTrainer):
         return latent_map_stacked
     
     def stack_latents(self, centers_frame_occupied, voxel_grid_temp):
-        c, h, w, d = self.voxel_grid.latent_shape 
+        c, h, w, d = voxel_grid_temp.latent_shape  # Use voxel_grid_temp to get latent_shape
         
-        latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d).to(device=self.device)
+        latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d, device=self.device)
         
-        offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device = self.device)
+        offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device=self.device)
+        
+        # Cache latents for efficiency
+        latent_cache = {}
         
         for idx_center, center in enumerate(centers_frame_occupied):
+            centers_with_offsets = center + offsets
             
-            stacked_voxel_frame = None
-            stacked_voxel_existing = None
-            
-            for idx_offset, offset in enumerate(offsets):
-                latent_frame = voxel_grid_temp.get_latent(center + offset)
-                latent_existing = self.voxel_grid.get_latent(center + offset)
-                if latent_existing is None:
-                    # print('latent_existing is None, searching in empty voxels')
-                    latent_existing = self.voxel_grid_empty.get_latent(center + offset)
-                    
-                if stacked_voxel_frame is None:
-                    stacked_voxel_frame = latent_frame
-                    stacked_voxel_existing = latent_existing
+            # Prepare latents in one batch
+            stacked_voxel_frame = []
+            stacked_voxel_existing = []
+            for center_with_offset in centers_with_offsets:
+                if center_with_offset not in latent_cache:
+                    latent_cache[center_with_offset] = voxel_grid_temp.get_latent(center_with_offset)
+                
+                latent_frame = latent_cache[center_with_offset]
+                if self.voxel_grid.get_latent(center_with_offset) is not None:
+                    latent_existing = self.voxel_grid.get_latent(center_with_offset)
                 else:
-                    stacked_voxel_frame = torch.cat((stacked_voxel_frame, latent_frame), axis = 0)
-                    stacked_voxel_existing = torch.cat((stacked_voxel_existing, latent_existing), axis = 0)
+                    latent_existing = self.voxel_grid_empty.get_latent(center_with_offset)
+                
+                stacked_voxel_frame.append(latent_frame.unsqueeze(0))
+                stacked_voxel_existing.append(latent_existing.unsqueeze(0))
+            
+            stacked_voxel_frame = torch.cat(stacked_voxel_frame, dim=0)
+            stacked_voxel_existing = torch.cat(stacked_voxel_existing, dim=0)
             
             stacked_voxel_frame = stacked_voxel_frame.reshape(c, 3*h, 3*w, 3*d)
             stacked_voxel_existing = stacked_voxel_existing.reshape(c, 3*h, 3*w, 3*d)
             
-            latent_map_stacked[idx_center] = torch.cat((stacked_voxel_frame, stacked_voxel_existing), axis = 0)
+            latent_map_stacked[idx_center] = torch.cat((stacked_voxel_frame, stacked_voxel_existing), dim=0)
 
         return latent_map_stacked
     

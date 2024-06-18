@@ -33,4 +33,4 @@ generation:
   model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   resolution_0: 50
 
-visualization: false
+visualization: true
