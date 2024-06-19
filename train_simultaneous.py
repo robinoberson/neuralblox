@@ -130,7 +130,7 @@ last_checkpoint_time = time.time()
 while True:
     torch.cuda.empty_cache()
     epoch_it += 1
-    # print(epoch_it)
+    print(epoch_it)
     for idx_batch, batch in enumerate(train_loader):
         it += 1
         

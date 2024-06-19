@@ -9,9 +9,9 @@ model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18/model_backbone_200.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18/model_merging_200.pt
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June19-24h
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/model_backbone_700.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/model_merging_700.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: true

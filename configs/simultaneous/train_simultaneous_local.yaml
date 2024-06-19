@@ -17,7 +17,7 @@ training:
   save_data_viz: true
   log_comet: false
 
-  # checkpoint_interval_minutes: 0
+  checkpoint_interval_minutes: 0
   # backup_every: 1
   # print_every: 1
 test:
@@ -33,4 +33,4 @@ generation:
   model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   resolution_0: 50
 
-visualization: true
+visualization: false
