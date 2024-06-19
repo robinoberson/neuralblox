@@ -3,12 +3,11 @@ data:
   input_type: pointcloud
   classes: null
   path: null
-  pointcloud_n: 16384
-  pointcloud_n_training: 16384
+  pointcloud_n: 2048
+  pointcloud_n_training: 2048
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.00
-  points_subsample: 32768
-  points_iou_subsample: 32768
+  points_subsample: 8192
   points_file: points.npz
   points_iou_file: points.npz
   points_unpackbits: true

@@ -2,7 +2,7 @@ from torch import nn
 import os
 from src.encoder import encoder_dict
 from src.neuralblox import models, training, training_fusion, training_fusion_old, training_sequential
-from src.neuralblox import generation, generation_fusion, generation_fusion_neighbors
+from src.neuralblox import generation, generation_fusion, generation_fusion_neighbors, generation_fusion_sequential
 from src import data, config, layers
 from src.common import decide_total_volume_range, update_reso
 from src.checkpoints import CheckpointIO
@@ -432,6 +432,55 @@ def get_generator_simultaneous(cfg, device):
         )
         
     return generator
+def get_generator_sequential(cfg, device):
+    ''' Returns the generator object.
+
+    Args:
+        model (nn.Module): the backbone encoder and decoder which are used
+        model_merge : the fusion network
+        sample_points : points sampled to define scene ranges
+        cfg (dict): config dictionary
+        device (device): pytorch device
+    '''
+
+    grid_reso = cfg['data']['grid_resolution']
+    input_vol_size = cfg['data']['input_vol']
+    query_vol_size = cfg['data']['query_vol']
+
+    vol_bound = {'query_crop_size': query_vol_size,
+                    'input_crop_size': input_vol_size,
+                    'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
+                    'reso': grid_reso}          
+    model = config.get_model(cfg, device=device)
+    model_merging = layers.Conv3D_one_input().to(device)
+
+    checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
+    checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
+
+    try:
+        checkpoint_io.load(cfg['generation']['model_backbone_file'])
+        checkpoint_io_merging.load(cfg['generation']['model_merging_file'])
+        
+    except FileExistsError as e:
+        print(f'No checkpoint file found! {e}')
+        return None
+    
+    optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
+    trainer = config.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
+    
+    generator = generation_fusion_sequential.Generator3DSequential(
+            model,
+            model_merging,
+            trainer,
+            threshold=cfg['generation']['threshold'],
+            device=device,
+            resolution0=cfg['generation']['resolution_0'],
+            upsampling_steps=cfg['generation']['upsampling_steps'],
+            padding=cfg['data']['padding'],
+            vol_bound=vol_bound,
+        )
+        
+    return generator
 def get_data_fields(mode, cfg):
     ''' Returns the data fields.
 
@@ -440,7 +489,6 @@ def get_data_fields(mode, cfg):
         cfg (dict): imported yaml config
     '''
     points_transform = data.SubsamplePoints(cfg['data']['points_subsample'])
-    points_transform_iou = data.SubsamplePoints(cfg['data']['points_iou_subsample'])
     
     input_type = cfg['data']['input_type']
     fields = {}

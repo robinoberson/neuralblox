@@ -77,9 +77,11 @@ class Generator3DSequential(object):
     def fuse_inputs(self, inputs_frame):
         with torch.no_grad():
             if self.trainer.voxel_grid.is_empty():
+                print(f'Voxel grid is empty, start with cold start')
                 latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_cold_start(inputs_frame)
             else:
-                latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
+                print(f'Perform latent fusion')
+                latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_inputs(inputs_frame)
             
         return latent_map_stacked_merged, centers_frame_occupied
 
@@ -102,15 +104,37 @@ class Generator3DSequential(object):
                             
         return stacked_latents, centers
     
-    def generate_logits(self, latent_map_sampled_merged, centers, inputs_distributed, visualize=False):
+    def stack_latents_all(self):
+        stacked_latents = None
+        centers_list = list(self.trainer.voxel_grid.centers_table.values())
+        centers = None
+        for center in centers_list:
+            if centers is None:
+                centers = center.unsqueeze(0)
+            else:
+                centers = torch.cat((centers, center.unsqueeze(0)), 0)
+        
+        for center in centers:
+            latent = self.trainer.voxel_grid.get_latent(center).unsqueeze(0)
+            
+            if latent is not None:
+                if stacked_latents is None:
+                    stacked_latents = latent
+                else:
+                    stacked_latents = torch.cat((stacked_latents, latent), 0)
+                    
+        return stacked_latents, centers
+        
+    def generate_logits(self, latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query, visualize=False):
         with torch.no_grad():
             p_stacked, latents, centers, occ = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+
             logits_sampled = self.trainer.get_logits(p_stacked, latents, centers)
-            inputs_distributed = self.get_inputs_map(centers)
+            inputs_distributed = self.get_inputs_map(centers_frame_occupied)
             
             if visualize:
-                self.trainer.visualize_logits(logits_sampled, p_stacked, inputs_distributed)
-        return logits_sampled
+                self.trainer.visualize_logits(logits_sampled, p_stacked, inputs_distributed, force_viz = visualize)
+        return logits_sampled, p_stacked
     
     def get_inputs_map(self, centers):
         inputs_distributed = None
@@ -118,7 +142,9 @@ class Generator3DSequential(object):
             inputs = self.trainer.voxel_grid.get_points(center)
             if inputs is not None:
                 if inputs_distributed is None:
-                    inputs_distributed = inputs
+                    inputs_distributed = inputs.unsqueeze(0)
+                else:
+                    inputs_distributed = torch.cat((inputs_distributed, inputs.unsqueeze(0)), 0)
 
         return inputs_distributed
             
@@ -158,25 +184,27 @@ class Generator3DSequential(object):
         return self.generate_mesh_from_occ(occ_values_x, return_stats=return_stats)
 
     # @profile
-    def generate_occupancy(self, latent_map_full):
+    def generate_occupancy(self, latent_map_full, centers, crop_size):
         with torch.no_grad():
             n_crop = latent_map_full.shape[0]
             print("Decoding latent codes from {} voxels".format(n_crop))
             # acquire the boundary for every crops
             kwargs = {}
 
-            vol_bound = self.trainer.vol_bound_all['query_vol'].copy()
-            vol_bound_inner = self.trainer.remove_padding_single_dim(vol_bound)
-            vol_bound_inner_reshaped = vol_bound_inner.reshape(-1, *vol_bound_inner.shape[3:])
+            n_voxels = latent_map_full.shape[0]
             
             n = self.resolution0
             
-            pp_full = np.zeros((vol_bound_inner_reshaped.shape[0], n**3, 3))
-            pp_n_full = np.zeros((vol_bound_inner_reshaped.shape[0], n**3, 3))
+            pp_full = np.zeros((n_voxels, n**3, 3))
+            pp_n_full = np.zeros((n_voxels, n**3, 3))
             
-            for i in range(vol_bound_inner_reshaped.shape[0]):
-                bb_min = vol_bound_inner_reshaped[i, 0]
-                bb_max = vol_bound_inner_reshaped[i, 1]
+            lb = centers - crop_size / 2
+            ub = centers + crop_size / 2
+            
+            for i in range(n_voxels):
+                center = centers[i]
+                bb_min = lb[i]
+                bb_max = ub[i]
                 t = (bb_max - bb_min) / n
                 # print(t)
                 
@@ -197,7 +225,7 @@ class Generator3DSequential(object):
                 pp_n_full[i] = pp_n
                 
             if self.limited_gpu:
-                n_batch_max = 5
+                n_batch_max = 20
             else:
                 n_batch_max = 1000
                     

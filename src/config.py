@@ -170,6 +170,19 @@ def get_generator_simultaneous(cfg, device):
     method = cfg['method']
     generator = method_dict[method].config.get_generator_simultaneous(cfg, device)
     return generator
+def get_generator_sequential(cfg, device):
+    ''' Returns a generator instance.
+
+    Args:
+        model (nn.Module): the backbone encoder and decoder which are used
+        model_merge : the fusion network
+        sample_points : points sampled to define scene ranges
+        cfg (dict): config dictionary
+        device (device): pytorch device
+    '''
+    method = cfg['method']
+    generator = method_dict[method].config.get_generator_sequential(cfg, device)
+    return generator
 # Datasets
 def get_dataset(mode, cfg, return_idx=False):
     ''' Returns the dataset.

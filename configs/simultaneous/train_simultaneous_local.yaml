@@ -2,7 +2,7 @@ inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: ['2024-03-27_11-27-52']
   # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight
   grid_resolution: 24
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.0
@@ -11,8 +11,8 @@ model:
     grid_resolution: 24
 training:
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_700.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_700.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: false
@@ -29,8 +29,8 @@ generation:
   threshold: 0.02
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
-  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
+  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_700.pt
+  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_700.pt
   resolution_0: 50
 
-visualization: false
+visualization: true

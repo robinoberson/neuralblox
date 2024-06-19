@@ -39,16 +39,7 @@ class VoxelGrid:
             self.latents_table[h] = latent
         
         if self.latent_shape is None:
-            self.latent_shape = latent.shape
-    # def add_latent(self, center, latent):
-    #     h = self.hasher.compute_hash(center)
-    #     self.latents_table[h] = latent
-    #     self.centers_table[h] = center
-        
-    #     if self.latent_shape is None:
-    #         self.latent_shape = latent.shape
-            
-    
+            self.latent_shape = latent.shape    
         
     def get_voxel(self, center):
         h = self.compute_hash(center)
@@ -100,7 +91,7 @@ class SequentialTrainer(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048):
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
@@ -122,8 +113,7 @@ class SequentialTrainer(BaseTrainer):
         self.cfg = cfg
         self.n_voxels_max = n_voxels_max
         self.n_max_points = n_max_points
-        self.rand_points_inputs = (torch.load('pretrained_models/fusion/empty_inputs.pt').to(self.device) + 0.56) / 1.12
-        # self.rand_points_inputs = torch.rand(20000, 3) 
+        self.n_max_points_query = n_max_points_query
         self.voxel_grid = VoxelGrid()
         self.voxel_grid_empty = VoxelGrid()
         current_dir = os.getcwd()
@@ -155,7 +145,7 @@ class SequentialTrainer(BaseTrainer):
         self.optimizer.zero_grad()
         
         p_in, p_query = self.get_inputs_from_batch(data_batch)
-        p_query_distributed, centers_query = self.get_distributed_inputs(p_query)
+        p_query_distributed, centers_query = self.get_distributed_inputs(p_query, self.n_max_points_query)
         
         
         n_sequence = p_in.shape[0]
@@ -169,9 +159,9 @@ class SequentialTrainer(BaseTrainer):
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
             else:
-                self.t0 = time.time()
+                # self.t0 = time.time()
                 latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
-                self.print_timing('fuse_inputs')
+                # self.print_timing('fuse_inputs')
                 
             p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
             # tup.append([p_stacked, latents, centers])
@@ -208,7 +198,7 @@ class SequentialTrainer(BaseTrainer):
         latents = latent_map[mask_frame]
         centers = centers_frame_occupied[mask_frame]
         
-        p_stacked = torch.zeros(latents.shape[0], self.n_max_points, 4).to(self.device)
+        p_stacked = torch.zeros(latents.shape[0], self.n_max_points_query, 4).to(self.device)
         
         for idx, center in enumerate(centers):
             h = self.voxel_grid.compute_hash(center)
@@ -284,7 +274,7 @@ class SequentialTrainer(BaseTrainer):
     
     def encode_distributed_inputs(self, inputs_frame, compute_neighbours = True):
         self.t0 = time.time()
-        inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame)
+        inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame, self.n_max_points)
         
         if compute_neighbours:
             neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
@@ -434,8 +424,30 @@ class SequentialTrainer(BaseTrainer):
             latent_map_stacked[idx_center] = inter
 
         return latent_map_stacked
-            
-    def get_empty_inputs(self, centers, crop_size):
+    def generate_points(self, n, lb = [0.0, 0.0, 0.0], ub = [1.0, 1.0, 1.0]):
+        """
+        Generate n points within the bounds lb and ub.
+
+        Args:
+        - n (int): Number of points to generate.
+        - lb (list of float): Lower bound for each dimension.
+        - ub (list of float): Upper bound for each dimension.
+
+        Returns:
+        - torch.Tensor: Tensor of shape (n, 3) containing the generated points.
+        """
+        lb = torch.tensor(lb)
+        ub = torch.tensor(ub)
+        
+        # Generate n points with each dimension in the range [0, 1)
+        points = torch.rand(n, 3)
+        
+        # Scale points to the range [lb, ub)
+        points = lb + points * (ub - lb)
+        
+        return points
+    
+    def get_empty_inputs(self, centers, crop_size, n_max_points = 2048):
         lb_input = centers - crop_size / 2
         ub_input = centers + crop_size / 2
         
@@ -447,7 +459,7 @@ class SequentialTrainer(BaseTrainer):
         bb_max = vol_bound_inputs[:, 1, :].unsqueeze(1)  # Shape: (n_crops, 3, 1)
         bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
 
-        random_points = self.rand_points_inputs[:self.n_max_points]
+        random_points = self.generate_points(n_max_points)
         random_points = random_points.repeat(n_crops, 1, 1).to(device=self.device)
         random_points *= bb_size  # Scale points to fit inside each bounding box
         random_points += bb_min  # Translate points to be within each bounding box
@@ -460,7 +472,7 @@ class SequentialTrainer(BaseTrainer):
 
         centers_neighbours_empty = centers_neighbours[~mask]
         
-        random_points = self.get_empty_inputs(centers_neighbours_empty, self.input_crop_size)
+        random_points = self.get_empty_inputs(centers_neighbours_empty, self.input_crop_size, self.n_max_points)
         occupancies = torch.zeros(*random_points.shape[:-1], 1, device=self.device)
         
         random_points = torch.cat((random_points, occupancies), axis = -1)
@@ -589,7 +601,7 @@ class SequentialTrainer(BaseTrainer):
         return vol_bound, centers
 
     
-    def get_distributed_inputs(self, distributed_inputs_raw):
+    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         
@@ -615,8 +627,6 @@ class SequentialTrainer(BaseTrainer):
         # Set values to 0 where conditions are met
         distributed_inputs[:, :, 3][final_mask] = 0
         
-        # Calculate n_max
-        n_max = self.n_max_points
         # print(f'Distributing inputs with n_max = {n_max}')
         # Create a mask for selecting points with label 1
         indexes_keep = distributed_inputs[..., 3] == 1
@@ -627,7 +637,7 @@ class SequentialTrainer(BaseTrainer):
         # Create a mask for broadcasting
         mask = torch.arange(n_max).expand(n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
 
-        random_points = self.get_empty_inputs(centers, self.input_crop_size)
+        random_points = self.get_empty_inputs(centers, self.input_crop_size, n_max_points = n_max)
         
         distributed_inputs_short = torch.zeros(n_crops, n_max, 4, device=self.device)
         distributed_inputs_short[:, :, :3] = random_points.reshape(n_crops, n_max, 3)
@@ -733,7 +743,7 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         with torch.no_grad():
             p_in, p_query = self.get_inputs_from_batch(data_batch)
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query)
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query, n_max=self.n_max_points_query)
             
             n_sequence = p_in.shape[0]
             
@@ -747,10 +757,10 @@ class SequentialTrainer(BaseTrainer):
                     latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
                     
                 else:
-                    self.t0 = time.time()
-                    self.timing_counter = 0
+                    # self.t0 = time.time()
+                    # self.timing_counter = 0
                     latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
-                    self.print_timing('fuse_inputs')
+                    # self.print_timing('fuse_inputs')
                 
                 p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
                 # return p_stacked, latents, centers
