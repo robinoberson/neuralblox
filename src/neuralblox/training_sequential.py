@@ -134,10 +134,42 @@ class SequentialTrainer(BaseTrainer):
 
         self.t0 = time.time()
         self.timing_counter += 1
-    def train_sequence_window(self, data_batch):
-        self.t0 = time.time()
-        self.timing_counter = 0
         
+    def process_sequence(self, p_in, p_query_distributed, centers_query, is_training):
+        n_sequence = p_in.shape[0]
+        total_loss = 0
+        results = []
+
+        for i in range(n_sequence):
+            inputs_frame = p_in[i]
+            if i == 0:
+                self.voxel_grid.reset()
+                latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
+            else:
+                latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
+
+            p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+            logits_sampled = self.get_logits(p_stacked, latents, centers)
+            loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
+            
+            if is_training:
+                loss.backward()
+                self.visualize_logits(logits_sampled, p_stacked)
+                self.voxel_grid.detach_latents()
+                self.optimizer.step()
+                self.iteration += 1
+            else:
+                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+
+            total_loss += loss.item()
+
+        if is_training:
+            return total_loss
+        else:
+            results.append(total_loss)
+            return results
+        
+    def train_sequence_window(self, data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.train()
@@ -148,34 +180,18 @@ class SequentialTrainer(BaseTrainer):
         p_query_distributed, centers_query = self.get_distributed_inputs(p_query, self.n_max_points_query)
         
         
-        n_sequence = p_in.shape[0]
+        return self.process_sequence(p_in, p_query_distributed, centers_query, is_training=True)
+    def validate_sequence(self, data_batch):
+        if self.limited_gpu: torch.cuda.empty_cache()
         
-        total_loss = 0
-        for i in range(n_sequence):
-            self.timing_counter = 0
+        self.model.eval()
+        self.model_merge.eval()
+        
+        with torch.no_grad():
+            p_in, p_query = self.get_inputs_from_batch(data_batch)
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query, n_max=self.n_max_points_query)
+            return self.process_sequence(p_in, p_query_distributed, centers_query, is_training=False)
 
-            inputs_frame = p_in[i]
-            if i == 0:
-                self.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
-            else:
-                # self.t0 = time.time()
-                latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
-                # self.print_timing('fuse_inputs')
-                
-            p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-            # tup.append([p_stacked, latents, centers])
-            # return p_stacked, latents, centers
-            logits_sampled = self.get_logits(p_stacked, latents, centers)
-            loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
-            loss.backward()
-            self.visualize_logits(logits_sampled, p_stacked)
-            self.voxel_grid.detach_latents()
-            self.optimizer.step()
-            self.iteration += 1
-
-            total_loss += loss.item()
-        return total_loss
     def fuse_cold_start(self, inputs_frame):
         latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
             
@@ -390,40 +406,6 @@ class SequentialTrainer(BaseTrainer):
 
         return latent_map_stacked
     
-    def stack_points(self, centers_frame_occupied, voxel_grid_temp):
-        
-        latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2, 27 * self.n_max_points, 4).to(device=self.device)
-        
-        offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device = self.device)
-        
-        for idx_center, center in enumerate(centers_frame_occupied):
-            
-            stacked_voxel_frame = None
-            stacked_voxel_existing = None
-            
-            for idx_offset, offset in enumerate(offsets):
-                latent_frame = voxel_grid_temp.get_points(center + offset)
-                latent_existing = self.voxel_grid.get_points(center + offset)
-                
-                if latent_existing is None:
-                    # print('latent_existing is None, searching in empty voxels')
-                    latent_existing = self.voxel_grid_empty.get_points(center + offset)
-                    
-                if stacked_voxel_frame is None:
-                    stacked_voxel_frame = latent_frame
-                    stacked_voxel_existing = latent_existing
-                else:
-                    stacked_voxel_frame = torch.cat((stacked_voxel_frame, latent_frame), axis = 0)
-                    stacked_voxel_existing = torch.cat((stacked_voxel_existing, latent_existing), axis = 0)
-            
-            stacked_voxel_frame = stacked_voxel_frame.reshape(self.n_max_points*27, 4).unsqueeze(0)
-            stacked_voxel_existing = stacked_voxel_existing.reshape(self.n_max_points*27, 4).unsqueeze(0)
-            
-            inter = torch.cat((stacked_voxel_frame, stacked_voxel_existing), axis = 0)
-            
-            latent_map_stacked[idx_center] = inter
-
-        return latent_map_stacked
     def generate_points(self, n, lb = [0.0, 0.0, 0.0], ub = [1.0, 1.0, 1.0]):
         """
         Generate n points within the bounds lb and ub.
@@ -734,46 +716,3 @@ class SequentialTrainer(BaseTrainer):
         
         geos += [pcd, base_axis]
         o3d.visualization.draw_geometries(geos)
-    
-    def validate_sequence(self, data_batch):        
-        if self.limited_gpu: torch.cuda.empty_cache()
-        
-        self.model.eval()
-        self.model_merge.eval()
-        total_loss = 0
-        with torch.no_grad():
-            p_in, p_query = self.get_inputs_from_batch(data_batch)
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query, n_max=self.n_max_points_query)
-            
-            n_sequence = p_in.shape[0]
-            
-            tup = []
-            for i in range(n_sequence):
-                tup_seq = []
-                inputs_frame = p_in[i]
-                # print(i)
-                if i == 0:
-                    self.voxel_grid.reset()
-                    latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
-                    
-                else:
-                    # self.t0 = time.time()
-                    # self.timing_counter = 0
-                    latent_map_stacked_merged, centers_frame_occupied = self.fuse_inputs(inputs_frame)
-                    # self.print_timing('fuse_inputs')
-                
-                p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-                # return p_stacked, latents, centers
-                
-                logits_sampled = self.get_logits(p_stacked, latents, centers)
-                tup_seq += [p_stacked, latents, inputs_frame, logits_sampled]
-
-                loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
-                total_loss += loss.item()
-                tup_seq += [loss.item()]
-                
-                tup.append(tup_seq)    
-                            
-        tup.append(total_loss)
-        
-        return tup
