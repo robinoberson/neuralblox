@@ -135,13 +135,15 @@ class SequentialTrainer(BaseTrainer):
         self.t0 = time.time()
         self.timing_counter += 1
         
-    def process_sequence(self, p_in, p_query_distributed, centers_query, is_training):
+    def process_sequence(self, p_in, p_query, is_training):
         n_sequence = p_in.shape[0]
         total_loss = 0
         results = []
 
         for i in range(n_sequence):
             inputs_frame = p_in[i]
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[i], self.n_max_points_query)
+
             if i == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied = self.fuse_cold_start(inputs_frame)
@@ -177,10 +179,9 @@ class SequentialTrainer(BaseTrainer):
         self.optimizer.zero_grad()
         
         p_in, p_query = self.get_inputs_from_batch(data_batch)
-        p_query_distributed, centers_query = self.get_distributed_inputs(p_query, self.n_max_points_query)
         
         
-        return self.process_sequence(p_in, p_query_distributed, centers_query, is_training=True)
+        return self.process_sequence(p_in, p_query, is_training=True)
     def validate_sequence(self, data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
         
@@ -321,6 +322,7 @@ class SequentialTrainer(BaseTrainer):
         # stacked_points = self.stack_points(centers_frame_occupied, voxel_grid_temp)
         # return stacked_points, centers_frame_occupied
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
+        
         for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
             self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
         
@@ -339,13 +341,17 @@ class SequentialTrainer(BaseTrainer):
             
             stacked_voxel_frame = None
             
+            #Retrieve latent 
             for idx_offset, offset in enumerate(offsets):
                 center_with_offset = center + offset
-            
+
+                # check if in cache, if not check in voxel grid if not in empty
                 if center_with_offset not in latent_cache:
                     latent_cache[center_with_offset] = self.voxel_grid.get_latent(center_with_offset)
+                    
                     if latent_cache[center_with_offset] is None:
                         latent_cache[center_with_offset] = self.voxel_grid_empty.get_latent(center_with_offset)
+                        
                 latent = latent_cache[center_with_offset]
                 
                 if latent is None:
@@ -353,6 +359,7 @@ class SequentialTrainer(BaseTrainer):
                     
                 if stacked_voxel_frame is None:
                     stacked_voxel_frame = latent
+                    
                 else:
                     stacked_voxel_frame = torch.cat((stacked_voxel_frame, latent), axis = 0)
             
@@ -362,7 +369,50 @@ class SequentialTrainer(BaseTrainer):
 
         return latent_map_stacked
     
+    def stack_points_cold_start(self, centers_frame_occupied):
+        
+        latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2, 27 * self.n_max_points, 4).to(device=self.device)      
+          
+        offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device = self.device)
+        latent_cache = {}
+
+        for idx_center, center in enumerate(centers_frame_occupied):
+            
+            stacked_voxel_frame = None
+            
+            #Retrieve latent 
+            for idx_offset, offset in enumerate(offsets):
+                center_with_offset = center + offset
+
+                # check if in cache, if not check in voxel grid if not in empty
+                if center_with_offset not in latent_cache:
+                    latent_cache[center_with_offset] = self.voxel_grid.get_points(center_with_offset)
+                    
+                    if latent_cache[center_with_offset] is None:
+                        latent_cache[center_with_offset] = self.voxel_grid_empty.get_points(center_with_offset)
+                        
+                latent = latent_cache[center_with_offset]
+                
+                if latent is None:
+                    print('latent_existing is None, problem in cold start')
+                    
+                if stacked_voxel_frame is None:
+                    stacked_voxel_frame = latent
+                    
+                else:
+                    stacked_voxel_frame = torch.cat((stacked_voxel_frame, latent), axis = 0)
+            
+            stacked_voxel_frame = stacked_voxel_frame.reshape(self.n_max_points*27, 4).unsqueeze(0)
+
+            inter = torch.cat((stacked_voxel_frame, stacked_voxel_frame), axis = 0)
+
+            latent_map_stacked[idx_center] = inter
+
+        return latent_map_stacked
+    
     def stack_latents(self, centers_frame_occupied, voxel_grid_temp):
+        #voxel_grid_temp is the precomputed voxel grid of the new frame
+        
         c, h, w, d = voxel_grid_temp.latent_shape  # Use voxel_grid_temp to get latent_shape
         
         latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d, device=self.device)
@@ -378,7 +428,9 @@ class SequentialTrainer(BaseTrainer):
             # Prepare latents in one batch
             stacked_voxel_frame = []
             stacked_voxel_existing = []
+            
             for center_with_offset in centers_with_offsets:
+                
                 # Retrieve latents frame 
                 if center_with_offset not in latent_cache:
                     latent_cache[center_with_offset] = voxel_grid_temp.get_latent(center_with_offset)
@@ -388,9 +440,11 @@ class SequentialTrainer(BaseTrainer):
                 # Retrieve latents for fusion
                 if self.voxel_grid.get_latent(center_with_offset) is not None:
                     latent_existing = self.voxel_grid.get_latent(center_with_offset)
-                else: # If the position has no latent, we use the latent from the empty voxel grid
-                    latent_existing = self.voxel_grid_empty.get_latent(center_with_offset)
-                
+                else: 
+                    # latent_existing = self.voxel_grid_empty.get_latent(center_with_offset) # If the position has no latent, we use the latent from the empty voxel grid
+                    latent_existing = latent_frame # If the position has no latent, we use the latent from the frame to double stack (fuse with itself)
+
+                # Append latents to batch
                 stacked_voxel_frame.append(latent_frame.unsqueeze(0))
                 stacked_voxel_existing.append(latent_existing.unsqueeze(0))
             
@@ -406,6 +460,54 @@ class SequentialTrainer(BaseTrainer):
 
         return latent_map_stacked
     
+    def stack_points(self, centers_frame_occupied, voxel_grid_temp):
+        #voxel_grid_temp is the precomputed voxel grid of the new frame
+                
+        latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2, 27 * self.n_max_points, 4).to(device=self.device)      
+        
+        offsets = torch.tensor([(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2)], device=self.device)
+        
+        # Cache latents for efficiency
+        latent_cache = {}
+        
+        for idx_center, center in enumerate(centers_frame_occupied):
+            centers_with_offsets = center + offsets
+            
+            # Prepare latents in one batch
+            stacked_voxel_frame = []
+            stacked_voxel_existing = []
+            
+            for center_with_offset in centers_with_offsets:
+                
+                # Retrieve latents frame 
+                if center_with_offset not in latent_cache:
+                    latent_cache[center_with_offset] = voxel_grid_temp.get_points(center_with_offset)
+                
+                latent_frame = latent_cache[center_with_offset]
+                
+                # Retrieve latents for fusion
+                if self.voxel_grid.get_points(center_with_offset) is not None:
+                    latent_existing = self.voxel_grid.get_points(center_with_offset)
+                else: 
+                    # latent_existing = self.voxel_grid_empty.get_latent(center_with_offset) # If the position has no latent, we use the latent from the empty voxel grid
+                    latent_existing = latent_frame # If the position has no latent, we use the latent from the frame to double stack (fuse with itself)
+
+                # Append latents to batch
+                stacked_voxel_frame.append(latent_frame.unsqueeze(0))
+                stacked_voxel_existing.append(latent_existing.unsqueeze(0))
+            
+            stacked_voxel_frame = torch.cat(stacked_voxel_frame, dim=0)
+            stacked_voxel_existing = torch.cat(stacked_voxel_existing, dim=0)
+            
+            # Reshape latents for neighborhood             
+            stacked_voxel_frame = stacked_voxel_frame.reshape(self.n_max_points*27, 4).unsqueeze(0)
+            stacked_voxel_existing = stacked_voxel_existing.reshape(self.n_max_points*27, 4).unsqueeze(0)
+
+            inter = torch.cat((stacked_voxel_frame, stacked_voxel_existing), axis = 0)
+
+            latent_map_stacked[idx_center] = inter
+            
+        return latent_map_stacked
     def generate_points(self, n, lb = [0.0, 0.0, 0.0], ub = [1.0, 1.0, 1.0]):
         """
         Generate n points within the bounds lb and ub.
@@ -536,6 +638,7 @@ class SequentialTrainer(BaseTrainer):
         p_query_3D = batch.get('points').to(self.device).squeeze(0)
         p_query_occ = batch.get('points.occ').to(self.device).squeeze(0).unsqueeze(-1)
         
+        print(f'p_in_3D: {p_in_3D.shape}, p_in_occ: {p_in_occ.shape}, p_query_3D: {p_query_3D.shape}, p_query_occ: {p_query_occ.shape}')
         p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
         p_query = torch.cat((p_query_3D, p_query_occ), dim=-1)
         
