@@ -3,11 +3,10 @@ data:
   input_type: pointcloud
   classes: null
   path: null
-  pointcloud_n: 2048
-  pointcloud_n_training: 2048
-  # pointcloud_noise: 0.005
-  pointcloud_noise: 0.00
-  points_subsample: 8192
+  pointcloud_n: 4096 #number of inputs when loading for each frame
+  pointcloud_noise: 0.005
+
+  points_subsample: 40960 # number of points used for cost computation, total amount
   points_file: points.npz
   points_iou_file: points.npz
   points_unpackbits: true

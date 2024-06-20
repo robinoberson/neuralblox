@@ -72,7 +72,30 @@ class Generator3DSequential(object):
         self.factor = 2**unet_depth
         self.hdim = unet_hdim
         
+    def generate_sequence(self, batch):
+        with torch.no_grad():
+            p_in = self.get_inputs(batch)
+            n_sequence = p_in.shape[0]
+            mesh_list = []
+            
+            for i in range(n_sequence):
+                inputs_frame = p_in[i]
+                if i == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_cold_start(inputs_frame)
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_inputs(inputs_frame)
+            
+                stacked_latents, centers = self.stack_latents_all()
+                mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
+                mesh_list.append(mesh)
+    
+    def get_inputs(self, batch):
+        p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
+        p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
         
+        p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
+        return p_in
 
     def fuse_inputs(self, inputs_frame):
         with torch.no_grad():
@@ -178,8 +201,8 @@ class Generator3DSequential(object):
         occ_hat = torch.cat(occ_hats, dim=0)
         return occ_hat
     # @profile
-    def generate_mesh_from_neural_map(self, latent_all, return_stats=True):
-        occ_values_x = self.generate_occupancy(latent_all)
+    def generate_mesh_from_neural_map(self, latent_map_full, centers, crop_size, return_stats=True):
+        occ_values_x = self.generate_occupancy(latent_map_full, centers, crop_size)
         # return occ_values_x
         return self.generate_mesh_from_occ(occ_values_x, return_stats=return_stats)
 
@@ -198,8 +221,8 @@ class Generator3DSequential(object):
             pp_full = np.zeros((n_voxels, n**3, 3))
             pp_n_full = np.zeros((n_voxels, n**3, 3))
             
-            lb = centers - crop_size / 2
-            ub = centers + crop_size / 2
+            lb = centers - crop_size / 2.0
+            ub = centers + crop_size / 2.0
             
             for i in range(n_voxels):
                 center = centers[i]
@@ -207,8 +230,6 @@ class Generator3DSequential(object):
                 bb_max = ub[i]
                 t = (bb_max - bb_min) / n
                 # print(t)
-                
-                centers = (bb_min + bb_max) / 2.0
                 
                 pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]]
                 pp = pp[:n, :n, :n]
