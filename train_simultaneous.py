@@ -78,12 +78,12 @@ train_loader = torch.utils.data.DataLoader(
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
-# val_loader = torch.utils.data.DataLoader(
-#     val_dataset, batch_size=batch_size, 
-#     num_workers=cfg['training']['n_workers'], 
-#     shuffle=True,
-#     collate_fn=data.collate_remove_none,
-#     worker_init_fn=data.worker_init_fn)
+val_loader = torch.utils.data.DataLoader(
+    val_dataset, batch_size=batch_size, 
+    num_workers=cfg['training']['n_workers'], 
+    shuffle=True,
+    collate_fn=data.collate_remove_none,
+    worker_init_fn=data.worker_init_fn)
 
 print(f'Number of training samples: {len(train_dataset)}')
 print(f'Number of validation samples: {len(val_dataset)}')
