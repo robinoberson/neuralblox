@@ -15,7 +15,7 @@ training:
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_700.pt
   limited_gpu: true
   save_data_viz: true
-  log_comet: false
+  log_comet: true
 
   # checkpoint_interval_minutes: 30
   # backup_every: 1

@@ -56,7 +56,8 @@ class SubsamplePointcloud(object):
             points_i = points[i, :]
             occ_i = occ[i, :]
             
-            indices = np.random.randint(points_i.shape[0], size=self.N)
+            # indices = np.random.randint(points_i.shape[0], size=self.N)
+            indices = np.random.choice(points_i.shape[0], size=self.N, replace=False)
             
             points_out[i, :] = points_i[indices, :]
             occ_out[i, :] = occ_i[indices]
@@ -141,7 +142,8 @@ class SubsamplePoints(object):
             points_i = points[i, :]
             occ_i = occ[i, :]
             
-            indices = np.random.randint(points_i.shape[0], size=self.N)
+            # indices = np.random.randint(points_i.shape[0], size=self.N)
+            indices = np.random.choice(points_i.shape[0], size=self.N, replace=False)
             
             points_out[i, :] = points_i[indices, :]
             occ_out[i, :] = occ_i[indices]

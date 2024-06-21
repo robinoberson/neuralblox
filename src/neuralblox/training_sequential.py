@@ -107,7 +107,7 @@ class SequentialTrainer(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192):
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 4096):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
@@ -157,11 +157,13 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        for i in range(n_sequence):
-            inputs_frame = p_in[i]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[i], self.n_max_points_query)
+        for idx_sequence in range(n_sequence):
+            # idx_sequence = 0
+            
+            inputs_frame = p_in[idx_sequence]
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query)
 
-            if i == 0:
+            if idx_sequence == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
             else:
@@ -171,15 +173,7 @@ class SequentialTrainer(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
             
-            if is_training:
-                # full_inputs = None
-                # for center in centers:
-                #     inputs = self.voxel_grid.get_points(center)
-                #     if full_inputs is None:
-                #         full_inputs = inputs
-                #     else:
-                #         full_inputs = torch.cat((full_inputs, inputs), 0)
-                        
+            if is_training:                        
                 loss.backward()
                 self.visualize_logits(logits_sampled, p_stacked, inputs_frame_distributed)
                 self.voxel_grid.detach_latents()
@@ -189,7 +183,7 @@ class SequentialTrainer(BaseTrainer):
                 results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
 
             total_loss += loss.item()
-
+        
         if is_training:
             return total_loss
         else:
@@ -237,16 +231,17 @@ class SequentialTrainer(BaseTrainer):
     def fuse_inputs(self, inputs_frame):
         latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
         voxel_grid_temp = VoxelGrid()
+        voxel_grid_empty_temp = VoxelGrid()
 
         for idx, (center, points, encoded_latent) in enumerate(zip(centers_frame, inputs_frame_distributed, latents_frame)):
             if idx < len(centers_frame_occupied):
                 voxel_grid_temp.add_voxel(center, points, encoded_latent)
                 # self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = False)
             else:
-                voxel_grid_temp.add_voxel(center, points, encoded_latent, overwrite = True)
+                voxel_grid_empty_temp.add_voxel(center, points, encoded_latent, overwrite = True)
                 # self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
         #stack the latents
-        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp)
+        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, voxel_grid_empty_temp)
 
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
         
@@ -267,7 +262,7 @@ class SequentialTrainer(BaseTrainer):
             if h in p_query_dict:
                 p_stacked[idx] = p_query_dict[h]
         
-        occ = p_query_distributed[mask_query][..., 3]
+        occ = p_stacked[..., 3]
         
         return p_stacked, latents, centers, occ
     
@@ -433,7 +428,7 @@ class SequentialTrainer(BaseTrainer):
 
         return latent_map_stacked
     
-    def stack_latents(self, centers_frame_occupied, voxel_grid_temp):
+    def stack_latents(self, centers_frame_occupied, voxel_grid_temp, voxel_grid_temp_empty):
         #voxel_grid_temp is the precomputed voxel grid of the new frame
         
         c, h, w, d = voxel_grid_temp.latent_shape  # Use voxel_grid_temp to get latent_shape
@@ -444,7 +439,8 @@ class SequentialTrainer(BaseTrainer):
         
         # Cache latents for efficiency
         latent_cache = {}
-        
+        latent_cache_empty = {}
+
         for idx_center, center in enumerate(centers_frame_occupied):
             centers_with_offsets = center + offsets
             
@@ -454,17 +450,27 @@ class SequentialTrainer(BaseTrainer):
             
             for center_with_offset in centers_with_offsets:
                 
+                is_empty = False
+
                 # Retrieve latents frame 
                 if center_with_offset not in latent_cache:
                     latent_cache[center_with_offset] = voxel_grid_temp.get_latent(center_with_offset)
-                
-                latent_frame = latent_cache[center_with_offset]
+
+                    if latent_cache[center_with_offset] is None:
+                        latent_cache_empty[center_with_offset] = voxel_grid_temp_empty.get_latent(center_with_offset)
+                        is_empty = True
+                        
+                if is_empty:
+                    latent_frame = self.voxel_grid.get_latent(center_with_offset)
+                    if latent_frame is None:
+                        latent_frame = latent_cache_empty[center_with_offset]
+                else:
+                    latent_frame = latent_cache[center_with_offset]
                 
                 # Retrieve latents for fusion
-                if self.voxel_grid.get_latent(center_with_offset) is not None:
-                    latent_existing = self.voxel_grid.get_latent(center_with_offset)
-                else: 
-                    # latent_existing = self.voxel_grid_empty.get_latent(center_with_offset) # If the position has no latent, we use the latent from the empty voxel grid
+                latent_existing = self.voxel_grid.get_latent(center_with_offset)
+               
+                if latent_existing is None:
                     latent_existing = latent_frame # If the position has no latent, we use the latent from the frame to double stack (fuse with itself)
 
                 # Append latents to batch
