@@ -3,15 +3,15 @@ data:
   classes: null
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
   grid_resolution: 24
-  pointcloud_noise: 0.005
-  # pointcloud_noise: 0.0
+  # pointcloud_noise: 0.005
+  pointcloud_noise: 0.0
 model:
   encoder_kwargs:
     grid_resolution: 24
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June20-4h
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/model_backbone_700.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/model_merging_700.pt
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_overfit_4h_21th_June-newmodel
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/None.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/simultaneous_training_gt_robot_June18-24h/None.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: true
