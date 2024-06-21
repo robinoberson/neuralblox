@@ -93,7 +93,9 @@ model = config.get_model(cfg, device=device, dataset=train_dataset)
 # Model for merging
 # num_blocks=4
 # num_channels=[256, 320, 416, 160, 128, 128, 128]
-model_merging = layers.Conv3D_one_input().to(device)
+num_blocks = 5
+num_channels = [256, 256, 192, 192, 192, 128, 128, 128]
+model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
 
 checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
 checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
