@@ -2,7 +2,7 @@ inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: ['2024-03-27_11-27-52']
   # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_augmented
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
   grid_resolution: 24
   # pointcloud_noise: 0.005
   pointcloud_noise: 0.0
@@ -17,7 +17,7 @@ training:
   save_data_viz: true
   log_comet: true
 
-  # checkpoint_interval_minutes: 30
+  # checkpoint_interval_minutes: 0
   # backup_every: 1
   # print_every: 1
 test:
