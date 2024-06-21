@@ -25,13 +25,14 @@ class VoxelGrid:
         self.points_table = {}
         self.centers_table = {}
         self.latents_table = {}
+        self.pcd_table = {}
         self.latent_shape = None
         self.verbose = False
     def compute_hash(self, center):
         # Assuming center is a tuple or a tensor with (x, y, z) coordinates
         return f"{center[0]}_{center[1]}_{center[2]}"
     
-    def add_voxel(self, center, points, latent, overwrite=False):
+    def add_voxel(self, center, points, latent, pcd = None, overwrite=False):
         h = self.compute_hash(center)
         if overwrite or h not in self.points_table:
             if self.verbose:
@@ -42,6 +43,9 @@ class VoxelGrid:
             self.points_table[h] = points
             self.centers_table[h] = center
             self.latents_table[h] = latent
+            
+            if pcd is not None:
+                self.pcd_table[h] = pcd
         
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
@@ -63,6 +67,11 @@ class VoxelGrid:
         points = self.points_table.get(h, None)
         return points
     
+    def get_pcd(self, center):
+        h = self.compute_hash(center)
+        pcd = self.pcd_table.get(h, None)
+        return pcd
+    
     def detach_latents(self):
         self.latents_table = {k: v.detach() for k, v in self.latents_table.items()}
         
@@ -70,7 +79,9 @@ class VoxelGrid:
         self.points_table = {}
         self.centers_table = {}
         self.latents_table = {}
+        self.pcd_table = {}
         self.latent_shape = None
+        
     def copy(self):
         return copy.deepcopy(self)
     

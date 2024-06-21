@@ -36,7 +36,7 @@ class CheckpointIO(object):
         for k, v in self.module_dict.items():
             outdict[k] = v.state_dict()
         torch.save(outdict, filename)
-        print('Saved checkpoint to %s' % filename)
+        # print('Saved checkpoint to %s' % filename)
 
     def load(self, filename):
         '''Loads a module dictionary from local file or url.
