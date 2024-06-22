@@ -193,56 +193,69 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
 
         return fea_grid
-    def pool_local(self, index, c, limited_gpu=False):
+    def pool_local(self, inverse_indices_flat, sum_tensor_flat, count_tensor_flat, c, limited_gpu=False):
         # Memory efficient version
-        
-        indexes = index['grid']
         n_batch, n_points, n_features = c.shape
         
-        unique_indexes, inverse_indices = torch.unique(indexes.reshape(-1), return_inverse=True)
-        n_unique_indexes = len(unique_indexes)
+        n_unique_indexes = unique_indexes.shape[0]
+
+        n_full = n_batch * n_features * n_unique_indexes
         
-        sum_tensor_flat = torch.zeros(n_batch, n_features, n_unique_indexes, dtype=torch.float).reshape(-1).to(c.device)
-        count_tensor_flat = torch.zeros(n_batch, n_features, n_unique_indexes, dtype=torch.float).reshape(-1).to(c.device)
-        
-        feature_indices = torch.arange(n_features).repeat_interleave(n_points).to(c.device)
-        base_indices = feature_indices * n_unique_indexes
-        
-        inverse_indices_expanded = inverse_indices.view(n_batch, 1, n_points).expand(-1, n_features, -1)
-        base_indices_expanded = base_indices.view(1, n_features, n_points).expand(n_batch, -1, -1).to(c.device)
-        batch_offset = (torch.arange(n_batch) * n_features * n_unique_indexes).view(n_batch, 1, 1).to(c.device)
-        
-        inverse_indices_flat = (inverse_indices_expanded + base_indices_expanded + batch_offset).reshape(-1)
+        sum_tensor_flat.zero_()
+        count_tensor_flat.zero_()
         
         sum_tensor_flat.index_add_(0, inverse_indices_flat, c.permute(0, 2, 1).reshape(-1))
-        count_tensor_flat.index_add_(0, inverse_indices_flat, torch.ones_like(c.permute(0, 2, 1)).reshape(-1))
+        count_tensor_flat.index_add_(0, inverse_indices_flat, torch.ones(n_batch * n_points * n_features).to(c.device))
         
         mean_values = sum_tensor_flat / count_tensor_flat
         final_tensor = mean_values[inverse_indices_flat].view(n_batch, n_features, n_points)
 
         return final_tensor.permute(0, 2, 1)
                 
-    def pool_local_fast(self, index, c, limited_gpu = False):
-        self.t0 = time.time()
-        indexes = index['grid']
+    # def pool_local_scatter(self, index, c, limited_gpu = False):
+    #     indexes = index['grid']
             
-        bs, fea_dim = c.size(0), c.size(2)
+    #     bs, fea_dim = c.size(0), c.size(2)
         
-        fea = torch.empty(bs, fea_dim, 2 * self.reso_grid ** 3, requires_grad=True).to(c.device)
+    #     fea = torch.empty(bs, fea_dim, 2 * self.reso_grid ** 3, requires_grad=True).to(c.device)
 
-        if self.scatter == scatter_max:
-            fea, _ = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
-        else: 
-            fea = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
+    #     if self.scatter == scatter_max:
+    #         fea, _ = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
+    #     else: 
+    #         fea = self.scatter(c.permute(0, 2, 1), indexes, out = fea)
                 
-        fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
+    #     fea = fea.gather(dim=2, index=indexes.expand(-1, fea_dim, -1))
                 
-        return fea.permute(0, 2, 1)
+    #     return fea.permute(0, 2, 1)
 
     def print_time(self, description):
         t1 = time.time()
         print(f'Time elapsed in pooled: {t1 - self.t0:.3f}, {description}')
         self.t0 = time.time()
+        
+    def precompute_indices(self, index): #TODO if still a bottleneck, optimise with warp 
+        device = c.device
+        n_batch, n_points, n_features = c.shape
+        unique_indexes, inverse_indices = torch.unique(indexes.view(-1), return_inverse=True)
+        n_unique_indexes = len(unique_indexes)
+        
+        n_full = n_batch * n_features * n_unique_indexes
+        
+        feature_indices = torch.arange(n_features, device=device).repeat_interleave(n_points)
+        base_indices = feature_indices * n_unique_indexes
+        
+        inverse_indices_expanded = inverse_indices.view(n_batch, 1, n_points).expand(-1, n_features, -1)
+        base_indices_expanded = base_indices.view(1, n_features, n_points).expand(n_batch, -1, -1)
+        batch_offset = torch.arange(n_batch, device=device) * n_features * n_unique_indexes
+        
+        batch_offset_expanded = batch_offset.view(n_batch, 1, 1).expand(-1, n_features, n_points)
+        inverse_indices_flat = (inverse_indices_expanded + base_indices_expanded + batch_offset_expanded).view(-1)
+        
+        #preallocate memory
+        sum_tensor_flat = torch.zeros(n_full, dtype=torch.float).to(device)
+        count_tensor_flat = torch.zeros(n_full, dtype=torch.float).to(device)
+        
+        return inverse_indices_flat, sum_tensor_flat, count_tensor_flat
         
     def forward(self, inputs, limited_gpu = False):
         self.t0 = time.time()
@@ -268,9 +281,12 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             
         
         net = self.blocks[0](net)
+        
+        inverse_indices_flat, sum_tensor_flat, count_tensor_flat = self.precompute_indices(index)
+        
         for idx_block, block in enumerate(self.blocks[1:]):
             
-            pooled = self.pool_local(index, net, limited_gpu = limited_gpu)
+            pooled = self.pool_local(inverse_indices_flat, sum_tensor_flat, count_tensor_flat, net, limited_gpu = limited_gpu)
             net = torch.cat([net, pooled], dim=2)
 
             net = block(net)     
