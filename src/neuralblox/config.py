@@ -197,6 +197,9 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
     limited_gpu = cfg['training']['limited_gpu']
     input_crop_size = cfg['data']['input_vol']
     query_crop_size = cfg['data']['query_vol']
+    n_max_points = cfg['training']['n_max_points']
+    n_max_points_query = cfg['training']['n_max_points_query']
+    
 
     trainer = training_sequential.SequentialTrainer(
         model, model_merge, optimizer, 
@@ -210,7 +213,9 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
         unet_depth = unet_depth,
         limited_gpu = limited_gpu,
         input_crop_size = input_crop_size,
-        query_crop_size = query_crop_size
+        query_crop_size = query_crop_size,
+        n_max_points = n_max_points,
+        n_max_points_query = n_max_points_query
     )
 
     return trainer
