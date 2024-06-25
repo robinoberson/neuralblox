@@ -45,7 +45,7 @@ training:
   backup_every: 100
 
   n_max_points: 2048 #max number of inputs per voxel (approx 400 occupied points per voxel)
-  n_max_points_query: 8192 #max number of query points per voxel (approx 1000 occupied points per voxel, n_max_points_query unoccupied)
+  n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
   occ_per_query: 0.3
 
   n_workers: 8
