@@ -278,16 +278,7 @@ class Encoder(nn.Module):
         
         if self.pooling is not None:
             x = self.pooling(x)
-        if limited_gpu:
-            x = x.to('cpu')
-            self.basic_module = self.basic_module.to('cpu')
-            
-            x = self.basic_module(x)
-            
-            self.basic_module = self.basic_module.to('cuda')
-            x = x.to('cuda')
-        else:
-            x = self.basic_module(x)
+        x = self.basic_module(x)
             
         # for name, param in self.basic_module.named_parameters():
         #     print(f"Parameter {name} on device: {param.device}")

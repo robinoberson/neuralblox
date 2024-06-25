@@ -71,10 +71,13 @@ if not os.path.exists(cfg['training']['out_dir']):
 train_dataset = config.get_dataset('train', cfg)
 val_dataset = config.get_dataset('val', cfg)
 
+#set seed 
+torch.manual_seed(42)
+
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, 
     num_workers=cfg['training']['n_workers'], 
-    shuffle=True,
+    shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 

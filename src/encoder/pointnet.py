@@ -173,6 +173,10 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         mean_values = torch.where(count_tensor_flat == 0, torch.zeros_like(sum_tensor_flat), sum_tensor_flat / count_tensor_flat)
         fea_grid = torch.zeros(c.size(0)* self.c_dim * 2 * self.reso_grid ** 3).to(device)
 
+        # if len(unique_indices_flat) != len(fea_grid):
+        #     print('len(unique_indices_flat) != len(fea_grid)')
+        #     raise ValueError
+        
         fea_grid[unique_indices_flat] = mean_values
         
         return fea_grid.view(n_batch, 2*self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
@@ -197,6 +201,9 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         device = c.device
         n_batch, n_points, n_features = c.shape
         unique_indices, inverse_indices = torch.unique(indexes.view(-1), return_inverse=True)
+        # keep only the values < self.reso_grid**3 * 2:
+        unique_indices = unique_indices[unique_indices < self.reso_grid**3 * 2]
+        
         n_unique_indices = len(unique_indices)
         
         n_full = n_batch * n_features * n_unique_indices
@@ -227,6 +234,12 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         count_tensor_flat = torch.zeros(n_full, dtype=torch.float, device=device)
 
         # Compute unique_indices_flat for fea_grid
+        n_unique_indices_max = torch.max(unique_indices)
+        if n_unique_indices_max > c.size(0)* self.c_dim * 2 * self.reso_grid ** 3:
+            # print('n_unique_indices_max > c.size(0)* self.c_dim * 2 * self.reso_grid ** 3')
+            print(f'n_unique_indices_max: {n_unique_indices_max}, {c.size(0)* self.c_dim * 2 * self.reso_grid ** 3}')
+            raise ValueError
+        
         feature_indices = torch.arange(n_features, device=device).repeat_interleave(n_unique_indices)
         base_indices = feature_indices * self.reso_grid ** 3 * 2
         unique_indices_flat = (
@@ -253,8 +266,6 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         
         p = inputs['points']
         index = inputs['index']
-
-        dir = 'generator_output'
         
         fea = {}
 

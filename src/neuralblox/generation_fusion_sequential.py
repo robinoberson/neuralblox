@@ -81,15 +81,16 @@ class Generator3DSequential(object):
             for i in range(n_sequence):
                 inputs_frame = p_in[i]
                 if i == 0:
-                    self.voxel_grid.reset()
+                    self.trainer.voxel_grid.reset()
                     latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
+                    print(f'Voxel grid is empty, start with cold start')
                 else:
                     latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
-            
+                    print(f'Perform latent fusion')
                 stacked_latents, centers = self.stack_latents_all()
                 mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
                 mesh_list.append(mesh)
-    
+        return mesh_list
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
@@ -209,6 +210,7 @@ class Generator3DSequential(object):
     # @profile
     def generate_occupancy(self, latent_map_full, centers, crop_size):
         with torch.no_grad():
+            centers = np.array(centers.cpu())
             n_crop = latent_map_full.shape[0]
             print("Decoding latent codes from {} voxels".format(n_crop))
             # acquire the boundary for every crops
@@ -232,7 +234,7 @@ class Generator3DSequential(object):
                 # print(t)
                 
                 pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]]
-                pp = pp[:n, :n, :n]
+                pp = pp[:, :n, :n, :n]
                 # print(pp.shape)
                 # print(bb_max - bb_min)
                 pp = pp.reshape(3, -1).T
@@ -240,7 +242,9 @@ class Generator3DSequential(object):
                 # pp = np.random.random((n**3, 3)) * (bb_max - bb_min) + bb_min
 
                 bb_size = bb_max - bb_min
-                pp_n = (pp-centers) / bb_size + 0.5
+                pp_centered = (pp-center)
+                pp_n = pp_centered / bb_size 
+                pp_n = pp_n + 0.5
                 
                 pp_full[i] = pp
                 pp_n_full[i] = pp_n

@@ -62,6 +62,7 @@ training:
   model_merging: model_merging.pt
   limited_gpu: true
   save_data_viz: true
+  n_voxels_max: 20
 test:
   threshold: 0.2
   eval_mesh: true

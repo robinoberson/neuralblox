@@ -2,23 +2,17 @@ inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes: null
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot_augmented
-  grid_resolution: 24
   pointcloud_noise: 0.005
   # pointcloud_noise: 0.0
-model:
-  encoder_kwargs:
-    grid_resolution: 24
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_25th_June_augmented
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_2nd_June_augmented/model_backbone_6000.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_2nd_June_augmented/model_merging_6000.pt
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_22nd_June_augmented/model_backbone_6000.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_22nd_June_augmented/model_merging_6000.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: true
+  n_voxels_max: 40
 test:
-  threshold: 0.2
-  eval_mesh: true
-  eval_pointcloud: false
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
 visualization: false

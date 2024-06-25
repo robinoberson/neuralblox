@@ -106,7 +106,7 @@ class SequentialTrainer(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 40, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.3):
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.3):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
@@ -159,7 +159,6 @@ class SequentialTrainer(BaseTrainer):
 
         for idx_sequence in range(n_sequence):
             # idx_sequence = 0
-            
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
@@ -273,18 +272,13 @@ class SequentialTrainer(BaseTrainer):
         vol_bound = self.get_grid_from_centers(centers, self.input_crop_size)
         p_n_stacked = normalize_coord(p_stacked, vol_bound)
 
-        if self.limited_gpu:
-            n_batch_max = 40
-        else:
-            n_batch_max = 1000
-
-        n_batch = int(np.ceil(n_crops_total / n_batch_max))
+        n_batch = int(np.ceil(n_crops_total / self.n_voxels_max))
 
         logits_stacked = None  # Initialize logits directly
 
         for i in range(n_batch):
-            start = i * n_batch_max
-            end = min((i + 1) * n_batch_max, n_crops_total)
+            start = i * self.n_voxels_max
+            end = min((i + 1) * self.n_voxels_max, n_crops_total)
 
             p_stacked_batch = p_stacked[start:end]
             p_n_stacked_batch = p_n_stacked[start:end]

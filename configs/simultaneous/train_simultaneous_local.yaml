@@ -1,14 +1,10 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
-  # classes: ['2024-03-27_11-27-52']
+  classes: null
   # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
   path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
-  grid_resolution: 24
-  # pointcloud_noise: 0.005
-  pointcloud_noise: 0.0
-model:
-  encoder_kwargs:
-    grid_resolution: 24
+  pointcloud_noise: 0.005
+  # pointcloud_noise: 0.0
 training:
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_6000.pt
@@ -21,8 +17,6 @@ training:
   # backup_every: 1
   # print_every: 1
 test:
-  eval_mesh: true
-  eval_pointcloud: false
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
 generation:
@@ -33,4 +27,4 @@ generation:
   model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_6000.pt
   resolution_0: 50
 
-visualization: true
+visualization: false

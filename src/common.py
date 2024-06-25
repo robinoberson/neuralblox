@@ -405,7 +405,10 @@ def normalize_coord(p, vol_range, plane='xz'):
     bb_max_coord = torch.max(coord, dim=-2)[0]
     
     if torch.max(coord) > 1.0 or torch.min(coord) < 0.0:
-        print('Problem with coord')
+        max_coord = torch.max(coord)
+        min_coord = torch.min(coord)
+        print(f'Problem with coord, max: {max_coord}, min: {min_coord}')
+        # print('Problem with coord')
         # a_reshaped = coord.reshape(-1, 3)
         # mask_bigger = torch.sum(a_reshaped > 1.0, 1)
         # mask_smaller = torch.sum(a_reshaped < 0.0, 1)
