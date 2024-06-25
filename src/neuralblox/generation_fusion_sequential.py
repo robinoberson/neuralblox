@@ -82,9 +82,9 @@ class Generator3DSequential(object):
                 inputs_frame = p_in[i]
                 if i == 0:
                     self.voxel_grid.reset()
-                    latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_cold_start(inputs_frame)
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
                 else:
-                    latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_inputs(inputs_frame)
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
             
                 stacked_latents, centers = self.stack_latents_all()
                 mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
@@ -101,10 +101,10 @@ class Generator3DSequential(object):
         with torch.no_grad():
             if self.trainer.voxel_grid.is_empty():
                 print(f'Voxel grid is empty, start with cold start')
-                latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_cold_start(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
             else:
                 print(f'Perform latent fusion')
-                latent_map_stacked_merged, centers_frame_occupied = self.trainer.fuse_inputs(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
             
         return latent_map_stacked_merged, centers_frame_occupied
 

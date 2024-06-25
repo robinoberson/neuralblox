@@ -17,8 +17,7 @@ import torch.profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 import copy
 
-
-torch.manual_seed(42)    
+torch.manual_seed(42)
 
 class VoxelGrid:
     def __init__(self):
@@ -107,7 +106,7 @@ class SequentialTrainer(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 6144):
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.3):
         self.model = model
         self.model_merge = model_merge
         self.optimizer = optimizer
@@ -130,6 +129,7 @@ class SequentialTrainer(BaseTrainer):
         self.n_voxels_max = n_voxels_max
         self.n_max_points = n_max_points
         self.n_max_points_query = n_max_points_query
+        self.occ_per_query = occ_per_query
         self.voxel_grid = VoxelGrid()
         # self.voxel_grid.verbose = True
         self.voxel_grid_empty = VoxelGrid()
@@ -161,7 +161,7 @@ class SequentialTrainer(BaseTrainer):
             # idx_sequence = 0
             
             inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query)
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
             if idx_sequence == 0:
                 self.voxel_grid.reset()
@@ -719,7 +719,7 @@ class SequentialTrainer(BaseTrainer):
         return vol_bound, centers
 
     
-    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048):
+    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         
@@ -745,30 +745,21 @@ class SequentialTrainer(BaseTrainer):
         # Set values to 0 where conditions are met
         distributed_inputs[:, :, 3][final_mask] = 0
         
-        # print(f'Distributing inputs with n_max = {n_max}')
         # Create a mask for selecting points with label 1
         indexes_keep = distributed_inputs[..., 3] == 1
-
-        # Calculate the number of points to keep for each input and crop
-        n_points = distributed_inputs[..., 3].sum(dim=1).int()
-
-        # Create a mask for broadcasting
-        mask = torch.arange(n_max).expand(n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
 
         random_points = self.get_empty_inputs(centers, self.input_crop_size, n_max_points = n_max)
         
         distributed_inputs_short = torch.zeros(n_crops, n_max, 4, device=self.device)
         distributed_inputs_short[:, :, :3] = random_points.reshape(n_crops, n_max, 3)
-        
-        # return distributed_inputs, distributed_inputs_short, indexes_keep, mask
-        
+                
         # Select n_max points
         new_line_template = torch.zeros(indexes_keep.shape[1], dtype=torch.bool)
         for i in range(distributed_inputs.shape[0]):
             indexes_line = indexes_keep[i, :]
-            if indexes_line.sum() > n_max:
+            if indexes_line.sum() > int(n_max*occ_perc):
                 indexes_true = torch.where(indexes_line)[0]
-                random_indexes_keep = torch.randperm(indexes_true.shape[0])[:n_max]
+                random_indexes_keep = torch.randperm(indexes_true.shape[0])[:int(n_max*occ_perc)]
                 
                 # Create a new line with the randomly selected indexes set to True in a single step
                 new_line = new_line_template.clone()
@@ -776,15 +767,16 @@ class SequentialTrainer(BaseTrainer):
                 
                 # Update the indexes_keep tensor with the new line for the current sample
                 indexes_keep[i] = new_line
+
+        # Select n_max points
+        n_points = indexes_keep.sum(axis=1)
+        mask = torch.arange(n_max).expand(n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
                 
-        new_distributed_inputs = distributed_inputs[indexes_keep]
-        to_be_agg = distributed_inputs_short[mask]
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
         voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
         
         inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
-        vol_bound_frame_occupied = vol_bound['input_vol'][voxels_occupied]
         centers_frame_occupied = centers[voxels_occupied]
 
         return inputs_frame_occupied, centers_frame_occupied
