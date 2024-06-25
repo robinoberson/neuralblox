@@ -7,8 +7,8 @@ data:
   # pointcloud_noise: 0.0
 training:
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_6000.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_6000.pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_200.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_200.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: false
@@ -23,8 +23,8 @@ generation:
   threshold: 0.02
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_6000.pt
-  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_6000.pt
+  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_300.pt
+  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_300.pt
   resolution_0: 50
 
 visualization: false

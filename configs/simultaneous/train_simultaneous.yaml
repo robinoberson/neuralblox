@@ -40,7 +40,7 @@ training:
   batch_size: 1
   model_selection_metric: iou
   model_selection_mode: maximize
-  checkpoint_interval_minutes: 20
+  checkpoint_interval_minutes: 30
   print_every: 50
   backup_every: 100
 
@@ -55,7 +55,7 @@ training:
   log_comet: false
   lr: 0.001
   lr_reduce_factor: 0.9
-  lr_patience: 200
+  lr_patience: 400
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt

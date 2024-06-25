@@ -79,6 +79,8 @@ class Generator3DSequential(object):
             mesh_list = []
             
             for i in range(n_sequence):
+                if i > 3:
+                    break
                 inputs_frame = p_in[i]
                 if i == 0:
                     self.trainer.voxel_grid.reset()
@@ -209,119 +211,129 @@ class Generator3DSequential(object):
 
     # @profile
     def generate_occupancy(self, latent_map_full, centers, crop_size):
-        with torch.no_grad():
-            centers = np.array(centers.cpu())
-            n_crop = latent_map_full.shape[0]
-            print("Decoding latent codes from {} voxels".format(n_crop))
-            # acquire the boundary for every crops
+        centers = np.array(centers.cpu())
+        n_crop = latent_map_full.shape[0]
+        print("Decoding latent codes from {} voxels".format(n_crop))
+        # acquire the boundary for every crops
+        kwargs = {}
+
+        n_voxels = latent_map_full.shape[0]
+        
+        n = self.resolution0
+        
+        pp_full = np.zeros((n_voxels, n**3, 3))
+        pp_n_full = np.zeros((n_voxels, n**3, 3))
+        
+        lb = centers - crop_size / 2.0
+        ub = centers + crop_size / 2.0
+        
+        for i in range(n_voxels):
+            center = centers[i]
+            bb_min = lb[i]
+            bb_max = ub[i]
+            t = (bb_max - bb_min) / n
+            # print(t)
+            
+            pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]]
+            pp = pp[:, :n, :n, :n]
+            # print(pp.shape)
+            # print(bb_max - bb_min)
+            pp = pp.reshape(3, -1).T
+            
+            # pp = np.random.random((n**3, 3)) * (bb_max - bb_min) + bb_min
+
+            bb_size = bb_max - bb_min
+            pp_centered = (pp-center)
+            pp_n = pp_centered / bb_size 
+            pp_n = pp_n + 0.5
+            
+            pp_full[i] = pp
+            pp_n_full[i] = pp_n
+            
+        if self.limited_gpu:
+            n_batch_max = 20
+        else:
+            n_batch_max = 1000
+                
+        n_batch = int(np.ceil(n_crop / n_batch_max))
+        logits_stacked = None
+        for i in range(n_batch):
+            start = i * n_batch_max
+            end = min((i + 1) * n_batch_max, n_crop)
+
+            p_stacked_batch = torch.from_numpy(pp_full[start:end]).to(self.trainer.device)
+            p_n_stacked_batch = torch.from_numpy(pp_n_full[start:end]).to(self.trainer.device)
+            latent_map_full_batch = latent_map_full[start:end]
+
             kwargs = {}
-
-            n_voxels = latent_map_full.shape[0]
+            pi_in = p_stacked_batch[..., :3].clone()
+            pi_in = {'p': pi_in}
+            p_n = {}
+            p_n['grid'] = p_n_stacked_batch[..., :3].clone()
+            pi_in['p_n'] = p_n
+            c = {}
+            latent_map_full_batch_decoded = self.trainer.unet.decode(latent_map_full_batch, self.trainer.features_shapes)
             
-            n = self.resolution0
+            c['grid'] = latent_map_full_batch_decoded.clone()
+            logits_decoded = self.trainer.model.decode(pi_in, c, **kwargs).logits
             
-            pp_full = np.zeros((n_voxels, n**3, 3))
-            pp_n_full = np.zeros((n_voxels, n**3, 3))
-            
-            lb = centers - crop_size / 2.0
-            ub = centers + crop_size / 2.0
-            
-            for i in range(n_voxels):
-                center = centers[i]
-                bb_min = lb[i]
-                bb_max = ub[i]
-                t = (bb_max - bb_min) / n
-                # print(t)
-                
-                pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]]
-                pp = pp[:, :n, :n, :n]
-                # print(pp.shape)
-                # print(bb_max - bb_min)
-                pp = pp.reshape(3, -1).T
-                
-                # pp = np.random.random((n**3, 3)) * (bb_max - bb_min) + bb_min
-
-                bb_size = bb_max - bb_min
-                pp_centered = (pp-center)
-                pp_n = pp_centered / bb_size 
-                pp_n = pp_n + 0.5
-                
-                pp_full[i] = pp
-                pp_n_full[i] = pp_n
-                
-            if self.limited_gpu:
-                n_batch_max = 20
+            if logits_stacked is None:
+                logits_stacked = logits_decoded.clone()  # Initialize logits directly with the first batch
             else:
-                n_batch_max = 1000
-                    
-            n_batch = int(np.ceil(n_crop / n_batch_max))
-            logits_stacked = None
-            for i in range(n_batch):
-                start = i * n_batch_max
-                end = min((i + 1) * n_batch_max, n_crop)
-
-                p_stacked_batch = torch.from_numpy(pp_full[start:end]).to(self.trainer.device)
-                p_n_stacked_batch = torch.from_numpy(pp_n_full[start:end]).to(self.trainer.device)
-                latent_map_full_batch = latent_map_full[start:end]
-
-                kwargs = {}
-                pi_in = p_stacked_batch[..., :3].clone()
-                pi_in = {'p': pi_in}
-                p_n = {}
-                p_n['grid'] = p_n_stacked_batch[..., :3].clone()
-                pi_in['p_n'] = p_n
-                c = {}
-                latent_map_full_batch_decoded = self.trainer.unet.decode(latent_map_full_batch, self.trainer.features_shapes)
-                
-                c['grid'] = latent_map_full_batch_decoded.clone()
-                logits_decoded = self.trainer.model.decode(pi_in, c, **kwargs).logits
-                
-                if logits_stacked is None:
-                    logits_stacked = logits_decoded.clone()  # Initialize logits directly with the first batch
-                else:
-                    logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
-            
-            # return logits_stacked, pp_full
-            # self.trainer.visualize_logits(logits_stacked, torch.from_numpy(pp_full))
+                logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
 
             values = logits_stacked.detach().cpu().numpy().reshape(-1, n, n, n)
             values = np.exp(values) / (1 + np.exp(values))
             
-            n_axis_crop = self.trainer.vol_bound_all['axis_n_crop']
-            max_x, max_y, max_z = n_axis_crop[0] - 2, n_axis_crop[1] - 2, n_axis_crop[2] - 2
+            self.lb_overall = np.min(centers, axis=0) - self.trainer.query_crop_size / 2
+            self.ub_overall = np.max(centers, axis=0) + self.trainer.query_crop_size / 2
             
-            if latent_map_full.shape[0] == 1:
-                max_x, max_y, max_z = 1, 1, 1
+            n_axis_crop = np.ceil((self.ub_overall - self.lb_overall) / self.trainer.query_crop_size).astype(int)
+            self.axis_n_crop = n_axis_crop
+            n_crop = n_axis_crop[0] * n_axis_crop[1] * n_axis_crop[2]
+            max_x, max_y, max_z = n_axis_crop[0], n_axis_crop[1], n_axis_crop[2] 
+            value_grid = np.zeros((max_x, max_y, max_z, n, n, n))
+
+        for idx_center in range(len(centers)):
+            center = centers[idx_center, :]
+            #convert to x,y,z 
+            center = center - self.lb_overall
+            center = center / self.trainer.query_crop_size
+            center = center - 0.5
             
-            value_grid = values.reshape(max_x, max_y, max_z, n, n, n)
+            x, y, z = int(center[0]), int(center[1]), int(center[2])
+            value_grid[x,y,z] = values[idx_center]
+        
+        if latent_map_full.shape[0] == 1:
+            max_x, max_y, max_z = 1, 1, 1
+        
+        print("Organize voxels for mesh generation")
+        
+        r = n * 2 ** self.upsampling_steps
+        occ_values = np.array([]).reshape(r, r, 0)
+        occ_values_y = np.array([]).reshape(r, 0, r * max_z)
+        occ_values_x = np.array([]).reshape(0, r * max_y, r * max_z)
 
-            print("Organize voxels for mesh generation")
-            
-            r = n * 2 ** self.upsampling_steps
-            occ_values = np.array([]).reshape(r, r, 0)
-            occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-            occ_values_x = np.array([]).reshape(0, r * max_y, r * max_z)
+        for i in trange(n_crop):
+            index_x = i // (max_y * max_z)
+            remainder_x = i % (max_y * max_z)
+            index_y = remainder_x // max_z
+            index_z = remainder_x % max_z
 
-            for i in trange(n_crop):
-                index_x = i // (max_y * max_z)
-                remainder_x = i % (max_y * max_z)
-                index_y = remainder_x // max_z
-                index_z = remainder_x % max_z
+            values = value_grid[index_x][index_y][index_z]
 
-                values = value_grid[index_x][index_y][index_z]
-
-                occ_values = np.concatenate((occ_values, values), axis=2)
-                # along y axis
-                if (i + 1) % max_z == 0:
-                    occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
-                    occ_values = np.array([]).reshape(r, r, 0)
-                # along x axis
-                if (i + 1) % (max_z * max_y) == 0:
-                    occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
-                    occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-            del occ_values, occ_values_y
-            
-            occ_values_x = occ_values_x.astype(np.float32)
+            occ_values = np.concatenate((occ_values, values), axis=2)
+            # along y axis
+            if (i + 1) % max_z == 0:
+                occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
+                occ_values = np.array([]).reshape(r, r, 0)
+            # along x axis
+            if (i + 1) % (max_z * max_y) == 0:
+                occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
+                occ_values_y = np.array([]).reshape(r, 0, r * max_z)
+        del occ_values, occ_values_y
+        
+        occ_values_x = occ_values_x.astype(np.float32)
             
         return occ_values_x
     # @profile
@@ -367,15 +379,13 @@ class Generator3DSequential(object):
 
         if self.vol_bound is not None:
             # Scale the mesh back to its original metric
-            vol_bound = self.trainer.remove_padding_single_dim(self.trainer.vol_bound_all['query_vol'].copy()).reshape(-1, 2, 3)
-            bb_min = vol_bound[:, 0].min(axis=0)
-            bb_max = vol_bound[:, 1].max(axis=0)
+            
             # bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
             # bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
-            axis_n_crop = self.trainer.vol_bound_all['axis_n_crop'] - np.array([2, 2, 2])
-            mc_unit = max(bb_max - bb_min) / (
-                        axis_n_crop.max() * self.resolution0 * 2 ** self.upsampling_steps)
-            vertices = vertices * mc_unit + bb_min
+            
+            mc_unit = max(self.ub_overall - self.lb_overall) / (
+                        self.axis_n_crop.max() * self.resolution0 * 2 ** self.upsampling_steps)
+            vertices = vertices * mc_unit + self.lb_overall
         else:
             # Normalize to bounding box
             vertices /= np.array([n_x - 1, n_y - 1, n_z - 1])
