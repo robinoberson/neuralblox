@@ -73,26 +73,53 @@ class Generator3DSequential(object):
         self.hdim = unet_hdim
         
     def generate_sequence(self, batch):
-        with torch.no_grad():
-            p_in = self.get_inputs(batch)
-            n_sequence = p_in.shape[0]
-            mesh_list = []
+        p_in = self.get_inputs(batch)
+        n_sequence = p_in.shape[0]
+        mesh_list = []
+        inputs_frame_list = []
+        
+        for i in range(n_sequence):
+        
+            inputs_frame = p_in[i]
+            inputs_frame_list.append(inputs_frame)
             
-            for i in range(n_sequence):
-                if i > 3:
-                    break
-                inputs_frame = p_in[i]
-                if i == 0:
-                    self.trainer.voxel_grid.reset()
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
-                    print(f'Voxel grid is empty, start with cold start')
-                else:
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
-                    print(f'Perform latent fusion')
-                stacked_latents, centers = self.stack_latents_all()
-                mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
-                mesh_list.append(mesh)
-        return mesh_list
+            if i == 0:
+                self.trainer.voxel_grid.reset()
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
+                print(f'Voxel grid is empty, start with cold start')
+            else:
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
+                # print(f'Perform latent fusion')
+            stacked_latents, centers = self.stack_latents_all()
+            mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
+            mesh_list.append(mesh)
+        return mesh_list, inputs_frame_list
+    
+    def generate_mesh_at_index(self, batch, index):
+        p_in = self.get_inputs(batch)
+        n_sequence = p_in.shape[0]
+        mesh_list = []
+        inputs_frame_list = []
+        
+        for i in range(n_sequence):
+            if i > index:
+                break
+            inputs_frame = p_in[i]
+            inputs_frame_list.append(inputs_frame)
+            
+            if i == 0:
+                self.trainer.voxel_grid.reset()
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
+                print(f'Voxel grid is empty, start with cold start')
+            else:
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
+                print(f'Perform latent fusion')
+                
+            stacked_latents, centers = self.stack_latents_all()
+            mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=False)
+            mesh_list.append(mesh)
+        
+        return mesh_list, inputs_frame_list
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
@@ -205,9 +232,8 @@ class Generator3DSequential(object):
         return occ_hat
     # @profile
     def generate_mesh_from_neural_map(self, latent_map_full, centers, crop_size, return_stats=True):
-        occ_values_x = self.generate_occupancy(latent_map_full, centers, crop_size)
-        # return occ_values_x
-        return self.generate_mesh_from_occ(occ_values_x, return_stats=return_stats)
+        return self.generate_occupancy(latent_map_full, centers, crop_size)
+        
 
     # @profile
     def generate_occupancy(self, latent_map_full, centers, crop_size):
@@ -232,16 +258,12 @@ class Generator3DSequential(object):
             bb_min = lb[i]
             bb_max = ub[i]
             t = (bb_max - bb_min) / n
-            # print(t)
             
             pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]]
             pp = pp[:, :n, :n, :n]
-            # print(pp.shape)
-            # print(bb_max - bb_min)
+
             pp = pp.reshape(3, -1).T
             
-            # pp = np.random.random((n**3, 3)) * (bb_max - bb_min) + bb_min
-
             bb_size = bb_max - bb_min
             pp_centered = (pp-center)
             pp_n = pp_centered / bb_size 
@@ -282,60 +304,95 @@ class Generator3DSequential(object):
             else:
                 logits_stacked = torch.cat((logits_stacked, logits_decoded), dim=0)  # Concatenate logits
 
-            values = logits_stacked.detach().cpu().numpy().reshape(-1, n, n, n)
-            values = np.exp(values) / (1 + np.exp(values))
-            
-            self.lb_overall = np.min(centers, axis=0) - self.trainer.query_crop_size / 2
-            self.ub_overall = np.max(centers, axis=0) + self.trainer.query_crop_size / 2
-            
-            n_axis_crop = np.ceil((self.ub_overall - self.lb_overall) / self.trainer.query_crop_size).astype(int)
-            self.axis_n_crop = n_axis_crop
-            n_crop = n_axis_crop[0] * n_axis_crop[1] * n_axis_crop[2]
-            max_x, max_y, max_z = n_axis_crop[0], n_axis_crop[1], n_axis_crop[2] 
-            value_grid = np.zeros((max_x, max_y, max_z, n, n, n))
-
-        for idx_center in range(len(centers)):
-            center = centers[idx_center, :]
-            #convert to x,y,z 
-            center = center - self.lb_overall
-            center = center / self.trainer.query_crop_size
-            center = center - 0.5
-            
-            x, y, z = int(center[0]), int(center[1]), int(center[2])
-            value_grid[x,y,z] = values[idx_center]
+        values = logits_stacked.detach().cpu().numpy()
+        values = np.exp(values) / (1 + np.exp(values))
         
-        if latent_map_full.shape[0] == 1:
-            max_x, max_y, max_z = 1, 1, 1
+        pp_full = pp_full.reshape(-1, 3)
+        values = values.reshape(-1)
         
-        print("Organize voxels for mesh generation")
+        scaling_factor = self.resolution0/self.trainer.query_crop_size # Adjust this factor based on your desired resolution increase
+
+        min_coords = np.min(pp_full, axis=0)
+        shift_vector = -min_coords + 1  # Shift enough to make all coordinates positive
+
+        # Scale the coordinates
+        scaled_points = (pp_full + shift_vector) * scaling_factor
+
+        # Round scaled coordinates to nearest integers for indexing
+        x = np.round(scaled_points[:, 0]).astype(int)
+        y = np.round(scaled_points[:, 1]).astype(int)
+        z = np.round(scaled_points[:, 2]).astype(int)
+
+        # Determine the maximum extents of scaled x, y, z
+        x_max = x.max() + 1 if x.size > 0 else 0
+        y_max = y.max() + 1 if y.size > 0 else 0
+        z_max = z.max() + 1 if z.size > 0 else 0
+        z_max = z.max() + 1 if z.size > 0 else 0
+
+        # Determine original shape based on maximum extents
+        original_shape = (x_max, y_max, z_max)
         
-        r = n * 2 ** self.upsampling_steps
-        occ_values = np.array([]).reshape(r, r, 0)
-        occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-        occ_values_x = np.array([]).reshape(0, r * max_y, r * max_z)
-
-        for i in trange(n_crop):
-            index_x = i // (max_y * max_z)
-            remainder_x = i % (max_y * max_z)
-            index_y = remainder_x // max_z
-            index_z = remainder_x % max_z
-
-            values = value_grid[index_x][index_y][index_z]
-
-            occ_values = np.concatenate((occ_values, values), axis=2)
-            # along y axis
-            if (i + 1) % max_z == 0:
-                occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
-                occ_values = np.array([]).reshape(r, r, 0)
-            # along x axis
-            if (i + 1) % (max_z * max_y) == 0:
-                occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
-                occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-        del occ_values, occ_values_y
+        values_reconstructed = np.zeros(original_shape)
         
-        occ_values_x = occ_values_x.astype(np.float32)
+        values_reconstructed[x, y, z] = values
+        threshold = 0.2
+
+        vertices, triangles = libmcubes.marching_cubes(values_reconstructed, threshold)
+        mesh = trimesh.Trimesh(vertices/scaling_factor - shift_vector, triangles, vertex_normals=None, process=False)
+
+        return mesh, pp_full
+        
+        # self.lb_overall = np.min(centers, axis=0) - self.trainer.query_crop_size / 2
+        # self.ub_overall = np.max(centers, axis=0) + self.trainer.query_crop_size / 2
+        
+        # n_axis_crop = np.ceil((self.ub_overall - self.lb_overall) / self.trainer.query_crop_size).astype(int)
+        # self.axis_n_crop = n_axis_crop
+        # n_crop = n_axis_crop[0] * n_axis_crop[1] * n_axis_crop[2]
+        # max_x, max_y, max_z = n_axis_crop[0], n_axis_crop[1], n_axis_crop[2] 
+        # value_grid = np.zeros((max_x, max_y, max_z, n, n, n))
+
+        # for idx_center in range(len(centers)):
+        #     center = centers[idx_center, :]
+        #     #convert to x,y,z 
+        #     center = center - self.lb_overall
+        #     center = center / self.trainer.query_crop_size
+        #     center = center - 0.5
             
-        return occ_values_x
+        #     x, y, z = int(center[0]), int(center[1]), int(center[2])
+        #     value_grid[x,y,z] = values[idx_center]
+        
+        # if latent_map_full.shape[0] == 1:
+        #     max_x, max_y, max_z = 1, 1, 1
+        
+        # # print("Organize voxels for mesh generation")
+        
+        # r = n * 2 ** self.upsampling_steps
+        # occ_values = np.array([]).reshape(r, r, 0)
+        # occ_values_y = np.array([]).reshape(r, 0, r * max_z)
+        # occ_values_x = np.array([]).reshape(0, r * max_y, r * max_z)
+
+        # for i in trange(n_crop):
+        #     index_x = i // (max_y * max_z)
+        #     remainder_x = i % (max_y * max_z)
+        #     index_y = remainder_x // max_z
+        #     index_z = remainder_x % max_z
+
+        #     values = value_grid[index_x][index_y][index_z]
+
+        #     occ_values = np.concatenate((occ_values, values), axis=2)
+        #     # along y axis
+        #     if (i + 1) % max_z == 0:
+        #         occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
+        #         occ_values = np.array([]).reshape(r, r, 0)
+        #     # along x axis
+        #     if (i + 1) % (max_z * max_y) == 0:
+        #         occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
+        #         occ_values_y = np.array([]).reshape(r, 0, r * max_z)
+        # del occ_values, occ_values_y
+        
+        # occ_values_x = occ_values_x.astype(np.float32)
+            
+        # return occ_values_x
     # @profile
     def generate_mesh_from_occ(self, value_grid, return_stats=True, stats_dict=dict()):
         value_grid[np.where(value_grid == 1.0)] = 0.9999999
@@ -348,7 +405,7 @@ class Generator3DSequential(object):
         mesh = self.extract_mesh(value_grid, stats_dict=stats_dict)
         t1 = time.time()
         generate_mesh_time = t1 - t0
-        print("Mesh generated in {:.2f}s".format(generate_mesh_time))
+        # print("Mesh generated in {:.2f}s".format(generate_mesh_time))
         if return_stats:
             return mesh, stats_dict, value_grid
         else:
@@ -363,7 +420,7 @@ class Generator3DSequential(object):
         '''
         # Some short hands
         n_x, n_y, n_z = occ_hat.shape
-        box_size = 1 + self.padding
+        box_size = 1
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
         # Make sure that mesh is watertight
         t0 = time.time()

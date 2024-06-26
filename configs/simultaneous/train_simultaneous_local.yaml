@@ -1,30 +1,24 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
-  classes: null
-  # path: /scratch/roberson/data/simultaneous/simultaneous_training/box_data
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
+  classes:
+  path: 
+    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
   pointcloud_noise: 0.005
-  # pointcloud_noise: 0.0
-training:
-  out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_200.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_200.pt
-  limited_gpu: true
-  save_data_viz: true
-  log_comet: false
-
-  # checkpoint_interval_minutes: 0
-  # backup_every: 1
-  # print_every: 1
+generation:
+  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
+  generator_type: neighbors
+  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_1800.pt
+  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_1800.pt
+  resolution_0: 50
+  threshold: 0.02
 test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
-generation:
-  threshold: 0.02
-  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
-  generator_type: neighbors
-  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_300.pt
-  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_300.pt
-  resolution_0: 50
-
+training:
+  limited_gpu: true
+  log_comet: false
+  out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
+  save_data_viz: true
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_200.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_200.pt
 visualization: false
