@@ -210,16 +210,22 @@ class SequentialTrainer(BaseTrainer):
             p_in, p_query = self.get_inputs_from_batch(data_batch)
             return self.process_sequence(p_in, p_query, is_training=False)
 
-    def fuse_cold_start(self, inputs_frame):
-        latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
-            
+    def fuse_cold_start(self, inputs_frame, encode_empty = True):
+        if encode_empty:
+            latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame, encode_empty = True)
+        else:
+            latents_frame, inputs_frame_distributed, centers_frame, centers_frame_occupied = self.encode_distributed_inputs(inputs_frame, encode_empty = False)
+
         for idx, (center, points, encoded_latent) in enumerate(zip(centers_frame, inputs_frame_distributed, latents_frame)):
             if idx < len(centers_frame_occupied):
                 self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = False)
             else:
-                self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
-            
-        latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied)
+                if encode_empty:
+                    self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
+                else:
+                    break
+                
+        latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied, encode_empty = encode_empty)
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
 
         for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
@@ -323,25 +329,35 @@ class SequentialTrainer(BaseTrainer):
         latent_map = self.model_merge(fea_dict)
         return latent_map
     
-    def encode_distributed_inputs(self, inputs_frame, compute_neighbours = True):
+    def encode_distributed_inputs(self, inputs_frame, encode_empty = True):
         self.t0 = time.time()
         inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame, self.n_max_points)
-        
-        if compute_neighbours:
-            neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
-            
+
+        neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
+        centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0)
+
+        if encode_empty:
             inputs_frame_distributed_empty, centers_frame_empty = self.get_empty_neighbours(neighbouring_centers, centers_frame_occupied)
             inputs_frame_distributed = torch.cat((inputs_frame_distributed_occupied, inputs_frame_distributed_empty), axis = 0)
-            centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0)
-        else:
-            inputs_frame_distributed = inputs_frame_distributed_occupied
-            centers_frame = centers_frame_occupied
+
+            latents_frame = self.encode_distributed(inputs_frame_distributed, centers_frame)
             
-        latents_frame = self.encode_distributed(inputs_frame_distributed, centers_frame)
-        return latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
-    
+            return latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
+
+
+        else:           
+            latents_frame_occupied = self.encode_distributed(inputs_frame_distributed_occupied, centers_frame_occupied)
+            
+            expanded_shape = (len(neighbouring_centers),) + self.empty_latent_code.shape
+            latents_frame_empty = self.empty_latent_code.shape.unsqueeze(0).expand(expanded_shape)
+            
+            latents_frame = torch.cat((latents_frame_occupied, latents_frame_empty), axis = 0)
+
+            return latents_frame, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
+
+            
         
-    def stack_latents_cold_start(self, centers_frame_occupied):
+    def stack_latents_cold_start(self, centers_frame_occupied, encode_empty = True):
         c, h, w, d = self.voxel_grid.latent_shape 
         
         latent_map_stacked = torch.zeros(len(centers_frame_occupied), 2 * c, 3*h, 3*w, 3*d).to(device=self.device)
@@ -362,7 +378,10 @@ class SequentialTrainer(BaseTrainer):
                     latent_cache[center_with_offset] = self.voxel_grid.get_latent(center_with_offset)
                     
                     if latent_cache[center_with_offset] is None:
-                        latent_cache[center_with_offset] = self.voxel_grid_empty.get_latent(center_with_offset)
+                        if encode_empty:
+                            latent_cache[center_with_offset] = self.voxel_grid_empty.get_latent(center_with_offset)
+                        else:
+                            latent_cache[center_with_offset] = self.empty_latent_code
                         
                 latent = latent_cache[center_with_offset]
                 
