@@ -160,19 +160,28 @@ class PatchLocalPoolPointnetLatent(nn.Module):
             self.fc_pos = nn.Linear(dim, 2 * hidden_dim)
     
     def generate_grid_features(self, index, unique_indices_flat, inverse_indices_flat, sum_tensor_flat, count_tensor_flat, c):
-
+        # t0 = time.time()
+        
         device = c.device
         n_batch, n_points, n_features = c.shape
         
         sum_tensor_flat = torch.zeros_like(sum_tensor_flat)
         count_tensor_flat = torch.zeros_like(count_tensor_flat)
-    
+
+        # print(f'time for allocation: {time.time() - t0}')
+        # t0 = time.time()
         sum_tensor_flat.index_add_(0, inverse_indices_flat, c.permute(0, 2, 1).reshape(-1))
         count_tensor_flat.index_add_(0, inverse_indices_flat, torch.ones(n_batch * n_points * n_features).to(c.device))
         
+        # print(f'time for index_add: {time.time() - t0}')
+        # t0 = time.time()
         mean_values = torch.where(count_tensor_flat == 0, torch.zeros_like(sum_tensor_flat), sum_tensor_flat / count_tensor_flat)
+        # print(f'time for where: {time.time() - t0}')
+        # t0 = time.time()
         fea_grid = torch.zeros(c.size(0)* self.c_dim * 2 * self.reso_grid ** 3).to(device)
 
+        # print(f'time for zero: {time.time() - t0}')
+        # t0 = time.time()
         # if len(unique_indices_flat) != len(fea_grid):
         #     print('len(unique_indices_flat) != len(fea_grid)')
         #     raise ValueError
@@ -262,7 +271,6 @@ class PatchLocalPoolPointnetLatent(nn.Module):
 
         
     def forward(self, inputs, limited_gpu = False):
-        self.t0 = time.time()
         
         p = inputs['points']
         index = inputs['index']
@@ -279,13 +287,14 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         net = self.blocks[0](net)
 
         inverse_indices_flat, unique_indices_flat, sum_tensor_flat, count_tensor_flat = self.precompute_indices(index['grid'], net) #net is passed for shape only
-        
+                
         for idx_block, block in enumerate(self.blocks[1:]):
             
             pooled = self.pool_local(inverse_indices_flat, sum_tensor_flat, count_tensor_flat, net)
             net = torch.cat([net, pooled], dim=2)
 
             net = block(net)     
+            
         c = self.fc_c(net)
         
         if 'grid' in self.plane_type:
@@ -295,9 +304,8 @@ class PatchLocalPoolPointnetLatent(nn.Module):
                                                       sum_tensor_flat=sum_tensor_flat, 
                                                       count_tensor_flat=count_tensor_flat, 
                                                       c=c)
-            
+        
+        
         unet = self.unet3d
 
-        if limited_gpu:
-            del c, net, pooled, pp
         return fea['grid'], unet

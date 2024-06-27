@@ -36,18 +36,38 @@ class VoxelGrid:
         if overwrite or h not in self.points_table:
             if self.verbose:
             #print if overwriting has been requested
-                if overwrite and h in self.points_table:
+                if overwrite and h in list(self.centers_table.keys()):
                     print('Overwriting', h)
                 
             self.points_table[h] = points
             self.centers_table[h] = center
             self.latents_table[h] = latent
             
-            if pcd is not None:
-                self.pcd_table[h] = pcd
+            # if pcd is not None:
+            #     self.pcd_table[h] = pcd
         
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
+    
+    def add_voxels_batch(self, centers, points_list, latents, pcds=None, overwrite=False):
+        for idx, center in enumerate(centers):
+            points = points_list[idx]
+            latent = latents[idx]
+            pcd = pcds[idx] if pcds is not None else None
+            h = self.compute_hash(center)
+            if overwrite or h not in self.points_table:
+                if self.verbose and overwrite and h in self.points_table:
+                    print('Overwriting', h)
+                
+                self.points_table[h] = points
+                self.centers_table[h] = center
+                self.latents_table[h] = latent
+                
+                if pcd is not None:
+                    self.pcd_table[h] = pcd
+
+        if self.latent_shape is None and latents:
+            self.latent_shape = latents[0].shape
         
     def get_voxel(self, center):
         h = self.compute_hash(center)
@@ -133,6 +153,7 @@ class SequentialTrainer(BaseTrainer):
         self.voxel_grid = VoxelGrid()
         # self.voxel_grid.verbose = True
         self.voxel_grid_empty = VoxelGrid()
+        self.empty_latent_code = self.get_empty_latent_representation()
         current_dir = os.getcwd()
         
         if 'robin' in current_dir:
@@ -215,6 +236,7 @@ class SequentialTrainer(BaseTrainer):
             latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame, encode_empty = True)
         else:
             latents_frame, inputs_frame_distributed, centers_frame, centers_frame_occupied = self.encode_distributed_inputs(inputs_frame, encode_empty = False)
+            inputs_frame_distributed_occupied = inputs_frame_distributed
 
         for idx, (center, points, encoded_latent) in enumerate(zip(centers_frame, inputs_frame_distributed, latents_frame)):
             if idx < len(centers_frame_occupied):
@@ -233,26 +255,48 @@ class SequentialTrainer(BaseTrainer):
             
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
     
-    def fuse_inputs(self, inputs_frame):
-        latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame)
+    def fuse_inputs(self, inputs_frame, encode_empty = True):
+        self.t0 = time.time()
+        self.timing_counter = 0
+        
+        if encode_empty:
+            latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied  = self.encode_distributed_inputs(inputs_frame, encode_empty = True)
+        else:
+            latents_frame, inputs_frame_distributed, centers_frame, centers_frame_occupied = self.encode_distributed_inputs(inputs_frame, encode_empty = False)
+            inputs_frame_distributed_occupied = inputs_frame_distributed
+        
+        self.print_timing('encode time')
+        
         voxel_grid_temp = VoxelGrid()
-        voxel_grid_empty_temp = VoxelGrid()
+        voxel_grid_empty_temp = None
+        
+        if encode_empty:
+            voxel_grid_empty_temp = VoxelGrid()
 
         for idx, (center, points, encoded_latent) in enumerate(zip(centers_frame, inputs_frame_distributed, latents_frame)):
             if idx < len(centers_frame_occupied):
                 voxel_grid_temp.add_voxel(center, points, encoded_latent)
                 # self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = False)
             else:
-                voxel_grid_empty_temp.add_voxel(center, points, encoded_latent, overwrite = True)
+                if encode_empty:
+                    voxel_grid_empty_temp.add_voxel(center, points, encoded_latent, overwrite = True)                    
                 # self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
+        self.print_timing('add voxel')
         #stack the latents
-        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, voxel_grid_empty_temp)
-
+        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, voxel_grid_empty_temp, encode_empty = encode_empty)
+        self.print_timing('stack latent')
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
+        self.print_timing('merge latent')
+        centers_frame_occupied_list = [centers_frame_occupied[i] for i in range(len(centers_frame_occupied))]
+        inputs_frame_distributed_occupied_list = [inputs_frame_distributed_occupied[i].cpu().numpy() for i in range(len(inputs_frame_distributed_occupied))]
+        latent_map_stacked_merged_list = [latent_map_stacked_merged[i] for i in range(len(latent_map_stacked_merged))]
+        self.print_timing('listify latent')
+        for i in range(len(centers_frame_occupied)):
+            self.voxel_grid.add_voxel(centers_frame_occupied_list[i], inputs_frame_distributed_occupied_list[i], latent_map_stacked_merged_list[i], overwrite = True)
         
-        for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
-            self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
-        
+        # for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
+        #     self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
+        self.print_timing('add voxel')
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
         # return stacked_points, centers_frame_occupied
     def prepare_data_logits(self, latent_map, centers_frame_occupied, p_query_distributed, centers_query):
@@ -329,30 +373,41 @@ class SequentialTrainer(BaseTrainer):
         latent_map = self.model_merge(fea_dict)
         return latent_map
     
+    def get_empty_latent_representation(self):
+        center = torch.tensor([0,0,0]).unsqueeze(0).to(self.device)
+        
+        empty_inputs = self.get_empty_inputs(center, self.query_crop_size, n_max_points = 2048)
+        occ = torch.zeros(*empty_inputs.shape[0:2], 1).to(self.device)
+        empty_inputs = torch.cat((empty_inputs, occ), axis = -1)
+        empty_latent_code = self.encode_distributed(empty_inputs, center)
+
+        return empty_latent_code.squeeze(0)
+    
     def encode_distributed_inputs(self, inputs_frame, encode_empty = True):
         self.t0 = time.time()
+        
         inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame, self.n_max_points)
-
-        neighbouring_centers = self.compute_neighbours_and_bounds(centers_frame_occupied)
+                
+        centers_neighbours = self.compute_neighbours_and_bounds(centers_frame_occupied)
+        centers_frame_empty = self.get_empty_neighbours_centers(centers_neighbours, centers_frame_occupied)
+        
         centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0)
-
+        
         if encode_empty:
-            inputs_frame_distributed_empty, centers_frame_empty = self.get_empty_neighbours(neighbouring_centers, centers_frame_occupied)
+            inputs_frame_distributed_empty, centers_frame_empty = self.get_empty_neighbours(centers_frame_empty)
             inputs_frame_distributed = torch.cat((inputs_frame_distributed_occupied, inputs_frame_distributed_empty), axis = 0)
 
             latents_frame = self.encode_distributed(inputs_frame_distributed, centers_frame)
             
             return latents_frame, inputs_frame_distributed, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
 
-
         else:           
             latents_frame_occupied = self.encode_distributed(inputs_frame_distributed_occupied, centers_frame_occupied)
-            
-            expanded_shape = (len(neighbouring_centers),) + self.empty_latent_code.shape
-            latents_frame_empty = self.empty_latent_code.shape.unsqueeze(0).expand(expanded_shape)
+                        
+            expanded_shape = (len(centers_neighbours),) + self.empty_latent_code.shape
+            latents_frame_empty = self.empty_latent_code.expand(expanded_shape)
             
             latents_frame = torch.cat((latents_frame_occupied, latents_frame_empty), axis = 0)
-
             return latents_frame, inputs_frame_distributed_occupied, centers_frame, centers_frame_occupied
 
             
@@ -441,7 +496,7 @@ class SequentialTrainer(BaseTrainer):
 
         return latent_map_stacked
     
-    def stack_latents(self, centers_frame_occupied, voxel_grid_temp, voxel_grid_temp_empty):
+    def stack_latents(self, centers_frame_occupied, voxel_grid_temp, voxel_grid_temp_empty, encode_empty = True):
         #voxel_grid_temp is the precomputed voxel grid of the new frame
         
         c, h, w, d = voxel_grid_temp.latent_shape  # Use voxel_grid_temp to get latent_shape
@@ -470,7 +525,11 @@ class SequentialTrainer(BaseTrainer):
                     latent_cache[center_with_offset] = voxel_grid_temp.get_latent(center_with_offset)
 
                     if latent_cache[center_with_offset] is None:
-                        latent_cache_empty[center_with_offset] = voxel_grid_temp_empty.get_latent(center_with_offset)
+                        if encode_empty:
+                            latent_cache_empty[center_with_offset] = voxel_grid_temp_empty.get_latent(center_with_offset)
+                        else:
+                            latent_cache_empty[center_with_offset] = self.empty_latent_code
+                            
                         is_empty = True
                         
                 if is_empty:
@@ -595,12 +654,14 @@ class SequentialTrainer(BaseTrainer):
         random_points += bb_min  # Translate points to be within each bounding box
 
         return random_points
-        
-    def get_empty_neighbours(self, centers_neighbours, centers_frame):
-        
+    def get_empty_neighbours_centers(self, centers_neighbours, centers_frame):
         mask = (centers_neighbours.unsqueeze(1) == centers_frame).all(dim=2).any(dim=1)
 
         centers_neighbours_empty = centers_neighbours[~mask]
+
+        return centers_neighbours_empty
+        
+    def get_empty_neighbours(self, centers_neighbours_empty):
         
         random_points = self.get_empty_inputs(centers_neighbours_empty, self.input_crop_size, self.n_max_points)
         occupancies = torch.zeros(*random_points.shape[:-1], 1, device=self.device)
@@ -657,16 +718,19 @@ class SequentialTrainer(BaseTrainer):
             index[fea_type] = ind
             input_cur_batch = add_key(inputs_distributed_batch_3D, index, 'points', 'index', device=self.device)
             
+            self.t0 = time.time()
+            
             if self.unet is None:
                 fea, self.unet = self.model.encode_inputs(input_cur_batch)
             else:
                 fea, _ = self.model.encode_inputs(input_cur_batch)
+            
+            # self.print_timing('encode_inputs')
                 
             _, latent_map_batch, self.features_shapes = self.unet(fea, return_feature_maps=True, decode = False, limited_gpu = False)
+
+            # self.print_timing('unet')
             # if self.limited_gpu: latent_map_batch = latent_map_batch.to('cpu')
-            if self.limited_gpu: 
-                del fea
-                torch.cuda.empty_cache()
 
             if latent_map is None:
                 latent_map = latent_map_batch  # Initialize latent_map with the first batch

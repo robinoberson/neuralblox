@@ -85,58 +85,59 @@ class Generator3DSequential(object):
             
             if i == 0:
                 self.trainer.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
                 print(f'Voxel grid is empty, start with cold start')
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False)
                 # print(f'Perform latent fusion')
             stacked_latents, centers = self.stack_latents_all()
             mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
             mesh_list.append(mesh)
         return mesh_list, inputs_frame_list
     
-    def generate_mesh_at_index(self, batch, index):
+    def generate_mesh_at_index(self, batch, index, memory_keep = False):
         p_in = self.get_inputs(batch)
         n_sequence = p_in.shape[0]
         mesh_list = []
         inputs_frame_list = []
+        times = []
+        
+        inputs_frame = None
         
         for i in range(n_sequence):
+            t0 = time.time()
             if i > index:
                 break
-            inputs_frame = p_in[i]
+            if inputs_frame is None:
+                inputs_frame = p_in[i]
+            elif memory_keep:
+                inputs_frame = torch.cat((inputs_frame, p_in[i]), 0)
+            else:
+                inputs_frame = p_in[i]
+
             inputs_frame_list.append(inputs_frame)
             
             if i == 0:
                 self.trainer.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
                 print(f'Voxel grid is empty, start with cold start')
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False)
                 print(f'Perform latent fusion')
-                
+            
+            times.append(time.time() - t0)
+            
             stacked_latents, centers = self.stack_latents_all()
             mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=False)
             mesh_list.append(mesh)
         
-        return mesh_list, inputs_frame_list
+        return mesh_list, inputs_frame_list, times
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
         
         p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
         return p_in
-
-    def fuse_inputs(self, inputs_frame):
-        with torch.no_grad():
-            if self.trainer.voxel_grid.is_empty():
-                print(f'Voxel grid is empty, start with cold start')
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame)
-            else:
-                print(f'Perform latent fusion')
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame)
-            
-        return latent_map_stacked_merged, centers_frame_occupied
 
     def stack_latents_region(self, x_limit, y_limit, z_limit):
         stacked_latents = None

@@ -2,13 +2,13 @@ inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   classes:
   path: 
-    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
+    /scratch/roberson/data/simultaneous/sequential_training/gt_robot
   pointcloud_noise: 0.005
 generation:
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_1800.pt
-  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_1800.pt
+  model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_3300.pt
+  model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_3300.pt
   resolution_0: 50
   threshold: 0.02
 test:
@@ -21,4 +21,5 @@ training:
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_200.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_200.pt
-visualization: false
+  n_voxels_max: 20
+visualization: true
