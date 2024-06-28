@@ -36,19 +36,6 @@ def run_ninja_build(build_directory: str, verbose: bool, error_prefix: str) -> N
         command.extend(['-j', str(num_workers)])
     env = os.environ.copy()
     # Try to activate the vc env for the users
-    if IS_WINDOWS and 'VSCMD_ARG_TGT_ARCH' not in env:
-        from setuptools import distutils
-
-        plat_name = distutils.util.get_platform()
-        plat_spec = PLAT_TO_VCVARS[plat_name]
-
-        vc_env = distutils._msvccompiler._get_vc_env(plat_spec)
-        vc_env = {k.upper(): v for k, v in vc_env.items()}
-        for k, v in env.items():
-            uk = k.upper()
-            if uk not in vc_env:
-                vc_env[uk] = v
-        env = vc_env
     try:
         sys.stdout.flush()
         sys.stderr.flush()
