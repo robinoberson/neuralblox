@@ -5,7 +5,6 @@ import time, datetime
 import matplotlib; matplotlib.use('Agg')
 from src import config, data
 from src.checkpoints import CheckpointIO
-import shutil
 from src import layers
 import pickle
 
