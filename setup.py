@@ -11,9 +11,12 @@ import numpy
 import subprocess
 import torch.utils.cpp_extension
 
-def run_ninja_build(command, **kwargs):
+def run_ninja_build(build_directory: str, verbose: bool, error_prefix: str, command, **kwargs):
     if command == ['ninja', '-v']:
         command = ['ninja', '--version']
+    
+    # Assuming you need to pass build_directory, verbose, and error_prefix to subprocess.run
+    # Modify as per your requirements
     return subprocess.run(command, **kwargs)
 
 # Monkey patch the original function
