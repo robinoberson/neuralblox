@@ -8,6 +8,16 @@ from Cython.Build import cythonize
 from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
 import numpy
 
+import subprocess
+import torch.utils.cpp_extension
+
+def run_ninja_build(command, **kwargs):
+    if command == ['ninja', '-v']:
+        command = ['ninja', '--version']
+    return subprocess.run(command, **kwargs)
+
+# Monkey patch the original function
+torch.utils.cpp_extension._run_ninja_build = run_ninja_build
 
 # Get the numpy include directory.
 numpy_include_dir = numpy.get_include()
