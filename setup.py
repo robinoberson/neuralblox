@@ -12,6 +12,8 @@ import subprocess
 import torch.utils.cpp_extension
 import os 
 import sys
+from typing import Dict, List, Optional, Union, Tuple
+
 
 def _get_num_workers(verbose: bool) -> Optional[int]:
     max_jobs = os.environ.get('MAX_JOBS')
