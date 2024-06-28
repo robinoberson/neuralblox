@@ -266,7 +266,7 @@ class SequentialTrainer(BaseTrainer):
             latents_frame, inputs_frame_distributed, centers_frame, centers_frame_occupied = self.encode_distributed_inputs(inputs_frame, encode_empty = False)
             inputs_frame_distributed_occupied = inputs_frame_distributed
         
-        self.print_timing('encode time')
+        # self.print_timing('encode time')
         
         voxel_grid_temp = VoxelGrid()
         voxel_grid_empty_temp = None
@@ -282,22 +282,22 @@ class SequentialTrainer(BaseTrainer):
                 if encode_empty:
                     voxel_grid_empty_temp.add_voxel(center, points, encoded_latent, overwrite = True)                    
                 # self.voxel_grid_empty.add_voxel(center, points, encoded_latent, overwrite = True)
-        self.print_timing('add voxel')
+        # self.print_timing('add voxel')
         #stack the latents
         latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, voxel_grid_empty_temp, encode_empty = encode_empty)
-        self.print_timing('stack latent')
+        # self.print_timing('stack latent')
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
-        self.print_timing('merge latent')
+        # self.print_timing('merge latent')
         centers_frame_occupied_list = [centers_frame_occupied[i] for i in range(len(centers_frame_occupied))]
         inputs_frame_distributed_occupied_list = [inputs_frame_distributed_occupied[i].cpu().numpy() for i in range(len(inputs_frame_distributed_occupied))]
         latent_map_stacked_merged_list = [latent_map_stacked_merged[i] for i in range(len(latent_map_stacked_merged))]
-        self.print_timing('listify latent')
+        # self.print_timing('listify latent')
         for i in range(len(centers_frame_occupied)):
             self.voxel_grid.add_voxel(centers_frame_occupied_list[i], inputs_frame_distributed_occupied_list[i], latent_map_stacked_merged_list[i], overwrite = True)
         
         # for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
         #     self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
-        self.print_timing('add voxel')
+        # self.print_timing('add voxel')
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
         # return stacked_points, centers_frame_occupied
     def prepare_data_logits(self, latent_map, centers_frame_occupied, p_query_distributed, centers_query):

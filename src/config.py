@@ -111,7 +111,7 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config_training.get_trainer_sequential(
+    trainer = method_dict[method].config.get_trainer_sequential(
         model, model_merge, optimizer, cfg, device)
     return trainer
 

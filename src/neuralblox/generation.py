@@ -6,8 +6,7 @@ from tqdm import trange, tqdm
 import trimesh
 from src.utils import libmcubes
 from src.common import make_3d_grid, normalize_coord, add_key, coord2index
-from src.utils.libsimplify import simplify_mesh
-from src.utils.libmise import MISE
+
 import time
 import math
 
@@ -46,6 +45,8 @@ class Generator3D(object):
                  simplify_nfaces=None,
                  grid_reso=24,
                  vol_range=None):
+        from src.utils.libsimplify import simplify_mesh
+        from src.utils.libmise import MISE
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
         self.refinement_step = refinement_step
