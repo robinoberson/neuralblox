@@ -3,7 +3,6 @@ import glob
 import random
 from PIL import Image
 import numpy as np
-import trimesh
 from src.data.core import Field
 from src.utils import binvox_rw
 from src.common import coord2index, normalize_coord
