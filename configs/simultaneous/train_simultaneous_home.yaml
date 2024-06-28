@@ -1,17 +1,23 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
-  classes: null
-  path: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/gt_robot
+  classes:
+  path: 
+    /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/gt_robot_straight_overfit
   grid_resolution: 24
+  pointcloud_noise: 0.0
 model:
   encoder_kwargs:
     grid_resolution: 24
 training:
   out_dir: /home/robin/Dev/MasterThesis/neuralblox/out_simultaneous/sequential_training
-  starting_model_backbone_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_backbone.pt
-  starting_model_merging_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_merging.pt
+  starting_model_backbone_file: 
+    /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_backbone_3300.pt
+  starting_model_merging_file: 
+    /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_merging_3300.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
+  n_max_points_query: 4096 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
+  n_voxels_max: 20
 test:
   threshold: 0.2
   eval_mesh: true
@@ -20,9 +26,12 @@ test:
   model_merging_file: model_merging.pt
 generation:
   threshold: 0.02
-  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_backbone.pt
-  model_merging_file: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models/model_merging.pt
+  generation_dir_models: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models
+  generation_dir: /home/robin/Dev/MasterThesis/data/simultaneous/sequential_training/models
+  model_backbone_file: model_backbone_3300.pt
+  model_merging_file: model_merging_3300.pt
   resolution_0: 50
+visualization: true
+
 

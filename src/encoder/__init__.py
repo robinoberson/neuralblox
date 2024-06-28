@@ -3,6 +3,4 @@ from src.encoder import (
 )
 
 encoder_dict = {
-    'pointnet_crop_local_pool_latent': pointnet.PatchLocalPoolPointnetLatent,
-    'pointnet_local_pool': pointnet.LocalPoolPointnet,
-}
+    'pointnet_crop_local_pool_latent': pointnet.PatchLocalPoolPointnetLatent}

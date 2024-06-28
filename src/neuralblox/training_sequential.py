@@ -178,29 +178,31 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        for idx_sequence in range(n_sequence):
-            # idx_sequence = 0
-            inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
-
-            if idx_sequence == 0:
-                self.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
-            else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
-
-            p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-            logits_sampled = self.get_logits(p_stacked, latents, centers)
-            loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
+        with torch.no_grad():
             
-            if is_training:                        
-                loss.backward()
-                self.visualize_logits(logits_sampled, p_stacked, inputs_frame_distributed)
-                self.voxel_grid.detach_latents()
-                self.optimizer.step()
-                self.iteration += 1
-            else:
-                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+            for idx_sequence in range(n_sequence):
+                # idx_sequence = 0
+                inputs_frame = p_in[idx_sequence]
+                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
+
+                if idx_sequence == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
+
+                p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                logits_sampled = self.get_logits(p_stacked, latents, centers)
+                loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
+                
+                if is_training:                        
+                    self.visualize_logits(logits_sampled, p_stacked, inputs_frame_distributed)
+                    # loss.backward()
+                    self.voxel_grid.detach_latents()
+                    self.optimizer.step()
+                    self.iteration += 1
+                else:
+                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
 
             total_loss += loss.item()
         
@@ -326,6 +328,7 @@ class SequentialTrainer(BaseTrainer):
 
         logits_stacked = None  # Initialize logits directly
 
+        torch.cuda.empty_cache()
         for i in range(n_batch):
             start = i * self.n_voxels_max
             end = min((i + 1) * self.n_voxels_max, n_crops_total)
@@ -863,8 +866,8 @@ class SequentialTrainer(BaseTrainer):
         
         current_dir = os.getcwd()
             
-        file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
-        # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
+        # file_path = f'/home/roberson/MasterThesis/master_thesis/neuralblox/configs/simultaneous/train_simultaneous_{self.location}.yaml'
+        file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
 
         try:
             with open(file_path, 'r') as f:

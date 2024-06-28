@@ -415,8 +415,8 @@ def get_generator_simultaneous(cfg, device):
     checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
 
     try:
-        checkpoint_io.load(cfg['generation']['model_backbone_file'])
-        checkpoint_io_merging.load(cfg['generation']['model_merging_file'])
+        checkpoint_io.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_backbone_file']))
+        checkpoint_io_merging.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_merging_file'])) 
         
     except FileExistsError as e:
         print(f'No checkpoint file found! {e}')
@@ -464,8 +464,8 @@ def get_generator_sequential(cfg, device):
     checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
 
     try:
-        checkpoint_io.load(cfg['generation']['model_backbone_file'])
-        checkpoint_io_merging.load(cfg['generation']['model_merging_file'])
+        checkpoint_io.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_backbone_file']))#cfg['generation']['model_backbone_file'])
+        checkpoint_io_merging.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_merging_file']))#cfg['generation']['model_merging_file'])
         
     except FileExistsError as e:
         print(f'No checkpoint file found! {e}')

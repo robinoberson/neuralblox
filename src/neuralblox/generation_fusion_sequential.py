@@ -5,7 +5,6 @@ import trimesh
 from src.utils import libmcubes
 from src.common import normalize_coord, add_key, coord2index
 import time
-from memory_profiler import profile
 
 
 class Generator3DSequential(object):

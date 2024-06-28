@@ -73,6 +73,7 @@ test:
 generation:
   threshold: 0.02
   generation_dir: generation
+  generation_dir_models: generation
   generator_type: neighbors
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
