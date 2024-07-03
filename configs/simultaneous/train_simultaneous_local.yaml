@@ -1,15 +1,15 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
-  classes:
-  path: 
-    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_straight_overfit
+  classes: ['2024-06-27_15-00-39', '2024-06-27_15-01-39', '2024-06-27_15-01-40', '2024-06-27_15-01-42', '2024-06-27_15-01-46', '2024-06-27_15-01-48', '2024-06-27_15-01-51', '2024-06-27_15-01-55', '2024-06-27_15-01-57', '2024-06-27_15-01-58', '2024-06-27_15-01-59', '2024-06-27_15-02-00', '2024-06-27_15-02-01', '2024-06-27_15-02-02', '2024-06-27_15-02-03', '2024-06-27_15-11-13', '2024-06-27_15-11-14', '2024-06-27_15-11-15', '2024-06-27_15-11-18', '2024-06-27_15-11-19', '2024-06-27_15-11-23', '2024-06-27_15-11-31', '2024-06-27_15-11-34', '2024-06-27_15-11-35', '2024-06-27_15-11-37', '2024-06-27_15-11-38', '2024-06-27_15-11-41', '2024-06-27_15-11-45', '2024-06-27_15-11-46', '2024-06-27_15-11-48', '2024-06-27_15-11-53'] #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
+  # classes: 
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_augmented_100/
   pointcloud_noise: 0.005
 generation:
   generation_dir_models: /scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: model_backbone_100.pt
-  model_merging_file: model_merging_100.pt
+  model_backbone_file: model_backbone_3300.pt
+  model_merging_file: model_merging_3300.pt
   resolution_0: 50
   threshold: 0.02
 test:
@@ -20,7 +20,7 @@ training:
   log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   save_data_viz: true
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_100.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_100.pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_3300.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_3300.pt
   n_voxels_max: 20
-visualization: false
+visualization: true
