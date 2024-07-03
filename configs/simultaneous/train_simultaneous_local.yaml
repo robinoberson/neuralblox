@@ -23,4 +23,4 @@ training:
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_100.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_100.pt
   n_voxels_max: 20
-visualization: true
+visualization: false

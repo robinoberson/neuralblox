@@ -120,11 +120,13 @@ class SequentialTrainer(BaseTrainer):
         
         if 'robin' in current_dir:
             self.location = 'home'
-        elif 'roberson' in current_dir:
-            self.location = 'local'
-        else:
+        elif 'cluster' in current_dir:
             self.location = 'euler'
+        else:
+            self.location = 'local'
 
+        print(f'Location: {self.location}')
+        
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
            
