@@ -5,9 +5,9 @@ data:
   pointcloud_noise: 0.005
   # pointcloud_noise: 0.0
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_02_July_overfit
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_01_July_overfit/model_backbone_600.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_01_July_overfit/model_merging_600.pt
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_03_July_overfit
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_02_July_overfit/model_backbone_100.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_02_July_overfit/model_merging_100.pt
   limited_gpu: true
   save_data_viz: true
   log_comet: true

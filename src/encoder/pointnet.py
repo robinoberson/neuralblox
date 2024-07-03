@@ -111,9 +111,8 @@ class PatchLocalPoolPointnetLatent(nn.Module):
     def precompute_indices(self, indexes, c):
         device = c.device
         n_batch, n_points, n_features = c.shape
+        
         unique_indices, inverse_indices = torch.unique(indexes.view(-1), return_inverse=True)
-        # keep only the values < self.reso_grid**3 * 2:
-        unique_indices = unique_indices[unique_indices < self.reso_grid**3 * 2]
         
         n_unique_indices = len(unique_indices)
         
@@ -176,6 +175,10 @@ class PatchLocalPoolPointnetLatent(nn.Module):
         
         p = inputs['points']
         index = inputs['index']
+        
+        # make sur no index is larger than self.reso_grid**3 * 2, which would mean the point is out of bounds
+        # if so, set it to 0 which transforms it into an unoccupied point
+        index['grid'][index['grid'] >= self.reso_grid**3 * 2] = 0
         
         fea = {}
 

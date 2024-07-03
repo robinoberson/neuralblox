@@ -478,9 +478,10 @@ def coord2index(p, vol_range, reso=None, plane='grid', normalize_coords = True):
     
     index = x[:, :, 0] + reso * x[:, :, 1] + reso**2 * x[:, :, 2] 
     
-    if index.max() > reso**3:
+    if index.max() >= reso**3:
         # sum_idxes = torch.sum(index.reshape(-1) > reso**3, dim=-1)
-        index[index > reso**3] = reso**3
+        index[index >= reso**3] = 0 #set it as unoccupied
+        
     if index.min() < 0:
         # sum_idxes = torch.sum(index.reshape(-1) < 0, dim=-1)
         index[index < 0] = 0
