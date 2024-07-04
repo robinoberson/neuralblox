@@ -144,37 +144,37 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        with torch.no_grad():
+        # with torch.no_grad():
             
-            for idx_sequence in range(n_sequence):
-                # idx_sequence = 0
-                inputs_frame = p_in[idx_sequence]
-                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
+        for idx_sequence in range(n_sequence):
+            # idx_sequence = 0
+            inputs_frame = p_in[idx_sequence]
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
-                if idx_sequence == 0:
-                    self.voxel_grid.reset()
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
-                else:
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
+            if idx_sequence == 0:
+                self.voxel_grid.reset()
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
+            else:
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
 
-                p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-                logits_sampled = self.get_logits(p_stacked, latents, centers)
-                loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-                
-                weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed, sigma = .7)
+            p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+            logits_sampled = self.get_logits(p_stacked, latents, centers)
+            loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            
+            weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed, sigma = .7)
 
-                loss = (loss_unweighted * weights).sum(dim=-1).mean()
-                
-                if is_training:         
-                    self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed)
-                    # loss.backward()
-                    self.voxel_grid.detach_latents()
-                    self.optimizer.step()
-                    self.iteration += 1
-                else:
-                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+            loss = (loss_unweighted * weights).sum(dim=-1).mean()
+            
+            if is_training:         
+                self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed)
+                loss.backward()
+                self.voxel_grid.detach_latents()
+                self.optimizer.step()
+                self.iteration += 1
+            else:
+                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
 
-                total_loss += loss.item()
+            total_loss += loss.item()
         
         if is_training:
             return total_loss
