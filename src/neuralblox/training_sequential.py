@@ -144,32 +144,37 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
+        with torch.no_grad():
             
-        for idx_sequence in range(n_sequence):
-            # idx_sequence = 0
-            inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
+            for idx_sequence in range(n_sequence):
+                # idx_sequence = 0
+                inputs_frame = p_in[idx_sequence]
+                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
-            if idx_sequence == 0:
-                self.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
-            else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
+                if idx_sequence == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame)
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame)
 
-            p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-            logits_sampled = self.get_logits(p_stacked, latents, centers)
-            loss = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none').sum(-1).mean()
-            
-            if is_training:                        
-                self.visualize_logits(logits_sampled, p_stacked, inputs_frame_distributed)
-                loss.backward()
-                self.voxel_grid.detach_latents()
-                self.optimizer.step()
-                self.iteration += 1
-            else:
-                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+                p_stacked, latents, centers, occ = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                logits_sampled = self.get_logits(p_stacked, latents, centers)
+                loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+                
+                weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed, sigma = .7)
 
-            total_loss += loss.item()
+                loss = (loss_unweighted * weights).sum(dim=-1).mean()
+                
+                if is_training:         
+                    self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed)
+                    # loss.backward()
+                    self.voxel_grid.detach_latents()
+                    self.optimizer.step()
+                    self.iteration += 1
+                else:
+                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+
+                total_loss += loss.item()
         
         if is_training:
             return total_loss
@@ -197,6 +202,33 @@ class SequentialTrainer(BaseTrainer):
         with torch.no_grad():
             p_in, p_query = self.get_inputs_from_batch(data_batch)
             return self.process_sequence(p_in, p_query, is_training=False)
+        
+    def compute_gaussian_weights(self, gt_points_batch, input_points_batch, sigma=1.0):
+        
+        batch_size = gt_points_batch.shape[0]
+        n_gt = gt_points_batch.shape[1]
+        
+        weights_batch = torch.zeros(batch_size, n_gt, device=self.device)
+
+        for b in range(batch_size):
+            gt_points = gt_points_batch[b]
+            input_points = input_points_batch[b]
+            
+            # Flatten to handle each batch element independently
+            gt_points_flat = gt_points[..., :3].reshape(-1, 3)
+            inputs_flat = input_points[input_points[..., 3] == 1, :3].reshape(-1, 3)
+            
+            # Compute pairwise distances
+            distances = torch.cdist(gt_points_flat, inputs_flat)
+            
+            # Find the minimum distance for each gt point
+            min_distances, _ = distances.min(dim=1)
+            
+            # Compute Gaussian weights
+            weights = torch.exp(-min_distances ** 2 / (2 * sigma ** 2))
+            weights_batch[b] = weights
+            
+        return weights_batch
 
     def fuse_cold_start(self, inputs_frame, encode_empty = True):
         if encode_empty:
@@ -620,8 +652,49 @@ class SequentialTrainer(BaseTrainer):
         centers_frame_occupied = centers[voxels_occupied]
 
         return inputs_frame_occupied, centers_frame_occupied
-    
-    def visualize_logits(self, logits_sampled, p_query, inputs_distributed=None, force_viz = False):
+    def visualize_weights(self, weights, p_query, inputs_distributed):
+        """
+        Visualize point cloud `p_query` with colors based on `weights`.
+
+        Parameters:
+        weights (torch.Tensor): Weights for each point in `p_query`, shape (n_points,)
+        p_query (torch.Tensor): Point cloud data, shape (n_points, 3)
+
+        Returns:
+        None
+        """
+        import matplotlib.pyplot as plt
+        import open3d as o3d
+        # Convert torch tensors to numpy arrays
+        inputs_distributed_np = inputs_distributed.detach().cpu().numpy()
+        weights_np = weights.detach().cpu().numpy()
+        p_query_np = p_query[..., :3].detach().cpu().numpy()
+        
+        n_skip = 20
+        geos = []
+        for i in range(p_query_np.shape[0]):
+
+            # Create Open3D PointCloud
+            pcd_query = o3d.geometry.PointCloud()
+            pcd_query.points = o3d.utility.Vector3dVector(p_query_np[i][::n_skip])
+            
+            pcd_in = o3d.geometry.PointCloud()
+            inputs_points = inputs_distributed_np[i]
+            pcd_in.points = o3d.utility.Vector3dVector(inputs_points[inputs_points[:, 3] == 1][:, :3])
+            pcd_in.paint_uniform_color([1.0, 0., 0.])
+
+            # Normalize weights to [0, 1] for colormap
+            colors = plt.cm.jet(weights_np[i])[::n_skip]
+
+            # Assign colors to PointCloud
+            pcd_query.colors = o3d.utility.Vector3dVector(colors[:, :3])  # Use RGB values from colormap
+            geos.append(pcd_query)
+            geos.append(pcd_in)
+            # Visualize using Open3D
+        o3d.visualization.draw_geometries(geos)
+        
+    def visualize_logits(self, logits_sampled, p_query, weights = None, inputs_distributed=None, force_viz = False):
+
         geos = []
         
         current_dir = os.getcwd()
@@ -639,6 +712,10 @@ class SequentialTrainer(BaseTrainer):
             return
 
         import open3d as o3d
+        
+        if weights is not None:
+            self.visualize_weights(weights, p_query, inputs_distributed)
+        
         p_stacked = p_query[..., :3]
         
         p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
@@ -649,7 +726,7 @@ class SequentialTrainer(BaseTrainer):
         
         values_sampled = values_sampled.reshape(-1)
 
-        threshold = 0.5
+        threshold = 0.1
 
         values_sampled[values_sampled < threshold] = 0
         values_sampled[values_sampled >= threshold] = 1

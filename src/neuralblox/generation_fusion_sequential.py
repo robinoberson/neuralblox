@@ -34,7 +34,7 @@ class Generator3DSequential(object):
 
     def __init__(self, model, model_merge, trainer,
                  points_batch_size=3000000,
-                 threshold=0.05, 
+                 prob_threshold=0.3, 
                  device=None,
                  resolution0=16, 
                  upsampling_steps=3,
@@ -45,7 +45,7 @@ class Generator3DSequential(object):
                  ):
         self.trainer = trainer
         self.points_batch_size = points_batch_size
-        self.threshold = threshold
+        self.prob_threshold = prob_threshold
         self.device = device
         self.resolution0 = resolution0
         self.upsampling_steps = upsampling_steps
@@ -335,126 +335,8 @@ class Generator3DSequential(object):
         values_reconstructed = np.zeros(original_shape)
         
         values_reconstructed[x, y, z] = values
-        threshold = 0.2
 
-        vertices, triangles = libmcubes.marching_cubes(values_reconstructed, threshold)
+        vertices, triangles = libmcubes.marching_cubes(values_reconstructed, self.prob_threshold)
         mesh = trimesh.Trimesh(vertices/scaling_factor - shift_vector, triangles, vertex_normals=None, process=False)
 
         return mesh, pp_full
-        
-        # self.lb_overall = np.min(centers, axis=0) - self.trainer.query_crop_size / 2
-        # self.ub_overall = np.max(centers, axis=0) + self.trainer.query_crop_size / 2
-        
-        # n_axis_crop = np.ceil((self.ub_overall - self.lb_overall) / self.trainer.query_crop_size).astype(int)
-        # self.axis_n_crop = n_axis_crop
-        # n_crop = n_axis_crop[0] * n_axis_crop[1] * n_axis_crop[2]
-        # max_x, max_y, max_z = n_axis_crop[0], n_axis_crop[1], n_axis_crop[2] 
-        # value_grid = np.zeros((max_x, max_y, max_z, n, n, n))
-
-        # for idx_center in range(len(centers)):
-        #     center = centers[idx_center, :]
-        #     #convert to x,y,z 
-        #     center = center - self.lb_overall
-        #     center = center / self.trainer.query_crop_size
-        #     center = center - 0.5
-            
-        #     x, y, z = int(center[0]), int(center[1]), int(center[2])
-        #     value_grid[x,y,z] = values[idx_center]
-        
-        # if latent_map_full.shape[0] == 1:
-        #     max_x, max_y, max_z = 1, 1, 1
-        
-        # # print("Organize voxels for mesh generation")
-        
-        # r = n * 2 ** self.upsampling_steps
-        # occ_values = np.array([]).reshape(r, r, 0)
-        # occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-        # occ_values_x = np.array([]).reshape(0, r * max_y, r * max_z)
-
-        # for i in trange(n_crop):
-        #     index_x = i // (max_y * max_z)
-        #     remainder_x = i % (max_y * max_z)
-        #     index_y = remainder_x // max_z
-        #     index_z = remainder_x % max_z
-
-        #     values = value_grid[index_x][index_y][index_z]
-
-        #     occ_values = np.concatenate((occ_values, values), axis=2)
-        #     # along y axis
-        #     if (i + 1) % max_z == 0:
-        #         occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
-        #         occ_values = np.array([]).reshape(r, r, 0)
-        #     # along x axis
-        #     if (i + 1) % (max_z * max_y) == 0:
-        #         occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
-        #         occ_values_y = np.array([]).reshape(r, 0, r * max_z)
-        # del occ_values, occ_values_y
-        
-        # occ_values_x = occ_values_x.astype(np.float32)
-            
-        # return occ_values_x
-    # @profile
-    def generate_mesh_from_occ(self, value_grid, return_stats=True, stats_dict=dict()):
-        value_grid[np.where(value_grid == 1.0)] = 0.9999999
-        value_grid[np.where(value_grid == 0.0)] = 0.0000001
-        np.divide(value_grid, 1 - value_grid, out=value_grid)
-        np.log(value_grid, out=value_grid)
-
-        # print("Generating mesh")
-        t0 = time.time()
-        mesh = self.extract_mesh(value_grid, stats_dict=stats_dict)
-        t1 = time.time()
-        generate_mesh_time = t1 - t0
-        # print("Mesh generated in {:.2f}s".format(generate_mesh_time))
-        if return_stats:
-            return mesh, stats_dict, value_grid
-        else:
-            return mesh
-
-    def extract_mesh(self, occ_hat, stats_dict=dict()):
-        ''' Extracts the mesh from the predicted occupancy grid.
-
-        Args:
-            occ_hat (tensor): value grid of occupancies
-            stats_dict (dict): stats dictionary
-        '''
-        # Some short hands
-        n_x, n_y, n_z = occ_hat.shape
-        box_size = 1
-        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
-        # Make sure that mesh is watertight
-        t0 = time.time()
-        occ_hat_padded = np.pad(
-            occ_hat, 1, 'constant', constant_values=-1e6)
-        vertices, triangles = libmcubes.marching_cubes(
-            occ_hat_padded, threshold)
-        stats_dict['time (marching cubes)'] = time.time() - t0
-        # Strange behaviour in libmcubes: vertices are shifted by 0.5
-        vertices -= 0.5
-        # # Undo padding
-        vertices -= 1
-
-        if self.vol_bound is not None:
-            # Scale the mesh back to its original metric
-            
-            # bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
-            # bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
-            
-            mc_unit = max(self.ub_overall - self.lb_overall) / (
-                        self.axis_n_crop.max() * self.resolution0 * 2 ** self.upsampling_steps)
-            vertices = vertices * mc_unit + self.lb_overall
-        else:
-            # Normalize to bounding box
-            vertices /= np.array([n_x - 1, n_y - 1, n_z - 1])
-            vertices = box_size * (vertices - 0.5)
-
-        # Create mesh
-        mesh = trimesh.Trimesh(vertices, triangles,
-                               vertex_normals=None,
-                               process=False)
-
-        # Directly return if mesh is empty
-        if vertices.shape[0] == 0:
-            return mesh
-
-        return mesh

@@ -230,7 +230,7 @@ def get_generator_sequential(cfg, device):
             model,
             model_merging,
             trainer,
-            threshold=cfg['generation']['threshold'],
+            prob_threshold=cfg['generation']['prob_threshold'],
             device=device,
             resolution0=cfg['generation']['resolution_0'],
             upsampling_steps=cfg['generation']['upsampling_steps'],
