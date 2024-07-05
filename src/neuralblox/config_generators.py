@@ -210,6 +210,10 @@ def get_generator_sequential(cfg, device):
                     'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
                     'reso': grid_reso}          
     model = config.get_model(cfg, device=device)
+    # num_blocks = 5
+    # num_channels = [256, 256, 192, 192, 192, 128, 128, 128]
+    # model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
+
     model_merging = layers.Conv3D_one_input().to(device)
 
     checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)

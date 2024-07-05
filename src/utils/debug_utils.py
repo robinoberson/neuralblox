@@ -277,7 +277,7 @@ def visualize_logits(logits_gt, logits_sampled, p_stacked, inputs_distributed=No
     if show: o3d.visualization.draw_geometries([pcd, base_axis, pcd_inputs])
     return pcd, pcd_inputs
 
-def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed = None, show=False):
+def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed = None, show=False, threshold=0.5):
     geos = []
     import open3d as o3d
 
@@ -290,8 +290,6 @@ def visualize_logits_simulatenous(logits_sampled, p_query, inputs_distributed = 
     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
     
     values_sampled = values_sampled.reshape(-1)
-
-    threshold = 0.5
 
     values_sampled[values_sampled < threshold] = 0
     values_sampled[values_sampled >= threshold] = 1
