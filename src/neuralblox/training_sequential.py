@@ -791,9 +791,9 @@ class SequentialTrainer(BaseTrainer):
             empty_latent = self.get_empty_latent_representation()
             
         expanded_shape = (len(centers_grid),) + self.empty_latent_code.shape
-        grid_latents = torch.zeros(expanded_shape).to(self.device)
-        grid_latents = grid_latents.expand(expanded_shape).reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).to(self.device)
-        
+        grid_latents = empty_latent.unsqueeze(0)
+        grid_latents = grid_latents.expand(expanded_shape)
+        grid_latents = grid_latents.reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).to(self.device).clone()
         #shift back the centers 
         
         lb = vol_bounds['lb']
@@ -807,7 +807,7 @@ class SequentialTrainer(BaseTrainer):
                 index_y = centers_grid_shifted[i, 1].int().item()
                 index_z = centers_grid_shifted[i, 2].int().item()
                 latent = voxel_grid_occ.get_latent(centers_grid[i])
-                grid_latents[index_x, index_y, index_z, :] = latent
+                grid_latents[index_x, index_y, index_z] = latent
                 # grid_latents[centers_grid_shifted[i, 0], centers_grid_shifted[i, 1], centers_grid_shifted[i, 2], :] = voxel_grid_occ.get_latent(centers_grid[i])
         return grid_latents, vol_bounds
     
