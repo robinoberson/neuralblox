@@ -55,7 +55,7 @@ training:
   log_comet: false
   lr: 0.001
   lr_reduce_factor: 0.9
-  lr_patience: 400
+  lr_patience: 600
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt
@@ -63,6 +63,8 @@ training:
   limited_gpu: true
   save_data_viz: true
   n_voxels_max: 40
+  return_flat: false # if true, cost computed on all voxels, if false, cost computed on some (not all) flat voxels + elevated voxels
+  sigma: 0.6 # used for the weighting of the cost, lower sigma -> higher emphasis on points close to inputs
 test:
   threshold: 0.2
   eval_mesh: true

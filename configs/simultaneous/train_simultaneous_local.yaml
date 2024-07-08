@@ -16,8 +16,8 @@ generation:
   generation_dir_models: /scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: model_backbone_800.pt
-  model_merging_file: model_merging_800.pt
+  model_backbone_file: model_backbone_2300.pt
+  model_merging_file: model_merging_2300.pt
   resolution_0: 50
   prob_threshold: 0.3
 test:
@@ -28,7 +28,7 @@ training:
   log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   save_data_viz: true
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_2600.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_2600.pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_1400.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging_1400.pt
   n_voxels_max: 20
 visualization: true
