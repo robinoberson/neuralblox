@@ -95,6 +95,9 @@ class Generator3DSequential(object):
         return mesh_list, inputs_frame_list
     
     def generate_mesh_at_index(self, batch, index, memory_keep = False):
+        self.trainer.model.eval()
+        self.trainer.model_merge.eval()
+        
         p_in = self.get_inputs(batch)
         n_sequence = p_in.shape[0]
         mesh_list = []
@@ -129,6 +132,8 @@ class Generator3DSequential(object):
             stacked_latents, centers = self.stack_latents_all()
             mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=False)
             mesh_list.append(mesh)
+            
+            times.append(time.time() - t0)
         
         return mesh_list, inputs_frame_list, times
     def get_inputs(self, batch):
