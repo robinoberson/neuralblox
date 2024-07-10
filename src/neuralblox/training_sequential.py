@@ -151,15 +151,19 @@ class SequentialTrainer(BaseTrainer):
             
         for idx_sequence in range(n_sequence):
             # idx_sequence = 0
+            self.print_timing(f'process_sequence start')
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
+            self.print_timing(f'get_distributed_inputs')
             if idx_sequence == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
             else:
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
 
+            self.print_timing(f'fuse_inputs')
+            
             if not return_flat:
                 mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
                 latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
@@ -173,18 +177,18 @@ class SequentialTrainer(BaseTrainer):
             weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
             loss = (loss_unweighted * weights).sum(dim=-1).mean()
-            
+            self.print_timing('loss done')
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed)
                 loss.backward()
+                self.print_timing('backward done')
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1
             else:
                 results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
-
             total_loss += loss.item()
-        
+
         if is_training:
             return total_loss
         else:
