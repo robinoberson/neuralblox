@@ -63,7 +63,21 @@ class CheckpointIO(object):
             print(filename)
             print('=> Loading checkpoint from local file...')
             state_dict = torch.load(filename)
-            scalars = self.parse_state_dict(state_dict)
+            
+            keys = state_dict['model'].keys()
+            new_keys = self.module_dict['model'].state_dict().keys()
+            
+            if state_dict['model'].keys() == self.module_dict['model'].state_dict().keys():
+                scalars = self.parse_state_dict(state_dict)
+            else:
+                state_dict_new = self.module_dict['model'].state_dict()
+                print(f'Loading model with new layers')
+
+                for layer in state_dict['model'].keys():
+                    state_dict_new[layer] = state_dict['model'][layer]
+                self.module_dict['model'].load_state_dict(state_dict_new)
+                
+                scalars = {k: v for k, v in state_dict.items() if k not in self.module_dict}
             return scalars
         else:
             print('Warning: Could not find %s in checkpoint!' % filename)

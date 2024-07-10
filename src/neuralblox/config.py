@@ -46,7 +46,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
                 reso = cfg['data']['query_vol_size'] + recep_field - 1
                 if 'grid' in fea_type:
                     encoder_kwargs['grid_resolution'] = update_reso(reso, dataset.depth)
-                    encoder_kwargs['grid_resolution'] = cfg['data']['grid_resolution']
+                    encoder_kwargs['grid_resolution'] = cfg['model']['encoder_kwargs']['grid_resolution']
                 if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
                     encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.depth)
             # if dataset.split == 'val': #TODO run validation in room level during training
@@ -56,7 +56,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
                 if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
                     encoder_kwargs['plane_resolution'] = dataset.total_reso
         else:
-            encoder_kwargs['grid_resolution'] = cfg['data']['grid_resolution']
+            encoder_kwargs['grid_resolution'] = cfg['model']['encoder_kwargs']['grid_resolution']
 
     if cfg['data']['input_type'] == 'pointcloud_merge' or cfg['data']['input_type'] == 'pointcloud_sequential':
         fea_type = cfg['model']['encoder_kwargs']['plane_type']
@@ -71,7 +71,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
 
         vol_info = decide_total_volume_range(query_vol_metric, recep_field, unit_size, depth)
 
-        grid_reso = cfg['data']['grid_resolution']
+        grid_reso = cfg['model']['encoder_kwargs']['grid_resolution']
         input_vol_size = cfg['data']['input_vol']
         query_vol_size = cfg['data']['query_vol']
 

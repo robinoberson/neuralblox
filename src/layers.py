@@ -91,7 +91,7 @@ class Conv3D_one_input(nn.Module):
         self.layers = nn.ModuleList()
         for i in range(0, num_blocks):
             stride = 1
-            if i == 0:
+            if i in [0]:
                 stride = 2
             
             self.layers.append(ResidualBlock(num_channels[i+1], num_channels[i + 2], stride=stride))
@@ -99,7 +99,10 @@ class Conv3D_one_input(nn.Module):
         self.final_conv = nn.Conv3d(num_channels[-2], num_channels[-1], kernel_size=3, padding=0)
         self.final_bn = nn.BatchNorm3d(num_channels[-1])
         self.final_relu = nn.ReLU(inplace=True)
-
+        
+        self.final_conv2 = nn.Conv3d(num_channels[-1], num_channels[-1], kernel_size=4, padding=0)
+        self.final_bn2 = nn.BatchNorm3d(num_channels[-1])
+        self.final_relu2 = nn.ReLU(inplace=True)
         # Initialize weights
         self._initialize_weights()
 
@@ -116,7 +119,10 @@ class Conv3D_one_input(nn.Module):
         z = self.final_conv(z)
         z = self.final_bn(z)
         z = self.final_relu(z)
-
+        z = self.final_conv2(z)
+        z = self.final_bn2(z)
+        z = self.final_relu2(z)
+        
         return z
 
     def _initialize_weights(self):

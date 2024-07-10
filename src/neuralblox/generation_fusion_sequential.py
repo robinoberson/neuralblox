@@ -90,7 +90,7 @@ class Generator3DSequential(object):
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False)
                 # print(f'Perform latent fusion')
             stacked_latents, centers = self.stack_latents_all()
-            mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=True)
+            mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=True)
             mesh_list.append(mesh)
         return mesh_list, inputs_frame_list
     
@@ -130,7 +130,7 @@ class Generator3DSequential(object):
             times.append(time.time() - t0)
             
             stacked_latents, centers = self.stack_latents_all()
-            mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.input_crop_size, return_stats=False)
+            mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
             mesh_list.append(mesh)
             
             times.append(time.time() - t0)
@@ -255,8 +255,8 @@ class Generator3DSequential(object):
         pp_full = np.zeros((n_voxels, n**3, 3))
         pp_n_full = np.zeros((n_voxels, n**3, 3))
         
-        lb = centers - crop_size / 2.0
-        ub = centers + crop_size / 2.0
+        lb = centers - crop_size / 2.0 
+        ub = centers + crop_size / 2.0 
         
         for i in range(n_voxels):
             center = centers[i]
@@ -271,7 +271,7 @@ class Generator3DSequential(object):
             
             bb_size = bb_max - bb_min
             pp_centered = (pp-center)
-            pp_n = pp_centered / bb_size 
+            pp_n = pp_centered / self.trainer.input_crop_size
             pp_n = pp_n + 0.5
             
             pp_full[i] = pp

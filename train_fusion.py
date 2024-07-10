@@ -52,7 +52,6 @@ backup_every = cfg['training']['backup_every']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 learning_rate = cfg['training']['learning_rate']
 limited_gpu = cfg['training']['limited_gpu']
-grid_reso = cfg['data']['grid_resolution']
 exit_after = args.exit_after
 
 gt_query = cfg['training']['gt_query']

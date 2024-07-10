@@ -87,7 +87,7 @@ def get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points
 
         vol_info = decide_total_volume_range(query_vol_metric, recep_field, unit_size, depth)
 
-        grid_reso = cfg['data']['grid_resolution']
+        grid_reso = cfg['model']['encoder_kwargs']['grid_resolution'] 
         input_vol_size = cfg['data']['input_vol']
         query_vol_size = cfg['data']['query_vol']
         voxel_threshold = cfg['generation']['voxel_threshold']
@@ -152,7 +152,7 @@ def get_generator_simultaneous(cfg, device):
         device (device): pytorch device
     '''
 
-    grid_reso = cfg['data']['grid_resolution']
+    grid_reso = cfg['model']['encoder_kwargs']['grid_resolution'] 
     input_vol_size = cfg['data']['input_vol']
     query_vol_size = cfg['data']['query_vol']
 
@@ -201,7 +201,7 @@ def get_generator_sequential(cfg, device):
         device (device): pytorch device
     '''
 
-    grid_reso = cfg['data']['grid_resolution']
+    grid_reso = cfg['model']['encoder_kwargs']['grid_resolution']
     input_vol_size = cfg['data']['input_vol']
     query_vol_size = cfg['data']['query_vol']
 
