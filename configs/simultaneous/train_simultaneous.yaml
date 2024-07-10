@@ -13,8 +13,8 @@ data:
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
   grid_resolution: 24
-  input_vol: 1.5
-  query_vol: 1.5
+  input_vol: 0.75
+  query_vol: 0.75
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
@@ -46,7 +46,7 @@ training:
 
   n_max_points: 2048 #max number of inputs per voxel (approx 400 occupied points per voxel)
   n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
-  occ_per_query: 0.3
+  occ_per_query: 0.1
 
   n_workers: 8
   n_workers_val: 4
@@ -63,8 +63,8 @@ training:
   limited_gpu: true
   save_data_viz: true
   n_voxels_max: 40
-  return_flat: false # if true, cost computed on all voxels, if false, cost computed on some (not all) flat voxels + elevated voxels
-  sigma: 0.6 # used for the weighting of the cost, lower sigma -> higher emphasis on points close to inputs
+  return_flat: true # if true, cost computed on all voxels, if false, cost computed on some (not all) flat voxels + elevated voxels
+  sigma: 0.8 # used for the weighting of the cost, lower sigma -> higher emphasis on points close to inputs
 test:
   threshold: 0.2
   eval_mesh: true
