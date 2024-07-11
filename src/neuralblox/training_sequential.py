@@ -193,9 +193,9 @@ class SequentialTrainer(BaseTrainer):
             total_loss += loss.item()
 
         if is_training:
-            return total_loss
+            return total_loss / n_sequence
         else:
-            results.append(total_loss)
+            results.append(total_loss / n_sequence)
             return results
         # self.print_timing('loop done')
         
