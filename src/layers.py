@@ -100,9 +100,9 @@ class Conv3D_one_input(nn.Module):
         self.final_bn = nn.BatchNorm3d(num_channels[-1])
         self.final_relu = nn.ReLU(inplace=True)
         
-        self.final_conv2 = nn.Conv3d(num_channels[-1], num_channels[-1], kernel_size=4, padding=0)
-        self.final_bn2 = nn.BatchNorm3d(num_channels[-1])
-        self.final_relu2 = nn.ReLU(inplace=True)
+        # self.final_conv2 = nn.Conv3d(num_channels[-1], num_channels[-1], kernel_size=4, padding=0)
+        # self.final_bn2 = nn.BatchNorm3d(num_channels[-1])
+        # self.final_relu2 = nn.ReLU(inplace=True)
         # Initialize weights
         self._initialize_weights()
 
@@ -119,9 +119,9 @@ class Conv3D_one_input(nn.Module):
         z = self.final_conv(z)
         z = self.final_bn(z)
         z = self.final_relu(z)
-        z = self.final_conv2(z)
-        z = self.final_bn2(z)
-        z = self.final_relu2(z)
+        # z = self.final_conv2(z)
+        # z = self.final_bn2(z)
+        # z = self.final_relu2(z)
         
         return z
 

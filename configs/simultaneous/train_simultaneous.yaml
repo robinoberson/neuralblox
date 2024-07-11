@@ -12,13 +12,13 @@ data:
   points_unpackbits: true
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
-  input_vol: 1.
-  query_vol: 1.
+  input_vol: 1.0
+  query_vol: 1.0
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
   encoder_kwargs:
-    grid_resolution: 48
+    grid_resolution: 24
     hidden_dim: 32
     plane_type: ['grid']
     unet3d: True
@@ -41,7 +41,7 @@ training:
   model_selection_mode: maximize
   checkpoint_interval_minutes: 30
   print_every: 50
-  backup_every: 100
+  backup_every: 200
 
   n_max_points: 2048 #max number of inputs per voxel (approx 400 occupied points per voxel)
   n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)

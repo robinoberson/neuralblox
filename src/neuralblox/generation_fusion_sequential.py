@@ -94,7 +94,7 @@ class Generator3DSequential(object):
             mesh_list.append(mesh)
         return mesh_list, inputs_frame_list
     
-    def generate_mesh_at_index(self, batch, index, memory_keep = False):
+    def generate_mesh_at_index(self, batch, index, generate_mesh = False, memory_keep = False):
         self.trainer.model.eval()
         self.trainer.model_merge.eval()
         
@@ -130,8 +130,10 @@ class Generator3DSequential(object):
             times.append(time.time() - t0)
             
             stacked_latents, centers = self.stack_latents_all()
-            mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
-            mesh_list.append(mesh)
+            if generate_mesh or i == index - 1:
+                
+                mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
+                mesh_list.append(mesh)
             
             times.append(time.time() - t0)
         
@@ -185,7 +187,7 @@ class Generator3DSequential(object):
         
     def generate_logits(self, latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query, visualize=False):
         with torch.no_grad():
-            p_stacked, latents, centers, occ = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+            p_stacked, latents, centers, occ, mask_frame = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
             logits_sampled = self.trainer.get_logits(p_stacked, latents, centers)
             inputs_distributed = self.get_inputs_map(centers_frame_occupied)
@@ -251,7 +253,6 @@ class Generator3DSequential(object):
         n_voxels = latent_map_full.shape[0]
         
         n = self.resolution0
-        
         pp_full = np.zeros((n_voxels, n**3, 3))
         pp_n_full = np.zeros((n_voxels, n**3, 3))
         

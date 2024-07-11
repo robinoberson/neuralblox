@@ -151,37 +151,40 @@ class SequentialTrainer(BaseTrainer):
             
         for idx_sequence in range(n_sequence):
             # idx_sequence = 0
-            self.print_timing(f'process_sequence start')
+            # self.print_timing(f'process_sequence start')
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
-            self.print_timing(f'get_distributed_inputs')
+            # self.print_timing(f'get_distributed_inputs')
             if idx_sequence == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
             else:
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
 
-            self.print_timing(f'fuse_inputs')
+            # self.print_timing(f'fuse_inputs')
             
-            if not return_flat:
-                mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
-                latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
-                centers_frame_occupied = centers_frame_occupied[mask_elevation]
-                inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
-                
+            # if not return_flat:
+            #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
+            #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
+            #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
+            #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
+            
+            
             p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+
+            # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
             
             weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
             loss = (loss_unweighted * weights).sum(dim=-1).mean()
-            self.print_timing('loss done')
+            # self.print_timing('loss done')
             if is_training:         
-                self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed)
+                self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
                 loss.backward()
-                self.print_timing('backward done')
+                # self.print_timing('backward done')
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1
@@ -195,6 +198,27 @@ class SequentialTrainer(BaseTrainer):
             results.append(total_loss)
             return results
         # self.print_timing('loop done')
+        
+    def visualize_cost(self, p_stacked, inputs_frame_distributed, mask_frame):
+        import open3d as o3d
+        
+        pcd_stacked = o3d.geometry.PointCloud()
+        pcd_stacked_points = p_stacked.detach().cpu().numpy().reshape(-1, 4)
+        pcd_stacked.points = o3d.utility.Vector3dVector(pcd_stacked_points[pcd_stacked_points[:, 3] == 1][:, :3])
+        pcd_stacked.paint_uniform_color([1.0, 0.0, 0.0])
+        
+        pcd_distributed = o3d.geometry.PointCloud()
+        pcd_distributed_points = inputs_frame_distributed.detach().cpu().numpy().reshape(-1, 4)
+        pcd_distributed.points = o3d.utility.Vector3dVector(pcd_distributed_points[pcd_distributed_points[:, 3] == 1][:, :3])
+        pcd_distributed.paint_uniform_color([0.0, 0.0, 1.0])
+        
+        pcd_distributed_masked = o3d.geometry.PointCloud()
+        pcd_distributed_masked_points = inputs_frame_distributed[mask_frame].detach().cpu().numpy().reshape(-1, 4)
+        pcd_distributed_masked.points = o3d.utility.Vector3dVector(pcd_distributed_masked_points[pcd_distributed_masked_points[:, 3] == 1][:, :3])
+        pcd_distributed_masked.paint_uniform_color([0.0, 1.0, 0.0])
+        
+        o3d.visualization.draw_geometries([pcd_stacked, pcd_distributed, pcd_distributed_masked])
+        
     def train_sequence_window(self, data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
         
@@ -384,11 +408,33 @@ class SequentialTrainer(BaseTrainer):
         return p_query_dict, mask_query, mask_frame
         
     def merge_latent_map(self, latent_map):
-        fea_dict = {}
-        fea_dict['latent'] = latent_map
+        n_samples = latent_map.shape[0]
+        batch_size = 5
+        n_batches = int(math.ceil(n_samples / batch_size))
         
-        latent_map = self.model_merge(fea_dict)
-        return latent_map
+        merged_latent_map = None
+        
+        for i in range(n_batches):
+            # Determine the start and end indices for the current batch
+            start_idx = i * batch_size
+            end_idx = min((i + 1) * batch_size, n_samples)
+            
+            # Extract the current batch from the latent_map
+            latent_map_batch = latent_map[start_idx:end_idx]
+            
+            # Create a dictionary as required by the model_merge function
+            fea_dict = {'latent': latent_map_batch}
+            
+            # Merge the current batch using the model_merge function
+            merged_batch = self.model_merge(fea_dict)
+            
+            # Concatenate the merged batch to the final merged_latent_map
+            if merged_latent_map is None:
+                merged_latent_map = merged_batch  # Initialize with the first batch
+            else:
+                merged_latent_map = torch.cat((merged_latent_map, merged_batch), dim=0)
+    
+        return merged_latent_map
     
     def get_empty_latent_representation(self):
         center = torch.tensor([0,0,0]).unsqueeze(0).to(self.device)
@@ -730,7 +776,7 @@ class SequentialTrainer(BaseTrainer):
 
             # Assign colors to PointCloud
             pcd_query.colors = o3d.utility.Vector3dVector(colors[:, :3])  # Use RGB values from colormap
-            geos.append(pcd_query)
+            # geos.append(pcd_query)
             geos.append(pcd_in)
             
             # o3d.visualization.draw_geometries([pcd_query, pcd_in])
