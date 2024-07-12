@@ -147,62 +147,62 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        with torch.no_grad():
+        # with torch.no_grad():
             
-            for idx_sequence in range(n_sequence):
-                # idx_sequence = 0
-                # self.print_timing(f'process_sequence start')
-                inputs_frame = p_in[idx_sequence]
-                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
+        for idx_sequence in range(n_sequence):
+            # idx_sequence = 0
+            # self.print_timing(f'process_sequence start')
+            inputs_frame = p_in[idx_sequence]
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
 
-                # self.print_timing(f'get_distributed_inputs')
-                if idx_sequence == 0:
-                    self.voxel_grid.reset()
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
-                else:
-                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
+            # self.print_timing(f'get_distributed_inputs')
+            if idx_sequence == 0:
+                self.voxel_grid.reset()
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
+            else:
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
 
-                # self.print_timing(f'fuse_inputs')
-                
-                # if not return_flat:
-                #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
-                #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
-                #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
-                #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
-                
-                
-                p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+            # self.print_timing(f'fuse_inputs')
+            
+            # if not return_flat:
+            #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
+            #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
+            #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
+            #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
+            
+            
+            p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
-                # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
-                logits_sampled = self.get_logits(p_stacked, latents, centers)
-                loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-                
-                weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
+            # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
+            logits_sampled = self.get_logits(p_stacked, latents, centers)
+            loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            
+            weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
-                loss_weighted = loss_unweighted 
-                
-                # min_loss = loss_weighted.min()
-                # max_loss = loss_weighted.max()
-                
-                # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_function'
-                # torch.save(loss_weighted, path + '/loss_weighted.pt')
-                # torch.save(p_stacked, path + '/p_stacked.pt')
-                # torch.save(occ, path + '/occ.pt')
-                # torch.save(logits_sampled, path + '/logits_sampled.pt')
-                # torch.save(inputs_frame_distributed[mask_frame], path + '/inputs_frame_distributed.pt')
-                
-                loss = loss_weighted.sum(dim=-1).mean()
-                # self.print_timing('loss done')
-                if is_training:         
-                    self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                    # loss.backward()
-                    # self.print_timing('backward done')
-                    self.voxel_grid.detach_latents()
-                    self.optimizer.step()
-                    self.iteration += 1
-                else:
-                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
-                total_loss += loss.item()
+            loss_weighted = loss_unweighted 
+            
+            # min_loss = loss_weighted.min()
+            # max_loss = loss_weighted.max()
+            
+            # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_function'
+            # torch.save(loss_weighted, path + '/loss_weighted.pt')
+            # torch.save(p_stacked, path + '/p_stacked.pt')
+            # torch.save(occ, path + '/occ.pt')
+            # torch.save(logits_sampled, path + '/logits_sampled.pt')
+            # torch.save(inputs_frame_distributed[mask_frame], path + '/inputs_frame_distributed.pt')
+            
+            loss = loss_weighted.sum(dim=-1).mean()
+            # self.print_timing('loss done')
+            if is_training:         
+                self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
+                loss.backward()
+                # self.print_timing('backward done')
+                self.voxel_grid.detach_latents()
+                self.optimizer.step()
+                self.iteration += 1
+            else:
+                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+            total_loss += loss.item()
 
         if is_training:
             return total_loss / n_sequence
