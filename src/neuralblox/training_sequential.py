@@ -666,7 +666,52 @@ class SequentialTrainer(BaseTrainer):
 
         return vol_bound, centers
 
-    
+    def remove_nearby_points(self, points, occupied_inputs, thresh):
+        # Calculate the squared Euclidean distances to avoid the cost of square root computation
+        dist_squared = torch.cdist(points[..., :3], occupied_inputs[..., :3], p=2).pow(2)
+        
+        # Find the minimum distance for each point in `points` to any point in `occupied_inputs`
+        min_dist_squared, _ = dist_squared.min(dim=1)
+        
+        # Keep only the points where the minimum distance is greater than or equal to `thresh` squared
+        mask = min_dist_squared >= thresh**2
+        filtered_points = points[mask]
+        
+        return filtered_points, mask.sum().item()
+
+    def maintain_n_sample_points(self, centers, crop_size, random_points, occupied_inputs, n_sample, thresh):
+        # Remove points from `random_points` that are within `thresh` distance to any `occupied_inputs`
+        filtered_points, n_filtered = self.remove_nearby_points(random_points, occupied_inputs, thresh)
+        n_removed = n_sample - n_filtered
+        # print("Number of points removed initially:", n_removed)
+        n_iter = 0
+        # Loop for removing and resampling points
+        while n_filtered < n_sample:
+            # Calculate the number of points to sample
+            n_to_sample = int(1.5 * n_removed)
+
+            # Sample new points inside the box
+            new_points = self.get_empty_inputs(centers, crop_size, n_max_points = n_to_sample).squeeze(0)
+            new_points = torch.cat((new_points, torch.zeros(new_points.shape[0], 1, device=self.device)), dim=1)
+            # Remove points from new_points that are within thresh distance to any occupied_inputs
+            new_points_filtered, n_new_filtered = self.remove_nearby_points(new_points, occupied_inputs, thresh)
+
+            # Calculate how many points we need to add to reach n_sample
+            n_to_add = min(n_removed, n_new_filtered)
+
+            # Add the new points to filtered_points
+            filtered_points = torch.cat((filtered_points, new_points_filtered[:n_to_add]), dim=0)
+            n_filtered += n_to_add
+            n_removed -= n_to_add
+            
+            n_iter += 1
+            
+        # Ensure we have exactly n_sample points
+        filtered_points = filtered_points[:n_sample]
+        # print(f'N iter {n_iter}')
+
+        return filtered_points
+
     def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0, isquery = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
@@ -724,15 +769,45 @@ class SequentialTrainer(BaseTrainer):
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
+        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
+
         if not isquery:
-            voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
             inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
             centers_frame_occupied = centers[voxels_occupied]
         
         else:
+            # self.print_timing('filter query start')
+
+            for i in range(distributed_inputs.shape[0]):
+                if not voxels_occupied[i]: continue
+                centers_remove = centers[i:i+1]
+                crop_size = self.input_crop_size
+                random_points = distributed_inputs_short[i]
+                occupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 1]
+                unoccupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 0]
+                n_sample = unoccupied_inputs.shape[0]
+                thresh = 0.04
+                
+                new_samples = self.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
+                # print(f'new samples {new_samples.shape[0]}')
+                distributed_inputs_short[i] = torch.cat((occupied_inputs, new_samples), dim=0)
+                
+                # import open3d as o3d
+                # pcd_occ = o3d.geometry.PointCloud()
+                # pcd_occ.points = o3d.utility.Vector3dVector(occupied_inputs[:, :3].cpu().numpy())
+                # pcd_occ.paint_uniform_color([0, 1, 0])
+                
+                # pcd_unocc = o3d.geometry.PointCloud()
+                # pcd_unocc.points = o3d.utility.Vector3dVector(distributed_inputs_short[i][distributed_inputs_short[i, :, 3] == 0, :3].cpu().numpy())
+                # pcd_unocc.paint_uniform_color([1, 0, 0])
+            
+                
+                # o3d.visualization.draw_geometries([pcd_occ, pcd_unocc])
+                
+                
             inputs_frame_occupied = distributed_inputs_short
             centers_frame_occupied = centers
-
+            # self.print_timing('filter query end')
         return inputs_frame_occupied, centers_frame_occupied
     
     def get_elevation_mask(self, inputs_frame_occupied):
