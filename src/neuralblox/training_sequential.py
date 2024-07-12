@@ -195,7 +195,7 @@ class SequentialTrainer(BaseTrainer):
             # self.print_timing('loss done')
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                # loss.backward()
+                loss.backward()
                 # self.print_timing('backward done')
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
