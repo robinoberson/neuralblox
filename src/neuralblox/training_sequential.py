@@ -18,16 +18,64 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import copy
 
 torch.manual_seed(42)
+import open3d as o3d
 
 class VoxelGrid:
     def __init__(self):
         self.centers_table = {}
         self.latents_table = {}
+        self.pcd_table = {}
         self.latent_shape = None
         self.verbose = False
     def compute_hash(self, center):
         # Assuming center is a tuple or a tensor with (x, y, z) coordinates
         return f"{torch.round(center[0]*1000)/1000:.3f}_{torch.round(center[1]*1000)/1000:.3f}_{torch.round(center[2]*1000)/1000:.3f}"
+    
+    def add_pcd(self, center, inputs, color):
+        points = inputs[..., :3].cpu().numpy()
+        occ = inputs[..., 3].cpu().numpy().astype(bool)
+        new_points = points[occ]
+
+        h = self.compute_hash(center)
+        
+        if h in self.pcd_table:
+            print('PCD Overwriting', h)
+            existing_pcd = self.pcd_table[h]
+            existing_points = np.asarray(existing_pcd.points)
+            existing_colors = np.asarray(existing_pcd.colors)
+            
+            # Combine existing points with new points
+            combined_points = np.vstack((existing_points, new_points))
+            
+            # Create a new color array for new points
+            new_colors = np.tile(color, (new_points.shape[0], 1))
+            
+            # Combine existing colors with new colors
+            combined_colors = np.vstack((existing_colors, new_colors))
+            
+            # Update the point cloud with combined points and colors
+            existing_pcd.points = o3d.utility.Vector3dVector(combined_points)
+            existing_pcd.colors = o3d.utility.Vector3dVector(combined_colors)
+        else:
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(new_points)
+            new_colors = np.tile(color, (new_points.shape[0], 1))
+            pcd.colors = o3d.utility.Vector3dVector(new_colors)
+            self.pcd_table[h] = pcd
+        
+    def visualize(self):
+        geos = []
+        for h, pcd in self.pcd_table.items():
+            geos.append(pcd)
+        # o3d.visualization.draw_geometries(geos)
+        
+        for h, pcd in self.pcd_table.items():
+            pcd.paint_uniform_color([0.5, 0.5, 0])
+            
+    def get_pcd(self, center):
+        h = self.compute_hash(center)
+        pcd = self.pcd_table.get(h, None)
+        return pcd
     
     def add_voxel(self, center, latent, overwrite=False):
         h = self.compute_hash(center)
@@ -147,50 +195,50 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        # with torch.no_grad():
+        with torch.no_grad():
             
-        for idx_sequence in range(n_sequence):
-            # idx_sequence = 0
-            # self.print_timing(f'process_sequence start')
-            inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
+            for idx_sequence in range(n_sequence):
+                # idx_sequence = 0
+                # self.print_timing(f'process_sequence start')
+                inputs_frame = p_in[idx_sequence]
+                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
 
-            # self.print_timing(f'get_distributed_inputs')
-            if idx_sequence == 0:
-                self.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
-            else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
+                # self.print_timing(f'get_distributed_inputs')
+                if idx_sequence == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
 
-            # self.print_timing(f'fuse_inputs')
-            
-            # if not return_flat:
-            #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
-            #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
-            #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
-            #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
-            
-            
-            p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                # self.print_timing(f'fuse_inputs')
+                
+                # if not return_flat:
+                #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
+                #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
+                #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
+                #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
+                
+                
+                p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
-            # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
-            logits_sampled = self.get_logits(p_stacked, latents, centers)
-            loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            
-            weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
+                # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
+                logits_sampled = self.get_logits(p_stacked, latents, centers)
+                loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+                
+                weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
-            loss = (loss_unweighted * weights).sum(dim=-1).mean()
-            # self.print_timing('loss done')
-            if is_training:         
-                self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                loss.backward()
-                # self.print_timing('backward done')
-                self.voxel_grid.detach_latents()
-                self.optimizer.step()
-                self.iteration += 1
-            else:
-                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
-            total_loss += loss.item()
+                loss = (loss_unweighted * weights).sum(dim=-1).mean()
+                # self.print_timing('loss done')
+                if is_training:         
+                    self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
+                    # loss.backward()
+                    # self.print_timing('backward done')
+                    self.voxel_grid.detach_latents()
+                    self.optimizer.step()
+                    self.iteration += 1
+                else:
+                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+                total_loss += loss.item()
 
         if is_training:
             return total_loss / n_sequence
@@ -274,7 +322,9 @@ class SequentialTrainer(BaseTrainer):
             if encoded_latent.shape != self.empty_latent_code.shape:
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             self.voxel_grid.add_voxel(center, encoded_latent, overwrite = False)
-        
+            
+            self.voxel_grid.add_pcd(center, inputs_frame_distributed_occupied[idx], color = [1.0, 0.5, 0.0])
+        self.voxel_grid.visualize()
         # voxel_grid_latents = torch.stack(list(self.voxel_grid.latents_table.values()))
         # voxel_grid_latents_reshaped = voxel_grid_latents.reshape(voxel_grid_latents.shape[0], -1)
         # voxel_grid_latents_sumed = voxel_grid_latents_reshaped.sum(dim = 1)
@@ -297,6 +347,14 @@ class SequentialTrainer(BaseTrainer):
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             self.voxel_grid.add_voxel(center, encoded_latent, overwrite = True)
             
+            pcd = self.voxel_grid.get_pcd(center)
+            if pcd is None:
+                print(f'Failed to get pcd for center: {center}')
+            else:
+                pcd.paint_uniform_color([1.0, 0., 0.0])
+            # self.voxel_grid.add_pcd(center, , color = [1.0, 0.0, 0.0])
+        self.voxel_grid.visualize()
+        
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
     
     def fuse_inputs(self, inputs_frame, encode_empty = True):
@@ -331,6 +389,15 @@ class SequentialTrainer(BaseTrainer):
         
         for i in range(len(centers_frame_occupied)):
             self.voxel_grid.add_voxel(centers_frame_occupied[i], latent_map_stacked_merged[i], overwrite = True)
+            
+            pcd = self.voxel_grid.get_pcd(centers_frame_occupied[i])
+            if pcd is None:
+                print(f'Failed to get pcd for center: {center}')
+                self.voxel_grid.add_pcd(centers_frame_occupied[i], inputs_frame_distributed_occupied[i], color = [.0, 1.0, .0])
+            else:
+                self.voxel_grid.add_pcd(centers_frame_occupied[i], inputs_frame_distributed_occupied[i], color = [1.0, .0, .0])
+            # self.voxel_grid.add_pcd(center, , color = [1.0, 0.0, 0.0])
+        self.voxel_grid.visualize()
         # self.print_timing('add voxel')
         # for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
         #     self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
@@ -803,8 +870,8 @@ class SequentialTrainer(BaseTrainer):
 
         import open3d as o3d
         
-        if weights is not None:
-            self.visualize_weights(weights, p_query, inputs_distributed)
+        # if weights is not None:
+        #     self.visualize_weights(weights, p_query, inputs_distributed)
         
         p_stacked = p_query[..., :3]
         
