@@ -52,7 +52,7 @@ training:
   reset_training: true
   monitor_gpu_usage: false 
   log_comet: false
-  lr: 0.01
+  lr: 0.001
   lr_reduce_factor: 0.9
   lr_patience: 200
   starting_model_backbone_file: model_backbone.pt
