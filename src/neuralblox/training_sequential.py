@@ -195,7 +195,7 @@ class SequentialTrainer(BaseTrainer):
             # self.print_timing('loss done')
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                loss.backward()
+                # loss.backward()
                 # self.print_timing('backward done')
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
@@ -786,7 +786,7 @@ class SequentialTrainer(BaseTrainer):
                 occupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 1]
                 unoccupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 0]
                 n_sample = unoccupied_inputs.shape[0]
-                thresh = 0.04
+                thresh = 0.03
                 
                 new_samples = self.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
                 # print(f'new samples {new_samples.shape[0]}')
