@@ -88,7 +88,7 @@ class SequentialTrainer(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.3, return_flat = True,
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
                  sigma = 0.8):
         self.model = model
         self.model_merge = model_merge
@@ -147,50 +147,62 @@ class SequentialTrainer(BaseTrainer):
         total_loss = 0
         results = []
 
-        # with torch.no_grad():
+        with torch.no_grad():
             
-        for idx_sequence in range(n_sequence):
-            # idx_sequence = 0
-            # self.print_timing(f'process_sequence start')
-            inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query)
+            for idx_sequence in range(n_sequence):
+                # idx_sequence = 0
+                # self.print_timing(f'process_sequence start')
+                inputs_frame = p_in[idx_sequence]
+                p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
 
-            # self.print_timing(f'get_distributed_inputs')
-            if idx_sequence == 0:
-                self.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
-            else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
+                # self.print_timing(f'get_distributed_inputs')
+                if idx_sequence == 0:
+                    self.voxel_grid.reset()
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
+                else:
+                    latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
 
-            # self.print_timing(f'fuse_inputs')
-            
-            # if not return_flat:
-            #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
-            #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
-            #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
-            #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
-            
-            
-            p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                # self.print_timing(f'fuse_inputs')
+                
+                # if not return_flat:
+                #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
+                #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
+                #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
+                #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
+                
+                
+                p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
-            # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
-            logits_sampled = self.get_logits(p_stacked, latents, centers)
-            loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            
-            weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
+                # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
+                logits_sampled = self.get_logits(p_stacked, latents, centers)
+                loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+                
+                weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
-            loss = (loss_unweighted * weights).sum(dim=-1).mean()
-            # self.print_timing('loss done')
-            if is_training:         
-                self.visualize_logits(logits_sampled, p_stacked, weights = weights, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                loss.backward()
-                # self.print_timing('backward done')
-                self.voxel_grid.detach_latents()
-                self.optimizer.step()
-                self.iteration += 1
-            else:
-                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
-            total_loss += loss.item()
+                loss_weighted = loss_unweighted 
+                
+                # min_loss = loss_weighted.min()
+                # max_loss = loss_weighted.max()
+                
+                # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_function'
+                # torch.save(loss_weighted, path + '/loss_weighted.pt')
+                # torch.save(p_stacked, path + '/p_stacked.pt')
+                # torch.save(occ, path + '/occ.pt')
+                # torch.save(logits_sampled, path + '/logits_sampled.pt')
+                # torch.save(inputs_frame_distributed[mask_frame], path + '/inputs_frame_distributed.pt')
+                
+                loss = loss_weighted.sum(dim=-1).mean()
+                # self.print_timing('loss done')
+                if is_training:         
+                    self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
+                    # loss.backward()
+                    # self.print_timing('backward done')
+                    self.voxel_grid.detach_latents()
+                    self.optimizer.step()
+                    self.iteration += 1
+                else:
+                    results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+                total_loss += loss.item()
 
         if is_training:
             return total_loss / n_sequence
@@ -655,7 +667,7 @@ class SequentialTrainer(BaseTrainer):
         return vol_bound, centers
 
     
-    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0):
+    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0, isquery = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         
@@ -703,17 +715,23 @@ class SequentialTrainer(BaseTrainer):
                 
                 # Update the indexes_keep tensor with the new line for the current sample
                 indexes_keep[i] = new_line
-
+            if indexes_line.sum() < int(n_max*0.0025):
+                # print(f'too little points for sample {i} : {indexes_line.sum()}, threshold = {int(n_max*0.0025)}')
+                indexes_keep[i] = torch.zeros_like(indexes_keep[i])
         # Select n_max points
         n_points = indexes_keep.sum(axis=1)
         mask = torch.arange(n_max).expand(n_crops, n_max).to(device=self.device) < n_points.unsqueeze(-1)
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
-        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
+        if not isquery:
+            voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
+            inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
+            centers_frame_occupied = centers[voxels_occupied]
         
-        inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
-        centers_frame_occupied = centers[voxels_occupied]
+        else:
+            inputs_frame_occupied = distributed_inputs_short
+            centers_frame_occupied = centers
 
         return inputs_frame_occupied, centers_frame_occupied
     
@@ -776,7 +794,7 @@ class SequentialTrainer(BaseTrainer):
 
             # Assign colors to PointCloud
             pcd_query.colors = o3d.utility.Vector3dVector(colors[:, :3])  # Use RGB values from colormap
-            # geos.append(pcd_query)
+            geos.append(pcd_query)
             geos.append(pcd_in)
             
             # o3d.visualization.draw_geometries([pcd_query, pcd_in])
@@ -803,8 +821,8 @@ class SequentialTrainer(BaseTrainer):
 
         import open3d as o3d
         
-        if weights is not None:
-            self.visualize_weights(weights, p_query, inputs_distributed)
+        # if weights is not None:
+        #     self.visualize_weights(weights, p_query, inputs_distributed)
         
         p_stacked = p_query[..., :3]
         
