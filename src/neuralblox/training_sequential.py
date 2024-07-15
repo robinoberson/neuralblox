@@ -16,6 +16,7 @@ from torch.autograd import gradcheck
 import torch.profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 import copy
+import random
 
 torch.manual_seed(42)
 
@@ -68,7 +69,48 @@ class VoxelGrid:
     
     def is_empty(self):
         return len(self.latents_table) == 0
+    
+class PrecomputedStorage:
+    def __init__(self):
+        self.storage_latents = {}   
+        self.storage_indexes = {}
+        self.storage_centers_occupied = {}
+        self.storage_dim = {}
         
+        self.scene_idx = 0
+        self.sequence_idx = 1
+        
+    def reset(self):
+        print('Reset storage')
+        self.storage_latents = {}   
+        self.storage_indexes = {}
+        self.storage_centers_occupied = {}
+        self.storage_dim = {}
+        
+        self.scene_idx = 0
+        self.sequence_idx = 1
+        
+    def compute_hash(self, scene_idx, sequence_idx):
+        return f'{scene_idx}_{sequence_idx}'
+               
+    def add_sequence_idx(self, torch_latents, torch_indexes, torch_centers_occupied, grid_dim):
+        h = self.compute_hash(self.scene_idx, self.sequence_idx)
+        self.storage_latents[h] = torch_latents.detach().clone()
+        self.storage_indexes[h] = torch_indexes.detach().clone()
+        self.storage_centers_occupied[h] = torch_centers_occupied.detach().clone()
+        self.storage_dim[h] = grid_dim.detach().clone()
+        
+        print(f'Added scene {self.scene_idx} sequence {self.sequence_idx}')
+        self.sequence_idx += 1
+        
+    def load_idx(self, scene_idx, sequence_idx):
+        h = f'{scene_idx}_{sequence_idx}'
+        latents = self.storage_latents.get(h, None)
+        indexes = self.storage_indexes.get(h, None)
+        centers_occupied = self.storage_centers_occupied.get(h, None)
+        
+        return latents, indexes, centers_occupied
+
 class SequentialTrainer(BaseTrainer):
     ''' Trainer object for fusion network.
 
@@ -119,6 +161,10 @@ class SequentialTrainer(BaseTrainer):
         # self.voxel_grid.verbose = True
         self.empty_latent_code = self.get_empty_latent_representation()
         self.timing_counter = 0
+        
+        #precomputing storage variables 
+        self.precomputed_storage = PrecomputedStorage()
+        
         current_dir = os.getcwd()
         
         if 'robin' in current_dir:
@@ -141,35 +187,58 @@ class SequentialTrainer(BaseTrainer):
         self.t0 = time.time()
         self.timing_counter += 1
         
-    def process_sequence(self, p_in, p_query, is_training, return_flat = True):
-        # self.print_timing('process_sequence')
-        n_sequence = p_in.shape[0]
+    def precompute_sequence(self, full_batch):
+        self.model.eval()
+        self.model_merge.eval()
+        
+        self.precomputed_storage.reset()
+        
+        with torch.no_grad():
+            for idx_scene in range(len(full_batch)):
+                data_batch = full_batch[idx_scene]
+                self.precomputed_storage.scene_idx = idx_scene
+                
+                p_in, p_query = self.get_inputs_from_scene(data_batch)
+                n_sequence = p_in.shape[0]
+
+                for idx_sequence in range(n_sequence):
+                    inputs_frame = p_in[idx_sequence]
+                    p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
+
+                    if idx_sequence == 0:
+                        self.voxel_grid.reset()
+                        latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = False)
+                    else:
+                        latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
+
+    def process_sequence(self, full_batch, is_training, return_flat = True):
+        
+        n_scenes = len(full_batch)
+        n_sequences = full_batch[0]['points'].shape[1]
+        
+        keys = [f'{idx_scene}_{idx_sequence}' for idx_scene in range(n_scenes) for idx_sequence in range(n_sequences)]
+        #shuffle the keys
+        random.shuffle(keys)
+        
         total_loss = 0
         results = []
+           
+        for key in keys:
+            scene = int(key.split('_')[0])
+            idx_sequence = int(key.split('_')[1])
+            self.precomputed_storage.scene_idx = scene
+            self.precomputed_storage.sequence_idx = idx_sequence
 
-        # with torch.no_grad():
-            
-        for idx_sequence in range(n_sequence):
-            # idx_sequence = 0
-            # self.print_timing(f'process_sequence start')
+            p_in, p_query = self.get_inputs_from_scene(full_batch[scene])
+
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
 
-            # self.print_timing(f'get_distributed_inputs')
             if idx_sequence == 0:
                 self.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = is_training)
             else:
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
-
-            # self.print_timing(f'fuse_inputs')
-            
-            # if not return_flat:
-            #     mask_elevation = self.get_elevation_mask(inputs_frame_distributed)
-            #     latent_map_stacked_merged = latent_map_stacked_merged[mask_elevation]
-            #     centers_frame_occupied = centers_frame_occupied[mask_elevation]
-            #     inputs_frame_distributed = inputs_frame_distributed[mask_elevation]
-            
             
             p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
@@ -181,22 +250,10 @@ class SequentialTrainer(BaseTrainer):
 
             loss_weighted = loss_unweighted 
             
-            # min_loss = loss_weighted.min()
-            # max_loss = loss_weighted.max()
-            
-            # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/debug/loss_function'
-            # torch.save(loss_weighted, path + '/loss_weighted.pt')
-            # torch.save(p_stacked, path + '/p_stacked.pt')
-            # torch.save(occ, path + '/occ.pt')
-            # torch.save(logits_sampled, path + '/logits_sampled.pt')
-            # torch.save(inputs_frame_distributed[mask_frame], path + '/inputs_frame_distributed.pt')
-            
             loss = loss_weighted.sum(dim=-1).mean()
-            # self.print_timing('loss done')
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                loss.backward()
-                # self.print_timing('backward done')
+                # loss.backward()
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1
@@ -205,42 +262,19 @@ class SequentialTrainer(BaseTrainer):
             total_loss += loss.item()
 
         if is_training:
-            return total_loss / n_sequence
+            return total_loss / n_sequences
         else:
-            results.append(total_loss / n_sequence)
+            results.append(total_loss / n_sequences)
             return results
-        # self.print_timing('loop done')
         
-    def visualize_cost(self, p_stacked, inputs_frame_distributed, mask_frame):
-        import open3d as o3d
-        
-        pcd_stacked = o3d.geometry.PointCloud()
-        pcd_stacked_points = p_stacked.detach().cpu().numpy().reshape(-1, 4)
-        pcd_stacked.points = o3d.utility.Vector3dVector(pcd_stacked_points[pcd_stacked_points[:, 3] == 1][:, :3])
-        pcd_stacked.paint_uniform_color([1.0, 0.0, 0.0])
-        
-        pcd_distributed = o3d.geometry.PointCloud()
-        pcd_distributed_points = inputs_frame_distributed.detach().cpu().numpy().reshape(-1, 4)
-        pcd_distributed.points = o3d.utility.Vector3dVector(pcd_distributed_points[pcd_distributed_points[:, 3] == 1][:, :3])
-        pcd_distributed.paint_uniform_color([0.0, 0.0, 1.0])
-        
-        pcd_distributed_masked = o3d.geometry.PointCloud()
-        pcd_distributed_masked_points = inputs_frame_distributed[mask_frame].detach().cpu().numpy().reshape(-1, 4)
-        pcd_distributed_masked.points = o3d.utility.Vector3dVector(pcd_distributed_masked_points[pcd_distributed_masked_points[:, 3] == 1][:, :3])
-        pcd_distributed_masked.paint_uniform_color([0.0, 1.0, 0.0])
-        
-        o3d.visualization.draw_geometries([pcd_stacked, pcd_distributed, pcd_distributed_masked])
-        
-    def train_sequence_window(self, data_batch):
+    def train_sequence_window(self, full_data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.train()
         self.model_merge.train()
         self.optimizer.zero_grad()
-        
-        p_in, p_query = self.get_inputs_from_batch(data_batch)
-        
-        return self.process_sequence(p_in, p_query, is_training=True, return_flat = self.return_flat)
+               
+        return self.process_sequence(full_data_batch, is_training=True, return_flat = self.return_flat)
     
     def validate_sequence(self, data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
@@ -249,7 +283,7 @@ class SequentialTrainer(BaseTrainer):
         self.model_merge.eval()
         
         with torch.no_grad():
-            p_in, p_query = self.get_inputs_from_batch(data_batch)
+            p_in, p_query = self.get_inputs_from_scene(data_batch)
             return self.process_sequence(p_in, p_query, is_training=False, return_flat = True)
         
     def compute_gaussian_weights(self, gt_points_batch, input_points_batch, sigma=1.0):
@@ -287,21 +321,8 @@ class SequentialTrainer(BaseTrainer):
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             self.voxel_grid.add_voxel(center, encoded_latent, overwrite = False)
         
-        # voxel_grid_latents = torch.stack(list(self.voxel_grid.latents_table.values()))
-        # voxel_grid_latents_reshaped = voxel_grid_latents.reshape(voxel_grid_latents.shape[0], -1)
-        # voxel_grid_latents_sumed = voxel_grid_latents_reshaped.sum(dim = 1)
-        # unique_lines = torch.unique(voxel_grid_latents_reshaped, dim = 0)
-        
-        # print(f'fuse_cold_start voxel_grid_latents, Unique lines: {unique_lines.shape[0]}, Total lines: {voxel_grid_latents_reshaped.shape[0]}')
-        
         latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied, encode_empty = encode_empty)
-        
-        # latent_map_stacked_reshaped = latent_map_stacked.reshape(latent_map_stacked.shape[0], -1)
-        # latent_map_stacked_reshaped_sumed = latent_map_stacked_reshaped.sum(dim = 1)
-        # unique_lines = torch.unique(latent_map_stacked_reshaped, dim = 0)
-        
-        # print(f'fuse_cold_start latent_map_stacked, Unique lines: {unique_lines.shape[0]}, Total lines: {latent_map_stacked_reshaped.shape[0]}')
-        
+
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
 
         for center, encoded_latent in zip(centers_frame_occupied, latent_map_stacked_merged):
@@ -311,44 +332,26 @@ class SequentialTrainer(BaseTrainer):
             
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
     
-    def fuse_inputs(self, inputs_frame, encode_empty = True):
-        self.t0 = time.time()
-        # self.print_timing('start')
+    def fuse_inputs(self, inputs_frame, encode_empty = True, is_precomputing = False):
         latents_frame_occupied, inputs_frame_distributed_occupied, centers_frame_occupied = self.encode_inputs_frame(inputs_frame)
-        
-        # self.print_timing('encode')
-        
+                
         voxel_grid_temp = VoxelGrid()
 
         for idx, (center, encoded_latent) in enumerate(zip(centers_frame_occupied, latents_frame_occupied)):
             if encoded_latent.shape != self.empty_latent_code.shape:
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             voxel_grid_temp.add_voxel(center, encoded_latent)
-        
              
-        # self.print_timing('add voxel')
         #stack the latents
-        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, encode_empty = encode_empty)
-        # self.print_timing('stack latent')
-        # latent_map_stacked_reshaped = latent_map_stacked.reshape(latent_map_stacked.shape[0], -1)
-        # latent_map_stacked_reshaped_sumed = latent_map_stacked_reshaped.sum(dim = 1)
-        # unique_lines = torch.unique(latent_map_stacked_reshaped, dim = 0)
-        
-        # print(f'fuse_inputs latent_map_stacked, Unique lines: {unique_lines.shape[0]}, Total lines: {latent_map_stacked_reshaped.shape[0]}')
-        
+        latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, encode_empty = encode_empty, is_precomputing = is_precomputing)
+
         latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
-        # self.print_timing('merge latent')
-        # centers_frame_occupied_list = [centers_frame_occupied[i] for i in range(len(centers_frame_occupied))]
-        # latent_map_stacked_merged_list = [latent_map_stacked_merged[i] for i in range(len(latent_map_stacked_merged))]
-        
+
         for i in range(len(centers_frame_occupied)):
             self.voxel_grid.add_voxel(centers_frame_occupied[i], latent_map_stacked_merged[i], overwrite = True)
-        # self.print_timing('add voxel')
-        # for center, points, encoded_latent in zip(centers_frame_occupied, inputs_frame_distributed_occupied, latent_map_stacked_merged):
-        #     self.voxel_grid.add_voxel(center, points, encoded_latent, overwrite = True)
-        # self.print_timing('add voxel')
+
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
-        # return stacked_points, centers_frame_occupied
+
     def prepare_data_logits(self, latent_map, centers_frame_occupied, p_query_distributed, centers_query):
         p_query_dict, mask_query, mask_frame = self.select_query_points(p_query_distributed, centers_query, centers_frame_occupied)
         latents = latent_map[mask_frame]
@@ -409,7 +412,6 @@ class SequentialTrainer(BaseTrainer):
 
         mask_query = (torch.norm(centers_query.unsqueeze(1) - centers_frame_occupied, dim=2) <= error).any(dim=1)
         mask_frame = (torch.norm(centers_frame_occupied.unsqueeze(1) - centers_query, dim=2) <= error).any(dim=1)
-        # print(f'{mask_query.sum()}, {mask_frame.sum()}')
         
         p_query_dict = {}
         
@@ -421,15 +423,14 @@ class SequentialTrainer(BaseTrainer):
         
     def merge_latent_map(self, latent_map):
         n_samples = latent_map.shape[0]
-        batch_size = 5
-        n_batches = int(math.ceil(n_samples / batch_size))
+        n_batches = int(math.ceil(n_samples / self.n_voxels_max))
         
         merged_latent_map = None
         
         for i in range(n_batches):
             # Determine the start and end indices for the current batch
-            start_idx = i * batch_size
-            end_idx = min((i + 1) * batch_size, n_samples)
+            start_idx = i * self.n_voxels_max
+            end_idx = min((i + 1) * self.n_voxels_max, n_samples)
             
             # Extract the current batch from the latent_map
             latent_map_batch = latent_map[start_idx:end_idx]
@@ -461,21 +462,9 @@ class SequentialTrainer(BaseTrainer):
     def encode_inputs_frame(self, inputs_frame, encode_empty = True):
         
         inputs_frame_distributed_occupied, centers_frame_occupied = self.get_distributed_inputs(inputs_frame, self.n_max_points)
-                
-        # centers_neighbours = self.compute_neighbours_and_bounds(centers_frame_occupied)
-        # centers_frame_empty = self.get_empty_neighbours_centers(centers_neighbours, centers_frame_occupied) #does not contains occupied centers
-        
-        # centers_frame = torch.cat((centers_frame_occupied, centers_frame_empty), axis = 0) #contains occupied + empty neighbours
-        
-        # if encode_empty:
-        #     self.empty_latent_code = self.get_empty_latent_representation()
 
         latents_frame_occupied = self.encode_distributed(inputs_frame_distributed_occupied, centers_frame_occupied)
                     
-        # expanded_shape = (len(centers_neighbours),) + self.empty_latent_code.shape
-        # latents_frame_empty = self.empty_latent_code.expand(expanded_shape)
-        
-        # latents_frame = torch.cat((latents_frame_occupied, latents_frame_empty), axis = 0)
         return latents_frame_occupied, inputs_frame_distributed_occupied, centers_frame_occupied
     
     def generate_points(self, n, lb = [0.0, 0.0, 0.0], ub = [1.0, 1.0, 1.0]):
@@ -519,42 +508,6 @@ class SequentialTrainer(BaseTrainer):
         random_points += bb_min  # Translate points to be within each bounding box
 
         return random_points
-    def get_empty_neighbours_centers(self, centers_neighbours, centers_frame):
-        mask = (centers_neighbours.unsqueeze(1) == centers_frame).all(dim=2).any(dim=1)
-
-        centers_neighbours_empty = centers_neighbours[~mask]
-
-        return centers_neighbours_empty
-        
-    def get_empty_neighbours(self, centers_neighbours_empty):
-        
-        random_points = self.get_empty_inputs(centers_neighbours_empty, self.input_crop_size, self.n_max_points)
-        occupancies = torch.zeros(*random_points.shape[:-1], 1, device=self.device)
-        
-        random_points = torch.cat((random_points, occupancies), axis = -1)
-        
-        return random_points, centers_neighbours_empty
-        
-        
-    def compute_neighbours_and_bounds(self, centers):
-        offsets = torch.tensor(
-            [(i, j, k) for i in range(-1, 2) for j in range(-1, 2) for k in range(-1, 2) if not (i == 0 and j == 0 and k == 0)],
-            device=self.device
-        )
-        
-        # Expand the centers tensor to match the offsets tensor
-        centers_expanded = centers.unsqueeze(1).expand(-1, offsets.size(0), -1)
-        
-        # Calculate the neighbouring centers
-        neighbouring_centers_full = centers_expanded + offsets
-
-        # Reshape the tensor to merge the first two dimensions
-        neighbouring_centers_full = neighbouring_centers_full.reshape(-1, 3)
-
-        # Remove duplicates by converting to a set of tuples and back to a tensor
-        unique_neighbouring_centers = torch.unique(neighbouring_centers_full, dim=0)
-
-        return unique_neighbouring_centers
 
     def encode_distributed(self, inputs, centers):
         
@@ -589,24 +542,20 @@ class SequentialTrainer(BaseTrainer):
                 fea, self.unet = self.model.encode_inputs(input_cur_batch)
             else:
                 fea, _ = self.model.encode_inputs(input_cur_batch)
-            
-            # self.print_timing('encode_inputs')
-                
+                            
             _, latent_map_batch, self.features_shapes = self.unet(fea, return_feature_maps=True, decode = False, limited_gpu = False)
 
-            # self.print_timing('unet')
-            # if self.limited_gpu: latent_map_batch = latent_map_batch.to('cpu')
 
             if latent_map is None:
                 latent_map = latent_map_batch  # Initialize latent_map with the first batch
-                # latent_map_decoded = latent_map_batch_decoded
             else:
                 latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
                 
         latent_map_shape = latent_map.shape
         return latent_map.reshape(n_crop, *latent_map_shape[1:])
 
-    def get_inputs_from_batch(self, batch):
+    def get_inputs_from_scene(self, batch):
+           
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
                 
@@ -776,7 +725,6 @@ class SequentialTrainer(BaseTrainer):
             centers_frame_occupied = centers[voxels_occupied]
         
         else:
-            # self.print_timing('filter query start')
 
             for i in range(distributed_inputs.shape[0]):
                 if not voxels_occupied[i]: continue
@@ -789,30 +737,16 @@ class SequentialTrainer(BaseTrainer):
                 thresh = 0.03
                 
                 new_samples = self.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
-                # print(f'new samples {new_samples.shape[0]}')
                 distributed_inputs_short[i] = torch.cat((occupied_inputs, new_samples), dim=0)
-                
-                # import open3d as o3d
-                # pcd_occ = o3d.geometry.PointCloud()
-                # pcd_occ.points = o3d.utility.Vector3dVector(occupied_inputs[:, :3].cpu().numpy())
-                # pcd_occ.paint_uniform_color([0, 1, 0])
-                
-                # pcd_unocc = o3d.geometry.PointCloud()
-                # pcd_unocc.points = o3d.utility.Vector3dVector(distributed_inputs_short[i][distributed_inputs_short[i, :, 3] == 0, :3].cpu().numpy())
-                # pcd_unocc.paint_uniform_color([1, 0, 0])
-            
-                
-                # o3d.visualization.draw_geometries([pcd_occ, pcd_unocc])
                 
                 
             inputs_frame_occupied = distributed_inputs_short
             centers_frame_occupied = centers
-            # self.print_timing('filter query end')
         return inputs_frame_occupied, centers_frame_occupied
     
     def get_elevation_mask(self, inputs_frame_occupied):
         elevation_mask = torch.rand(len(inputs_frame_occupied), device=self.device) < 0.5
-        # elevation_mask = torch.zeros(len(inputs_frame_occupied)).bool()
+
         # Mask for occupied points
         occupied_mask = inputs_frame_occupied[:, :, -1] == 1
 
@@ -982,10 +916,7 @@ class SequentialTrainer(BaseTrainer):
         
         lb = vol_bounds['lb']
         centers_grid_shifted = self.centers_to_grid_indexes(centers_grid, lb)
-        
-        # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training/test_data'
-        # torch.save(centers_grid_shifted, path + '/centers_grid_shifted.pt')
-        # indexes_used = []
+                   
         for i in range(centers_grid.shape[0]):
             occupancy = mask_centers_grid_occupied[i]
             
@@ -996,13 +927,9 @@ class SequentialTrainer(BaseTrainer):
                 # indexes_used.append((index_x, index_y, index_z))
                 latent = voxel_grid_occ.get_latent(centers_grid[i])
                 grid_latents[index_x, index_y, index_z] = latent
-                # grid_latents[centers_grid_shifted[i, 0], centers_grid_shifted[i, 1], centers_grid_shifted[i, 2], :] = voxel_grid_occ.get_latent(centers_grid[i])
-        # grid_latents_reshaped = grid_latents.reshape(centers_grid.shape[0], -1)
-        # unique_lines = torch.unique(grid_latents_reshaped, dim=0)
-        # print(f'populate_grid_latent_cold_start Unique lines: {unique_lines.shape[0]}, n_centers_occ {centers_frame_occupied.shape[0]}')
+                
         return grid_latents, vol_bounds
-    
-    def populate_grid_latent(self, centers_frame_occupied, voxel_grid_occ_frame, voxel_grid_occ_existing, encode_empty = True): 
+    def populate_grid_latent_og(self, centers_frame_occupied, voxel_grid_occ_frame, voxel_grid_occ_existing, encode_empty = True): 
         # centers_frame_occupied + centers_frame_unocc = centers_frame_grid
         vol_bounds, centers_grid = self.compute_vol_bound(centers_frame_occupied, padding = True)
         
@@ -1040,8 +967,7 @@ class SequentialTrainer(BaseTrainer):
                 indexes_used.append((index_x, index_y, index_z))
                 if occupancy_frame:
                     latent = voxel_grid_occ_frame.get_latent(centers_grid[i])
-                    # if latent.shape != self.empty_latent_code.shape:
-                    #     print(f'latent.shape: {latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
+                   
                     grid_latents_frame[index_x, index_y, index_z, :] = latent
                     
                 if occupancy_existing:
@@ -1056,47 +982,99 @@ class SequentialTrainer(BaseTrainer):
         grid_latents_existing.view(-1, *self.empty_latent_code.shape)[mask_complete_existing] = grid_latents_frame.view(-1, *self.empty_latent_code.shape)[mask_complete_existing]
         
         return grid_latents_frame, grid_latents_existing, vol_bounds
+    def populate_grid_latent(self, centers_frame_occupied, voxel_grid_occ_frame, voxel_grid_occ_existing, encode_empty = True, is_precomputing = False): 
+        # centers_frame_occupied + centers_frame_unocc = centers_frame_grid
+        vol_bounds, centers_grid = self.compute_vol_bound(centers_frame_occupied, padding = True)
+        
+        n_x, n_y, n_z = vol_bounds['axis_n_crop']
+
+        if encode_empty == False:
+            empty_latent = self.empty_latent_code
+        else:
+            empty_latent = self.get_empty_latent_representation()
+
+        expanded_shape = (len(centers_grid),) + self.empty_latent_code.shape
+        grid_latents_frame = empty_latent.unsqueeze(0)
+        grid_latents_frame = grid_latents_frame.expand(expanded_shape)
+        grid_latents_frame = grid_latents_frame.reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).to(self.device).clone()
+        
+        grid_latents_existing = grid_latents_frame.clone()
+        
+        lb = vol_bounds['lb']
+        centers_grid_shifted = self.centers_to_grid_indexes(centers_grid, lb)
+        
+        if is_precomputing:
+            centers_occupied_existing_full = torch.stack(list(voxel_grid_occ_existing.centers_table.values()))
+        else:
+            latents_precomputed, indexes_precomputed, centers_occupied_existing_full  = self.precomputed_storage.load_idx(self.precomputed_storage.scene_idx, self.precomputed_storage.sequence_idx)
+            grid_latents_existing[indexes_precomputed[:, 0], indexes_precomputed[:, 1], indexes_precomputed[:, 2], :] = latents_precomputed
+                    
+        centers_occupied_frame_full = torch.stack(list(voxel_grid_occ_frame.centers_table.values()))
+
+        mask_centers_occupied_frame_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
+        mask_centers_occupied_existing_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_existing_full)
+        
+        if is_precomputing:
+            precomputed_latents = torch.empty(sum(mask_centers_occupied_existing_occupied), *self.empty_latent_code.shape).to(self.device)
+            precomputed_indices = torch.empty(sum(mask_centers_occupied_existing_occupied), 3, dtype = torch.int).to(self.device)
+                   
+        indexes_used = []
+        idx_indexes = 0
+        for i in range(centers_grid_shifted.shape[0]):
+            occupancy_frame = mask_centers_occupied_frame_occupied[i]
+            occupancy_existing = mask_centers_occupied_existing_occupied[i]
+            
+            if occupancy_frame or (occupancy_existing and is_precomputing):
+                index_x = centers_grid_shifted[i, 0].int().item()
+                index_y = centers_grid_shifted[i, 1].int().item()
+                index_z = centers_grid_shifted[i, 2].int().item()
+                indexes_used.append((index_x, index_y, index_z))
+                
+                if occupancy_frame:
+                    latent = voxel_grid_occ_frame.get_latent(centers_grid[i])
+                    grid_latents_frame[index_x, index_y, index_z, :] = latent
+                    
+                if (occupancy_existing and is_precomputing):
+                    latent = voxel_grid_occ_existing.get_latent(centers_grid[i])
+                    grid_latents_existing[index_x, index_y, index_z, :] = latent
+                    precomputed_indices[idx_indexes] = torch.tensor([index_x, index_y, index_z])
+                    idx_indexes += 1
+                        
+        if is_precomputing:
+            # l1 = len(precomputed_latents)
+            # l2 = len(precomputed_indices)
+            # l3 = len(centers_occupied_existing_full)
+            # assert l1 == l2 == l3
+            
+            precomputed_latents = grid_latents_existing[precomputed_indices[:, 0], precomputed_indices[:, 1], precomputed_indices[:, 2], ...].clone()
+            self.precomputed_storage.add_sequence_idx(precomputed_latents, precomputed_indices, centers_occupied_existing_full, torch.tensor([n_x, n_y, n_z]))
+
+        #complete the empty voxels by crossing 
+        mask_complete_frame = (~mask_centers_occupied_frame_occupied) & mask_centers_occupied_existing_occupied #returns True where frame is empty and existing is occupied
+        mask_complete_existing = (~mask_centers_occupied_existing_occupied) & mask_centers_occupied_frame_occupied #returns True where existing is empty and frame is occupied
+        
+        grid_latents_frame.view(-1, *self.empty_latent_code.shape)[mask_complete_frame] = grid_latents_existing.view(-1, *self.empty_latent_code.shape)[mask_complete_frame]
+        grid_latents_existing.view(-1, *self.empty_latent_code.shape)[mask_complete_existing] = grid_latents_frame.view(-1, *self.empty_latent_code.shape)[mask_complete_existing]
+        
+        return grid_latents_frame, grid_latents_existing, vol_bounds
     
     def create_stacked_map(self, grid_latents, centers_occupied, vol_bounds):
-        # self.print_timing('create stacked map start')
-        # print('')
+
         lb = vol_bounds['lb']
         centers_occupied_shifted = self.centers_to_grid_indexes(centers_occupied, lb)
         
         shifts = torch.Tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
-        # self.print_timing('create shifts')
         c, h, w, d = self.voxel_grid.latent_shape
-        # self.print_timing('create indices')
         latent_map_stacked = torch.zeros(len(centers_occupied_shifted), c, 3 * h, 3 * w, 3 * d).to(self.device)
-        
-        # self.print_timing('allocate latent map')
-        
+                
         # Calculate all possible shifts for the centers
         centers_occupied_shifted = centers_occupied_shifted.unsqueeze(1) + shifts.unsqueeze(0)  # Shape: (num_centers, 27, 3)
         centers_occupied_shifted = centers_occupied_shifted.int()
-        # Clip the indices to ensure they are within the bounds of the grid_latents
-        # min_bound = torch.tensor([0, 0, 0], device=self.device)
-        # max_bound = torch.tensor(grid_latents.shape[:3], device=self.device) - 1
-        # centers_occupied_shifted = torch.clamp(centers_occupied_shifted, min_bound, max_bound.unsqueeze(0).unsqueeze(1))
-
-        # Gather the latents for all the shifted centers    
-        #save centers_occupied_shifted
-        # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training/test_data'
-        # torch.save(centers_occupied_shifted, path + '/centers_occupied_shifted.pt')
-        # torch.save(centers_occupied, path + '/centers_occupied.pt')
-        # centers_occupied_shifted = (torch.round(centers_occupied_shifted*1e4)/1e4)
         
         latent_temp = grid_latents[centers_occupied_shifted[..., 0], centers_occupied_shifted[..., 1], centers_occupied_shifted[..., 2]]
-        # self.print_timing('gather latents')
-        # latent_temp_reshaped = latent_temp.reshape(latent_temp.shape[0], -1)
-        # latent_temp_sumed = latent_temp_reshaped.sum(dim = 1)
-        # unique_lines = torch.unique(latent_temp_reshaped, dim = 0)
 
-        # print(f'create_stacked_map, Unique lines: {unique_lines.shape[0]}, centers_occupied_shifted: {len(centers_occupied_shifted)}')
-        
         # Reshape the gathered latents and assign to latent_map_stacked
         latent_map_stacked = latent_temp.reshape(len(centers_occupied_shifted), c, 3 * h, 3 * w, 3 * d)
-        # self.print_timing('reshape stacked map')
         return latent_map_stacked
 
     def stack_latents_cold_start(self, centers_frame_occupied, encode_empty = True):
@@ -1107,18 +1085,14 @@ class SequentialTrainer(BaseTrainer):
         latent_map_stacked_reshaped = latent_map_stacked.reshape(latent_map_stacked.shape[0], -1)
         
         latent_map_stacked_sumed = latent_map_stacked_reshaped.sum(dim = 1)
-        # unique_lines = torch.unique(latent_map_stacked_reshaped, dim = 0)
-        
-        # print(f'stack_latents_cold_start Unique lines: {unique_lines.shape[0]}, centers_frame_occupied: {len(centers_frame_occupied)}')
-        # self.print_timing('create stacked map')
+
         return torch.cat((latent_map_stacked, latent_map_stacked), dim = 1)
-    def stack_latents(self, centers_frame_occupied, voxel_grid_temp, encode_empty = True):
-        # self.print_timing('stack latents start')
-        grid_latents_frame, grid_latents_existing, vol_bounds = self.populate_grid_latent(centers_frame_occupied, self.voxel_grid, voxel_grid_temp, encode_empty = encode_empty)
-        # self.print_timing('populate grid latent')
+    def stack_latents(self, centers_frame_occupied, voxel_grid_temp, encode_empty = True, is_precomputing = False):
+        # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training/test_data'
+        # torch.save(centers_frame_occupied, path + '/centers_frame_occupied.pt')
+        # print('centers_frame_occupied saved')
+        grid_latents_frame, grid_latents_existing, vol_bounds = self.populate_grid_latent(centers_frame_occupied, voxel_grid_temp, self.voxel_grid, encode_empty = encode_empty, is_precomputing = is_precomputing)
         latent_map_stacked_frame = self.create_stacked_map(grid_latents_frame, centers_frame_occupied, vol_bounds)
-        # self.print_timing('create stacked map frame')
         latent_map_stacked_existing = self.create_stacked_map(grid_latents_existing, centers_frame_occupied, vol_bounds)
-        # self.print_timing('create stacked map existing')
-        # self.print_timing('create stacked map')
+
         return torch.cat((latent_map_stacked_frame, latent_map_stacked_existing), dim = 1)

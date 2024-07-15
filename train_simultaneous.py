@@ -21,6 +21,9 @@ parser.add_argument('--exit-after', type=int, default=-1,
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 
+#copy cfg to out_dir
+
+
 log_comet = cfg['training']['log_comet']
 
 if log_comet:
