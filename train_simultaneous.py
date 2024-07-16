@@ -180,8 +180,8 @@ while True:
                 if log_comet:
                     experiment.log_metric("learning_rate", current_lr, step=it)
                     
-        if log_comet: 
-            experiment.log_metric('train_loss', loss, step=it)
+        # if log_comet: 
+        #     experiment.log_metric('train_loss', loss, step=it)
         
         # Print output
         if print_every > 0 and (it % print_every) == 0:

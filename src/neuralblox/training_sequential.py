@@ -309,7 +309,7 @@ class SequentialTrainer(BaseTrainer):
             
             loss = loss_weighted.sum(dim=-1).mean()
             
-            if self.log_experiment: self.experiment.log_scalar('loss', loss.item(), self.iteration)
+            if self.log_experiment: self.experiment.log_metric('loss', loss.item(), step = self.iteration)
             
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
@@ -322,7 +322,7 @@ class SequentialTrainer(BaseTrainer):
             total_loss += loss.item()
 
         if is_training:
-            if self.log_experiment: self.experiment.log_scalar('total_loss', total_loss / n_sequences / n_scenes, self.iteration)
+            if self.log_experiment: self.experiment.log_metric('total_loss', total_loss / n_sequences / n_scenes, step = self.iteration)
             return total_loss / n_sequences
         else:
             results.append(total_loss / n_sequences / n_scenes)
