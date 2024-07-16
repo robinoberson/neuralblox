@@ -1,3 +1,5 @@
+import torch
+
 class PrecomputedStorage:
     def __init__(self):
         self.storage_latents = {}   

@@ -162,8 +162,11 @@ while True:
     print(epoch_it)
     
     batch_groups = create_batch_groups(train_loader, cfg['training']['batch_group_size'])
+    batch_groups_val = create_batch_groups(val_loader, cfg['training']['batch_group_size'])
     
     for batch_group in batch_groups:
+        break 
+
         it += 1
         
         trainer.precompute_sequence(batch_group)
@@ -187,7 +190,7 @@ while True:
         if print_every > 0 and (it % print_every) == 0:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
-                     % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
+                    % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
             
             if log_comet: 
                 for param_group in optimizer.param_groups:
@@ -199,7 +202,6 @@ while True:
             print('Backup checkpoint')
             checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it)
             checkpoint_io.save('model_backbone_%d.pt' % it, epoch_it=epoch_it, it=it)
-        
     # Save checkpoint
     current_time = time.time()
     if (current_time - last_checkpoint_time) >= checkpoint_interval:
@@ -222,10 +224,11 @@ while True:
                 
                 print(f'Saving {os.path.join(path, f"data_viz_batch_idx_{epoch_it}.pkl")}')
 
-                for batch_idx, batch in enumerate(train_loader):
-                    if batch_idx > 10 :
-                        break
-                    tup = trainer.validate_sequence(batch)
+                for batch_idx, batch_group in enumerate(batch_groups):
+                    if batch_idx > 10:
+                        continue
+                    trainer.precompute_sequence(batch_group)
+                    tup = trainer.validate_sequence(batch_group)
                 
                     #dump all files 
                     with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
@@ -234,20 +237,22 @@ while True:
 
                 tup = []
                 val_loss = 0
-                for batch_idx, batch in enumerate(val_loader):
+                iter_val = 0
+                for batch_idx, batch_group in enumerate(batch_groups_val):
                     if batch_idx > 10:
                         continue 
-                    
-                    tup = trainer.validate_sequence(batch)                    #dump all files 
+                    trainer.precompute_sequence(batch_group)
+                    tup = trainer.validate_sequence(batch_group)                    #dump all files 
                     val_loss += tup[-1]
                     
                     with open(os.path.join(path, f"data_viz_val_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
                         pickle.dump(tup, f)
                     # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
-            
+
+                    iter_val += 1
                     
-                val_loss = val_loss / len(val_loader)
-                print(f'val_loss = {val_loss}, {len(val_loader)}')
+                val_loss = val_loss / iter_val
+                print(f'val_loss = {val_loss}, {iter_val}')
 
                 if log_comet: 
                     experiment.log_metric('val_loss', val_loss, step=it)

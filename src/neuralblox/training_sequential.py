@@ -1,157 +1,23 @@
 import os
 import torch
 import math
-from torch.profiler import profile, record_function, ProfilerActivity
+import numpy as np
+import time
+import yaml
+from torch.nn import functional as F
+import random
+import src.neuralblox.helpers.sequential_trainer_utils as st_utils
+import src.neuralblox.helpers.visualization_utils as vis_utils
+# import open3d as o3d
+
+torch.manual_seed(42)
 
 from src.common import (
     add_key, coord2index, normalize_coord
 )
 from src.training import BaseTrainer
-import numpy as np
-import pickle
-import time
-import yaml
-from torch.nn import functional as F
-from torch.autograd import gradcheck
-import torch.profiler
-from torch.profiler import profile, record_function, ProfilerActivity
-import copy
-import random
-# import open3d as o3d
-
-torch.manual_seed(42)
-
-class VoxelGrid:
-    def __init__(self):
-        self.centers_table = {}
-        self.latents_table = {}
-        self.pcd_table = {}
-        self.latent_shape = None
-        self.verbose = False
-    def compute_hash(self, center):
-        # Assuming center is a tuple or a tensor with (x, y, z) coordinates
-        return f"{torch.round(center[0]*1000)/1000:.3f}_{torch.round(center[1]*1000)/1000:.3f}_{torch.round(center[2]*1000)/1000:.3f}"
-    
-    def add_voxel(self, center, latent, overwrite=False):
-        h = self.compute_hash(center)
-        list_keys = list(self.centers_table.keys())
-        if overwrite or h not in list(self.centers_table.keys()):
-            if self.verbose:
-            #print if overwriting has been requested
-                if overwrite and h in list(self.centers_table.keys()):
-                    print('Overwriting', h)
-                
-            self.centers_table[h] = center
-            self.latents_table[h] = latent
-            
-        if self.latent_shape is None:
-            self.latent_shape = latent.shape    
-    def add_pcd(self, center, inputs):
-        h = self.compute_hash(center)
-        pcd = o3d.geometry.PointCloud()
-        points = torch.from_numpy(inputs.cpu().detach().numpy())[..., :3]
-        occ = torch.from_numpy(inputs.cpu().detach().numpy())[..., 3]
-        pcd.points = o3d.utility.Vector3dVector(points[occ == 1].cpu().detach().numpy())
-        pcd.paint_uniform_color([0.5, 0.5, 0.5])
-        self.pcd_table[h] = pcd
-        
-    def get_voxel(self, center):
-        h = self.compute_hash(center)
-        center = self.centers_table.get(h, None)
-        latent = self.latents_table.get(h, None)
-        return center, latent
-    
-    def get_latent(self, center):
-        h = self.compute_hash(center)
-        latent = self.latents_table.get(h, None)
-        return latent
-    
-    def get_pcd(self, center):
-        h = self.compute_hash(center)
-        pcd = self.pcd_table.get(h, None)
-        return pcd
-    
-    def paint_pcd(self):
-        for pcd in self.pcd_table.values():
-            pcd.paint_uniform_color([0.5, 0.5, 0.5])
-            
-    def detach_latents(self):
-        self.latents_table = {k: v.detach() for k, v in self.latents_table.items()}
-        
-    def reset(self):
-        self.centers_table = {}
-        self.latents_table = {}
-        self.latent_shape = None
-        
-    def copy(self):
-        return copy.deepcopy(self)
-    
-    def is_empty(self):
-        return len(self.latents_table) == 0
-    
-class PrecomputedStorage:
-    def __init__(self):
-        self.storage_latents = {}   
-        self.storage_indexes = {}
-        self.storage_centers_occupied = {}
-        self.storage_dim = {}
-        self.storage_pcd = {}
-        
-        self.scene_idx = 0
-        self.sequence_idx = 1
-        
-    def reset(self):
-        print('Reset storage')
-        self.storage_latents = {}   
-        self.storage_indexes = {}
-        self.storage_centers_occupied = {}
-        self.storage_dim = {}
-        
-        self.scene_idx = 0
-        self.sequence_idx = 1
-        
-    def compute_hash(self, scene_idx, sequence_idx):
-        return f'{scene_idx}_{sequence_idx}'
-               
-    def add_sequence_idx(self, torch_latents, torch_indexes, torch_centers_occupied, grid_dim):
-        h = self.compute_hash(self.scene_idx, self.sequence_idx)
-        self.storage_latents[h] = torch_latents.detach().clone()
-        self.storage_indexes[h] = torch_indexes.detach().clone()
-        self.storage_centers_occupied[h] = torch_centers_occupied.detach().clone()
-        self.storage_dim[h] = grid_dim.detach().clone()
-        
-        # print(f'Added scene {self.scene_idx} sequence {self.sequence_idx}')
-        self.sequence_idx += 1
-    
-    def create_pcd_full(self, centers, voxel_grid, color):
-        pcd_full = []
-        for center in centers:
-            pcd = voxel_grid.get_pcd(center)
-            pcd.paint_uniform_color(color)
-            pcd_full.append(pcd)
-
-        self.add_pcd(pcd_full)
-
-    def add_pcd(self, pcd_full):
-        h = self.compute_hash(self.scene_idx, self.sequence_idx)
-        self.storage_pcd[h] = pcd_full
-    
-    def get_pcd(self, scene_idx, sequence_idx):
-        h = self.compute_hash(scene_idx, sequence_idx)
-        pcd_full = self.storage_pcd.get(h, None)
-        return pcd_full
-    
-    def visualize_pcd(self):
-        pcd_full = self.get_pcd(self.scene_idx, self.sequence_idx + 1)
-        o3d.visualization.draw_geometries(pcd_full)
-        
-    def load_idx(self, scene_idx, sequence_idx):
-        h = f'{scene_idx}_{sequence_idx}'
-        latents = self.storage_latents.get(h, None)
-        indexes = self.storage_indexes.get(h, None)
-        centers_occupied = self.storage_centers_occupied.get(h, None)
-        
-        return latents, indexes, centers_occupied
+from src.neuralblox.helpers.voxel_grid import VoxelGrid
+from src.neuralblox.helpers.precomputed_storage import PrecomputedStorage
 
 class SequentialTrainer(BaseTrainer):
     ''' Trainer object for fusion network.
@@ -178,21 +44,14 @@ class SequentialTrainer(BaseTrainer):
         self.model_merge = model_merge
         self.optimizer = optimizer
         self.device = device
-        self.device_og = device
-        self.input_type = input_type
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
         self.vis_dir = vis_dir
-        self.threshold = threshold
-        self.max_crop_with_change = None
-        self.query_n = query_n
         self.hdim = unet_hdim
-        self.factor = 2**unet_depth
         self.unet = None
         self.limited_gpu = limited_gpu
         self.reso = grid_reso
         self.iteration = 0
-        self.cfg = cfg
         self.n_voxels_max = n_voxels_max
         self.n_max_points = n_max_points
         self.n_max_points_query = n_max_points_query
@@ -227,14 +86,6 @@ class SequentialTrainer(BaseTrainer):
         self.experiment = experiment
         self.log_experiment = True
         
-    def print_timing(self, operation):
-        torch.cuda.synchronize()
-        t1 = time.time()
-        print(f'Time elapsed, {self.timing_counter}: {t1 - self.t0:.3f}, {operation}')
-
-        self.t0 = time.time()
-        self.timing_counter += 1
-        
     def precompute_sequence(self, full_batch):
         self.model.eval()
         self.model_merge.eval()
@@ -246,7 +97,7 @@ class SequentialTrainer(BaseTrainer):
                 data_batch = full_batch[idx_scene]
                 self.precomputed_storage.scene_idx = idx_scene
                 self.precomputed_storage.sequence_idx = 1
-                p_in, p_query = self.get_inputs_from_scene(data_batch)
+                p_in, p_query = st_utils.get_inputs_from_scene(data_batch, self.device)
                 n_sequence = p_in.shape[0]
 
                 for idx_sequence in range(n_sequence):
@@ -279,7 +130,7 @@ class SequentialTrainer(BaseTrainer):
             
             # print(f'Processing scene {scene}, sequence {idx_sequence}')
 
-            p_in, p_query = self.get_inputs_from_scene(full_batch[scene])
+            p_in, p_query = st_utils.get_inputs_from_scene(full_batch[scene], self.device)
             
             # pcd_in = o3d.geometry.PointCloud()
             # points_in = p_in[idx_sequence].cpu().numpy().reshape(-1, 4)[:, :3]
@@ -303,7 +154,7 @@ class SequentialTrainer(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
             
-            weights = self.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
+            weights = st_utils.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
             loss_weighted = loss_unweighted 
             
@@ -312,8 +163,8 @@ class SequentialTrainer(BaseTrainer):
             if self.log_experiment: self.experiment.log_metric('loss', loss.item(), step = self.iteration)
             
             if is_training:         
-                self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                loss.backward()
+                vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
+                # loss.backward()
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1
@@ -345,33 +196,6 @@ class SequentialTrainer(BaseTrainer):
         
         with torch.no_grad():
             return self.process_sequence(full_data_batch, is_training=False, return_flat = True)
-        
-    def compute_gaussian_weights(self, gt_points_batch, input_points_batch, sigma=1.0):
-        
-        batch_size = gt_points_batch.shape[0]
-        n_gt = gt_points_batch.shape[1]
-        
-        weights_batch = torch.zeros(batch_size, n_gt, device=self.device)
-
-        for b in range(batch_size):
-            gt_points = gt_points_batch[b]
-            input_points = input_points_batch[b]
-            
-            # Flatten to handle each batch element independently
-            gt_points_flat = gt_points[..., :3].reshape(-1, 3)
-            inputs_flat = input_points[input_points[..., 3] == 1, :3].reshape(-1, 3)
-            
-            # Compute pairwise distances
-            distances = torch.cdist(gt_points_flat, inputs_flat)
-            
-            # Find the minimum distance for each gt point
-            min_distances, _ = distances.min(dim=1)
-            
-            # Compute Gaussian weights
-            weights = torch.exp(-min_distances ** 2 / (2 * sigma ** 2))
-            weights_batch[b] = weights
-            
-        return weights_batch
 
     def fuse_cold_start(self, inputs_frame, encode_empty = True):
         latents_frame_occupied, inputs_frame_distributed_occupied, centers_frame_occupied = self.encode_inputs_frame(inputs_frame)
@@ -440,7 +264,7 @@ class SequentialTrainer(BaseTrainer):
     
         n_crops_total = p_stacked.shape[0]
                 
-        vol_bound = self.get_grid_from_centers(centers, self.input_crop_size)
+        vol_bound = st_utils.get_grid_from_centers(centers, self.input_crop_size)
         p_n_stacked = normalize_coord(p_stacked, vol_bound)
 
         n_batch = int(np.ceil(n_crops_total / self.n_voxels_max))
@@ -520,7 +344,7 @@ class SequentialTrainer(BaseTrainer):
     def get_empty_latent_representation(self):
         center = torch.tensor([0,0,0]).unsqueeze(0).to(self.device)
         
-        empty_inputs = self.get_empty_inputs(center, self.query_crop_size, n_max_points = 2048)
+        empty_inputs = st_utils.get_empty_inputs(center, self.query_crop_size, n_max_points = 2048)
         occ = torch.zeros(*empty_inputs.shape[0:2], 1).to(self.device)
         empty_inputs = torch.cat((empty_inputs, occ), axis = -1)
         empty_latent_code = self.encode_distributed(empty_inputs, center)
@@ -534,52 +358,10 @@ class SequentialTrainer(BaseTrainer):
         latents_frame_occupied = self.encode_distributed(inputs_frame_distributed_occupied, centers_frame_occupied)
                     
         return latents_frame_occupied, inputs_frame_distributed_occupied, centers_frame_occupied
-    
-    def generate_points(self, n, lb = [0.0, 0.0, 0.0], ub = [1.0, 1.0, 1.0]):
-        """
-        Generate n points within the bounds lb and ub.
-
-        Args:
-        - n (int): Number of points to generate.
-        - lb (list of float): Lower bound for each dimension.
-        - ub (list of float): Upper bound for each dimension.
-
-        Returns:
-        - torch.Tensor: Tensor of shape (n, 3) containing the generated points.
-        """
-        lb = torch.tensor(lb)
-        ub = torch.tensor(ub)
-        
-        # Generate n points with each dimension in the range [0, 1)
-        points = torch.rand(n, 3)
-        
-        # Scale points to the range [lb, ub)
-        points = lb + points * (ub - lb)
-        
-        return points
-    
-    def get_empty_inputs(self, centers, crop_size, n_max_points = 2048):
-        lb_input = centers - crop_size / 2
-        ub_input = centers + crop_size / 2
-        
-        vol_bound_inputs = torch.stack([lb_input, ub_input], axis=1)
-        
-        n_crops = vol_bound_inputs.shape[0]
-        
-        bb_min = vol_bound_inputs[:, 0, :].unsqueeze(1) # Shape: (n_crops, 3, 1)
-        bb_max = vol_bound_inputs[:, 1, :].unsqueeze(1)  # Shape: (n_crops, 3, 1)
-        bb_size = bb_max - bb_min  # Shape: (n_crops, 3, 1)
-
-        random_points = self.generate_points(n_max_points)
-        random_points = random_points.repeat(n_crops, 1, 1).to(device=self.device)
-        random_points *= bb_size  # Scale points to fit inside each bounding box
-        random_points += bb_min  # Translate points to be within each bounding box
-
-        return random_points
 
     def encode_distributed(self, inputs, centers):
         
-        vol_bound = self.get_grid_from_centers(centers, self.input_crop_size)
+        vol_bound = st_utils.get_grid_from_centers(centers, self.input_crop_size)
 
         n_crop = inputs.shape[0]
         
@@ -622,118 +404,11 @@ class SequentialTrainer(BaseTrainer):
         latent_map_shape = latent_map.shape
         return latent_map.reshape(n_crop, *latent_map_shape[1:])
 
-    def get_inputs_from_scene(self, batch):
-           
-        p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
-        p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
-                
-        p_query_3D = batch.get('points').to(self.device).squeeze(0)
-        p_query_occ = batch.get('points.occ').to(self.device).squeeze(0).unsqueeze(-1)
-        
-        # print(f'p_in_3D: {p_in_3D.shape}, p_in_occ: {p_in_occ.shape}, p_query_3D: {p_query_3D.shape}, p_query_occ: {p_query_occ.shape}')
-        p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)
-        p_query = torch.cat((p_query_3D, p_query_occ), dim=-1)
-        
-        return p_in, p_query
-    
-    def get_grid_from_centers(self, centers, crop_size):
-        lb = centers - crop_size / 2
-        ub = centers + crop_size / 2
-        vol_bounds = torch.stack([lb, ub], dim=1)
-        
-        return vol_bounds
-
-    def compute_vol_bound(self, inputs, padding = False):
-        # inputs must have shape (n_points, 3)
-        assert inputs.shape[1] == 3 and inputs.shape[0] > 0 and len(inputs.shape) == 2
-
-        vol_bound = {}
-
-        lb_p = torch.min(inputs, dim=0).values - torch.tensor([0.01, 0.01, 0.01], device=inputs.device)
-        ub_p = torch.max(inputs, dim=0).values
-        
-        # print(lb_p, ub_p)
-
-        lb = torch.round((lb_p - lb_p % self.query_crop_size) * 1e6) / 1e6
-        ub = torch.round((((ub_p - ub_p % self.query_crop_size) / self.query_crop_size) + 1) * self.query_crop_size * 1e6) / 1e6
-
-        if padding:
-            lb -= self.query_crop_size
-            ub += self.query_crop_size
-        
-        lb_query = torch.stack(torch.meshgrid(
-            torch.arange(lb[0], ub[0] - 0.01, self.query_crop_size, device='cuda:0'),
-            torch.arange(lb[1], ub[1] - 0.01, self.query_crop_size, device='cuda:0'),
-            torch.arange(lb[2], ub[2] - 0.01, self.query_crop_size, device='cuda:0'),
-        ), dim=-1).reshape(-1, 3)
-
-        ub_query = lb_query + self.query_crop_size
-        centers = (lb_query + ub_query) / 2
-
-        # Number of crops alongside x, y, z axis
-        vol_bound['axis_n_crop'] = torch.ceil((ub - lb - 0.01) / self.query_crop_size).int()
-
-        # Total number of crops
-        num_crop = torch.prod(vol_bound['axis_n_crop']).item()
-        vol_bound['n_crop'] = num_crop
-        vol_bound['input_vol'] = self.get_grid_from_centers(centers, self.input_crop_size)
-        vol_bound['query_vol'] = self.get_grid_from_centers(centers, self.query_crop_size)
-        vol_bound['lb'] = lb
-        vol_bound['ub'] = ub
-
-        return vol_bound, centers
-
-    def remove_nearby_points(self, points, occupied_inputs, thresh):
-        # Calculate the squared Euclidean distances to avoid the cost of square root computation
-        dist_squared = torch.cdist(points[..., :3], occupied_inputs[..., :3], p=2).pow(2)
-        
-        # Find the minimum distance for each point in `points` to any point in `occupied_inputs`
-        min_dist_squared, _ = dist_squared.min(dim=1)
-        
-        # Keep only the points where the minimum distance is greater than or equal to `thresh` squared
-        mask = min_dist_squared >= thresh**2
-        filtered_points = points[mask]
-        
-        return filtered_points, mask.sum().item()
-
-    def maintain_n_sample_points(self, centers, crop_size, random_points, occupied_inputs, n_sample, thresh):
-        # Remove points from `random_points` that are within `thresh` distance to any `occupied_inputs`
-        filtered_points, n_filtered = self.remove_nearby_points(random_points, occupied_inputs, thresh)
-        n_removed = n_sample - n_filtered
-        # print("Number of points removed initially:", n_removed)
-        n_iter = 0
-        # Loop for removing and resampling points
-        while n_filtered < n_sample:
-            # Calculate the number of points to sample
-            n_to_sample = int(1.5 * n_removed)
-
-            # Sample new points inside the box
-            new_points = self.get_empty_inputs(centers, crop_size, n_max_points = n_to_sample).squeeze(0)
-            new_points = torch.cat((new_points, torch.zeros(new_points.shape[0], 1, device=self.device)), dim=1)
-            # Remove points from new_points that are within thresh distance to any occupied_inputs
-            new_points_filtered, n_new_filtered = self.remove_nearby_points(new_points, occupied_inputs, thresh)
-
-            # Calculate how many points we need to add to reach n_sample
-            n_to_add = min(n_removed, n_new_filtered)
-
-            # Add the new points to filtered_points
-            filtered_points = torch.cat((filtered_points, new_points_filtered[:n_to_add]), dim=0)
-            n_filtered += n_to_add
-            n_removed -= n_to_add
-            
-            n_iter += 1
-            
-        # Ensure we have exactly n_sample points
-        filtered_points = filtered_points[:n_sample]
-        # print(f'N iter {n_iter}')
-
-        return filtered_points
-
     def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0, isquery = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         
-        vol_bound, centers = self.compute_vol_bound(distributed_inputs[:, :3].reshape(-1, 3))
+        vol_bound, centers = st_utils.compute_vol_bound(distributed_inputs[:, :3].reshape(-1, 3), self.query_crop_size, self.input_crop_size)
         
         n_crops = vol_bound['n_crop']
         
@@ -758,7 +433,7 @@ class SequentialTrainer(BaseTrainer):
         # Create a mask for selecting points with label 1
         indexes_keep = distributed_inputs[..., 3] == 1
 
-        random_points = self.get_empty_inputs(centers, self.input_crop_size, n_max_points = n_max)
+        random_points = st_utils.get_empty_inputs(centers, self.input_crop_size, n_max_points = n_max)
         
         distributed_inputs_short = torch.zeros(n_crops, n_max, 4, device=self.device)
         distributed_inputs_short[:, :, :3] = random_points.reshape(n_crops, n_max, 3)
@@ -804,7 +479,7 @@ class SequentialTrainer(BaseTrainer):
                 n_sample = unoccupied_inputs.shape[0]
                 thresh = 0.03
                 
-                new_samples = self.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
+                new_samples = st_utils.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
                 distributed_inputs_short[i] = torch.cat((occupied_inputs, new_samples), dim=0)
                 
                 
@@ -812,163 +487,13 @@ class SequentialTrainer(BaseTrainer):
             centers_frame_occupied = centers
         return inputs_frame_occupied, centers_frame_occupied
     
-    def get_elevation_mask(self, inputs_frame_occupied):
-        elevation_mask = torch.rand(len(inputs_frame_occupied), device=self.device) < 0.5
-
-        # Mask for occupied points
-        occupied_mask = inputs_frame_occupied[:, :, -1] == 1
-
-        # Compute bounding boxes for all frames
-        bb_min = torch.min(torch.where(occupied_mask.unsqueeze(-1), inputs_frame_occupied[:, :, :3], float('inf')), dim=1)[0]
-        bb_max = torch.max(torch.where(occupied_mask.unsqueeze(-1), inputs_frame_occupied[:, :, :3], float('-inf')), dim=1)[0]
-        
-        # Compute y_diff
-        y_diff = bb_max[:, 1] - bb_min[:, 1]
-        
-        # print(y_diff)
-        # Update elevation_mask based on y_diff
-        elevation_mask = elevation_mask | (y_diff > 0.1) #max elevation is self.query_crop_size[1]
-        
-        # Count the number of flat and elevated frames
-        n_flat = (~elevation_mask).sum()
-        n_elevated = elevation_mask.sum()
-        
-        
-        return elevation_mask
-    def visualize_weights(self, weights, p_query, inputs_distributed):
-        """
-        Visualize point cloud `p_query` with colors based on `weights`.
-
-        Parameters:
-        weights (torch.Tensor): Weights for each point in `p_query`, shape (n_points,)
-        p_query (torch.Tensor): Point cloud data, shape (n_points, 3)
-
-        Returns:
-        None
-        """
-        import matplotlib.pyplot as plt
-        import open3d as o3d
-        # Convert torch tensors to numpy arrays
-        inputs_distributed_np = inputs_distributed.detach().cpu().numpy()
-        weights_np = weights.detach().cpu().numpy()
-        p_query_np = p_query[..., :3].detach().cpu().numpy()
-        
-        n_skip = 20
-        geos = []
-        for i in range(p_query_np.shape[0]):
-
-            # Create Open3D PointCloud
-            pcd_query = o3d.geometry.PointCloud()
-            pcd_query.points = o3d.utility.Vector3dVector(p_query_np[i][::n_skip])
-            
-            pcd_in = o3d.geometry.PointCloud()
-            inputs_points = inputs_distributed_np[i]
-            pcd_in.points = o3d.utility.Vector3dVector(inputs_points[inputs_points[:, 3] == 1][:, :3])
-            pcd_in.paint_uniform_color([.0, 1., 0.])
-
-            # Normalize weights to [0, 1] for colormap
-            colors = plt.cm.jet(weights_np[i])[::n_skip]
-
-            # Assign colors to PointCloud
-            pcd_query.colors = o3d.utility.Vector3dVector(colors[:, :3])  # Use RGB values from colormap
-            geos.append(pcd_query)
-            geos.append(pcd_in)
-            
-            # o3d.visualization.draw_geometries([pcd_query, pcd_in])
-            # Visualize using Open3D
-        o3d.visualization.draw_geometries(geos)
-        
-    def visualize_logits(self, logits_sampled, p_query, weights = None, inputs_distributed=None, force_viz = False):
-
-        geos = []
-        
-        current_dir = os.getcwd()
-            
-        file_path = f'configs/simultaneous/train_simultaneous_{self.location}.yaml'
-        # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
-
-        try:
-            with open(file_path, 'r') as f:
-                config = yaml.safe_load(f)
-        except:
-            return
-            
-        if not(force_viz or config['visualization']):
-            return
-
-        import open3d as o3d
-        
-        # if weights is not None:
-        #     self.visualize_weights(weights, p_query, inputs_distributed)
-        
-        p_stacked = p_query[..., :3]
-        
-        p_full = p_stacked.detach().cpu().numpy().reshape(-1, 3)
-
-        occ_sampled = logits_sampled.detach().cpu().numpy()
-
-        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
-        
-        values_sampled = values_sampled.reshape(-1)
-
-        threshold = 0.1
-
-        values_sampled[values_sampled < threshold] = 0
-        values_sampled[values_sampled >= threshold] = 1
-        
-        values_gt = p_query[..., -1].reshape(-1).detach().cpu().numpy()
-
-        both_occ = np.logical_and(values_gt, values_sampled)
-        
-        pcd = o3d.geometry.PointCloud()
-        colors = np.zeros((values_gt.shape[0], 3))
-        colors[values_gt == 1] = [1, 0, 0] # red
-        colors[values_sampled == 1] = [0, 0, 1] # blue
-        colors[both_occ == 1] = [0, 1, 0] # green
-        
-        mask = np.any(colors != [0, 0, 0], axis=1)
-        # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
-        if inputs_distributed is not None:
-            pcd_inputs = o3d.geometry.PointCloud()
-            inputs_reshaped = inputs_distributed.reshape(-1, 4).detach().cpu().numpy()
-            pcd_inputs.points = o3d.utility.Vector3dVector(inputs_reshaped[inputs_reshaped[..., -1] == 1, :3])
-            pcd_inputs.paint_uniform_color([1., 0.5, 1.0]) # blue
-            geos += [pcd_inputs]
-            
-        colors = colors[mask]
-        pcd.points = o3d.utility.Vector3dVector(p_full[mask])
-        bb_min_points = np.min(p_full[mask], axis=0)
-        bb_max_points = np.max(p_full[mask], axis=0)
-        # print(bb_min_points, bb_max_points)
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
-        
-        geos += [pcd, base_axis]
-        o3d.visualization.draw_geometries(geos)
-    
-    def compute_mask_occupied(self, centers_grid, centers_occupied):
-        centers_grid_expanded = centers_grid.unsqueeze(1)  
-        centers_occupied_full_expanded = centers_occupied.unsqueeze(0)  
-        
-        error = 0.1
-
-        matches = (torch.norm(centers_grid_expanded - centers_occupied_full_expanded, dim=2) <= error)
-
-        mask_centers_grid_occupied = matches.any(dim=1)
-        
-        return mask_centers_grid_occupied
-    
-    def centers_to_grid_indexes(self, centers, lb):
-        centers_shifted = torch.round((centers - (lb + self.query_crop_size / 2)) / self.query_crop_size * 10e4) / 10e4
-
-        return centers_shifted
     def populate_grid_latent_cold_start(self, centers_frame_occupied, voxel_grid_occ, encode_empty = True): 
-        vol_bounds, centers_grid = self.compute_vol_bound(centers_frame_occupied, padding = True)
+        vol_bounds, centers_grid = st_utils.compute_vol_bound(centers_frame_occupied, self.query_crop_size, self.input_crop_size, padding = True)
         n_x, n_y, n_z = vol_bounds['axis_n_crop']
 
         centers_occupied_full = torch.stack(list(voxel_grid_occ.centers_table.values()))
 
-        mask_centers_grid_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_full)
+        mask_centers_grid_occupied = st_utils.compute_mask_occupied(centers_grid, centers_occupied_full)
         
         if encode_empty == False:
             empty_latent = self.empty_latent_code
@@ -983,7 +508,7 @@ class SequentialTrainer(BaseTrainer):
         #shift back the centers 
         
         lb = vol_bounds['lb']
-        centers_grid_shifted = self.centers_to_grid_indexes(centers_grid, lb)
+        centers_grid_shifted = st_utils.centers_to_grid_indexes(centers_grid, lb, self.query_crop_size)
                    
         for i in range(centers_grid.shape[0]):
             occupancy = mask_centers_grid_occupied[i]
@@ -997,60 +522,10 @@ class SequentialTrainer(BaseTrainer):
                 grid_latents[index_x, index_y, index_z] = latent
                 
         return grid_latents, vol_bounds
-    def populate_grid_latent_og(self, centers_frame_occupied, voxel_grid_occ_frame, voxel_grid_occ_existing, encode_empty = True): 
-        # centers_frame_occupied + centers_frame_unocc = centers_frame_grid
-        vol_bounds, centers_grid = self.compute_vol_bound(centers_frame_occupied, padding = True)
-        
-        n_x, n_y, n_z = vol_bounds['axis_n_crop']
-
-        if encode_empty == False:
-            empty_latent = self.empty_latent_code
-        else:
-            empty_latent = self.get_empty_latent_representation()
-
-        expanded_shape = (len(centers_grid),) + self.empty_latent_code.shape
-        grid_latents_frame = empty_latent.unsqueeze(0)
-        grid_latents_frame = grid_latents_frame.expand(expanded_shape)
-        grid_latents_frame = grid_latents_frame.reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).to(self.device).clone()
-        grid_latents_existing = grid_latents_frame.clone()
-        
-        lb = vol_bounds['lb']
-        centers_grid_shifted = self.centers_to_grid_indexes(centers_grid, lb)
-        
-        centers_occupied_frame_full = torch.stack(list(voxel_grid_occ_frame.centers_table.values()))
-        centers_occupied_existing_full = torch.stack(list(voxel_grid_occ_existing.centers_table.values()))
-
-        mask_centers_occupied_frame_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
-        mask_centers_occupied_existing_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_existing_full)
-
-        for i in range(centers_grid_shifted.shape[0]):
-            occupancy_frame = mask_centers_occupied_frame_occupied[i]
-            occupancy_existing = mask_centers_occupied_existing_occupied[i]
-            
-            if occupancy_frame or occupancy_existing:
-                index_x = centers_grid_shifted[i, 0].int().item()
-                index_y = centers_grid_shifted[i, 1].int().item()
-                index_z = centers_grid_shifted[i, 2].int().item()
-                if occupancy_frame:
-                    latent = voxel_grid_occ_frame.get_latent(centers_grid[i])
-                   
-                    grid_latents_frame[index_x, index_y, index_z, :] = latent
-                    
-                if occupancy_existing:
-                    latent = voxel_grid_occ_existing.get_latent(centers_grid[i])
-                    grid_latents_existing[index_x, index_y, index_z, :] = latent
-
-        #complete the empty voxels by crossing 
-        mask_complete_frame = (~mask_centers_occupied_frame_occupied) & mask_centers_occupied_existing_occupied #returns True where frame is empty and existing is occupied
-        mask_complete_existing = (~mask_centers_occupied_existing_occupied) & mask_centers_occupied_frame_occupied #returns True where existing is empty and frame is occupied
-        
-        grid_latents_frame.view(-1, *self.empty_latent_code.shape)[mask_complete_frame] = grid_latents_existing.view(-1, *self.empty_latent_code.shape)[mask_complete_frame]
-        grid_latents_existing.view(-1, *self.empty_latent_code.shape)[mask_complete_existing] = grid_latents_frame.view(-1, *self.empty_latent_code.shape)[mask_complete_existing]
-        
-        return grid_latents_frame, grid_latents_existing, vol_bounds
+    
     def populate_grid_latent(self, centers_frame_occupied, voxel_grid_occ_frame, voxel_grid_occ_existing, encode_empty = True, is_precomputing = False): 
         # centers_frame_occupied + centers_frame_unocc = centers_frame_grid
-        vol_bounds, centers_grid = self.compute_vol_bound(centers_frame_occupied, padding = True)
+        vol_bounds, centers_grid = st_utils.compute_vol_bound(centers_frame_occupied, self.query_crop_size, self.input_crop_size, padding = True)
         
         n_x, n_y, n_z = vol_bounds['axis_n_crop']
 
@@ -1067,7 +542,7 @@ class SequentialTrainer(BaseTrainer):
         grid_latents_existing = grid_latents_frame.clone()
         
         lb = vol_bounds['lb']
-        centers_grid_shifted = self.centers_to_grid_indexes(centers_grid, lb)
+        centers_grid_shifted = st_utils.centers_to_grid_indexes(centers_grid, lb, self.query_crop_size)
         
         if is_precomputing:
             centers_occupied_existing_full = torch.stack(list(voxel_grid_occ_existing.centers_table.values()))
@@ -1079,8 +554,8 @@ class SequentialTrainer(BaseTrainer):
             
         centers_occupied_frame_full = torch.stack(list(voxel_grid_occ_frame.centers_table.values()))
 
-        mask_centers_occupied_frame_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
-        mask_centers_occupied_existing_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_existing_full)
+        mask_centers_occupied_frame_occupied = st_utils.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
+        mask_centers_occupied_existing_occupied = st_utils.compute_mask_occupied(centers_grid, centers_occupied_existing_full)
         
         if is_precomputing:
             precomputed_latents = torch.empty(sum(mask_centers_occupied_existing_occupied), *self.empty_latent_code.shape).to(self.device)
@@ -1126,7 +601,7 @@ class SequentialTrainer(BaseTrainer):
     def create_stacked_map(self, grid_latents, centers_occupied, vol_bounds):
 
         lb = vol_bounds['lb']
-        centers_occupied_shifted = self.centers_to_grid_indexes(centers_occupied, lb)
+        centers_occupied_shifted = st_utils.centers_to_grid_indexes(centers_occupied, lb, self.query_crop_size)
         
         shifts = torch.Tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
         c, h, w, d = self.voxel_grid.latent_shape
@@ -1145,7 +620,6 @@ class SequentialTrainer(BaseTrainer):
     def stack_latents_cold_start(self, centers_frame_occupied, encode_empty = True):
         grid_latents, vol_bounds = self.populate_grid_latent_cold_start(centers_frame_occupied, self.voxel_grid, encode_empty = encode_empty)
         
-        # self.print_timing('populate grid latent')
         latent_map_stacked = self.create_stacked_map(grid_latents, centers_frame_occupied, vol_bounds)
         latent_map_stacked_reshaped = latent_map_stacked.reshape(latent_map_stacked.shape[0], -1)
         
@@ -1154,9 +628,6 @@ class SequentialTrainer(BaseTrainer):
         return torch.cat((latent_map_stacked, latent_map_stacked), dim = 1)
     
     def stack_latents(self, centers_frame_occupied, voxel_grid_temp, encode_empty = True, is_precomputing = False):
-        # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training/test_data'
-        # torch.save(centers_frame_occupied, path + '/centers_frame_occupied.pt')
-        # print('centers_frame_occupied saved')
         grid_latents_frame, grid_latents_existing, vol_bounds = self.populate_grid_latent(centers_frame_occupied, voxel_grid_temp, self.voxel_grid, encode_empty = encode_empty, is_precomputing = is_precomputing)
         latent_map_stacked_frame = self.create_stacked_map(grid_latents_frame, centers_frame_occupied, vol_bounds)
         latent_map_stacked_existing = self.create_stacked_map(grid_latents_existing, centers_frame_occupied, vol_bounds)
