@@ -344,8 +344,7 @@ class SequentialTrainer(BaseTrainer):
         self.model_merge.eval()
         
         with torch.no_grad():
-            p_in, p_query = self.get_inputs_from_scene(data_batch)
-            return self.process_sequence(p_in, p_query, is_training=False, return_flat = True)
+            return self.process_sequence(full_data_batch, is_training=False, return_flat = True)
         
     def compute_gaussian_weights(self, gt_points_batch, input_points_batch, sigma=1.0):
         
