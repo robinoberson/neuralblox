@@ -337,7 +337,7 @@ class SequentialTrainer(BaseTrainer):
                
         return self.process_sequence(full_data_batch, is_training=True, return_flat = self.return_flat)
     
-    def validate_sequence(self, data_batch):
+    def validate_sequence(self, full_data_batch):
         if self.limited_gpu: torch.cuda.empty_cache()
         
         self.model.eval()
