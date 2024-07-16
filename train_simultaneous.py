@@ -7,6 +7,7 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 from src import layers
 import pickle
+import yaml
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -22,7 +23,12 @@ args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 
 #copy cfg to out_dir
+os.makedirs(cfg['training']['out_dir'], exist_ok=True)
 
+# Save the full cfg to a file in the output directory
+config_path = os.path.join(cfg['training']['out_dir'], 'config.yaml')
+with open(config_path, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
 
 log_comet = cfg['training']['log_comet']
 
@@ -115,6 +121,8 @@ load_dict = dict()
 optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=learning_rate)
 trainer = config.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
 
+if log_comet:
+    trainer.set_experiment(experiment)
 epoch_it = 0
 it = 0
 
@@ -132,14 +140,35 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=cfg['t
 prev_lr = -1
 last_checkpoint_time = time.time()
 
+def create_batch_groups(train_loader, group_size): #TODO include this as a standard data loader
+    batch_groups = []
+    current_group = []
+    
+    for batch in train_loader:
+        current_group.append(batch)
+        if len(current_group) == group_size:
+            batch_groups.append(current_group)
+            current_group = []
+    
+    # Add any remaining batches
+    if current_group:
+        batch_groups.append(current_group)
+    
+    return batch_groups
+
 while True:
     torch.cuda.empty_cache()
     epoch_it += 1
     print(epoch_it)
-    for idx_batch, batch in enumerate(train_loader):
+    
+    batch_groups = create_batch_groups(train_loader, cfg['training']['batch_group_size'])
+    
+    for batch_group in batch_groups:
         it += 1
         
-        loss = trainer.train_sequence_window(batch)
+        trainer.precompute_sequence(batch_group)
+        
+        loss = trainer.train_sequence_window(batch_group)
         
         scheduler.step(loss)
         

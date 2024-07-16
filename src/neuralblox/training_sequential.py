@@ -17,6 +17,7 @@ import torch.profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 import copy
 import random
+import open3d as o3d
 
 torch.manual_seed(42)
 
@@ -24,6 +25,7 @@ class VoxelGrid:
     def __init__(self):
         self.centers_table = {}
         self.latents_table = {}
+        self.pcd_table = {}
         self.latent_shape = None
         self.verbose = False
     def compute_hash(self, center):
@@ -44,6 +46,14 @@ class VoxelGrid:
             
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
+    def add_pcd(self, center, inputs):
+        h = self.compute_hash(center)
+        pcd = o3d.geometry.PointCloud()
+        points = torch.from_numpy(inputs.cpu().detach().numpy())[..., :3]
+        occ = torch.from_numpy(inputs.cpu().detach().numpy())[..., 3]
+        pcd.points = o3d.utility.Vector3dVector(points[occ == 1].cpu().detach().numpy())
+        pcd.paint_uniform_color([0.5, 0.5, 0.5])
+        self.pcd_table[h] = pcd
         
     def get_voxel(self, center):
         h = self.compute_hash(center)
@@ -56,6 +66,15 @@ class VoxelGrid:
         latent = self.latents_table.get(h, None)
         return latent
     
+    def get_pcd(self, center):
+        h = self.compute_hash(center)
+        pcd = self.pcd_table.get(h, None)
+        return pcd
+    
+    def paint_pcd(self):
+        for pcd in self.pcd_table.values():
+            pcd.paint_uniform_color([0.5, 0.5, 0.5])
+            
     def detach_latents(self):
         self.latents_table = {k: v.detach() for k, v in self.latents_table.items()}
         
@@ -76,6 +95,7 @@ class PrecomputedStorage:
         self.storage_indexes = {}
         self.storage_centers_occupied = {}
         self.storage_dim = {}
+        self.storage_pcd = {}
         
         self.scene_idx = 0
         self.sequence_idx = 1
@@ -100,8 +120,30 @@ class PrecomputedStorage:
         self.storage_centers_occupied[h] = torch_centers_occupied.detach().clone()
         self.storage_dim[h] = grid_dim.detach().clone()
         
-        print(f'Added scene {self.scene_idx} sequence {self.sequence_idx}')
+        # print(f'Added scene {self.scene_idx} sequence {self.sequence_idx}')
         self.sequence_idx += 1
+    
+    def create_pcd_full(self, centers, voxel_grid, color):
+        pcd_full = []
+        for center in centers:
+            pcd = voxel_grid.get_pcd(center)
+            pcd.paint_uniform_color(color)
+            pcd_full.append(pcd)
+
+        self.add_pcd(pcd_full)
+
+    def add_pcd(self, pcd_full):
+        h = self.compute_hash(self.scene_idx, self.sequence_idx)
+        self.storage_pcd[h] = pcd_full
+    
+    def get_pcd(self, scene_idx, sequence_idx):
+        h = self.compute_hash(scene_idx, sequence_idx)
+        pcd_full = self.storage_pcd.get(h, None)
+        return pcd_full
+    
+    def visualize_pcd(self):
+        pcd_full = self.get_pcd(self.scene_idx, self.sequence_idx + 1)
+        o3d.visualization.draw_geometries(pcd_full)
         
     def load_idx(self, scene_idx, sequence_idx):
         h = f'{scene_idx}_{sequence_idx}'
@@ -161,6 +203,8 @@ class SequentialTrainer(BaseTrainer):
         # self.voxel_grid.verbose = True
         self.empty_latent_code = self.get_empty_latent_representation()
         self.timing_counter = 0
+        self.experiment = None
+        self.log_experiment = False
         
         #precomputing storage variables 
         self.precomputed_storage = PrecomputedStorage()
@@ -178,7 +222,11 @@ class SequentialTrainer(BaseTrainer):
         
         if vis_dir is not None and not os.path.exists(vis_dir):
             os.makedirs(vis_dir)
-           
+    
+    def set_experiment(self, experiment):
+        self.experiment = experiment
+        self.log_experiment = True
+        
     def print_timing(self, operation):
         torch.cuda.synchronize()
         t1 = time.time()
@@ -197,7 +245,7 @@ class SequentialTrainer(BaseTrainer):
             for idx_scene in range(len(full_batch)):
                 data_batch = full_batch[idx_scene]
                 self.precomputed_storage.scene_idx = idx_scene
-                
+                self.precomputed_storage.sequence_idx = 1
                 p_in, p_query = self.get_inputs_from_scene(data_batch)
                 n_sequence = p_in.shape[0]
 
@@ -227,9 +275,18 @@ class SequentialTrainer(BaseTrainer):
             scene = int(key.split('_')[0])
             idx_sequence = int(key.split('_')[1])
             self.precomputed_storage.scene_idx = scene
-            self.precomputed_storage.sequence_idx = idx_sequence
+            self.precomputed_storage.sequence_idx = idx_sequence 
+            
+            # print(f'Processing scene {scene}, sequence {idx_sequence}')
 
             p_in, p_query = self.get_inputs_from_scene(full_batch[scene])
+            
+            # pcd_in = o3d.geometry.PointCloud()
+            # points_in = p_in[idx_sequence].cpu().numpy().reshape(-1, 4)[:, :3]
+            # occ_in = p_in[idx_sequence].cpu().numpy().reshape(-1, 4)[:, 3]
+
+            # pcd_in.points = o3d.utility.Vector3dVector(points_in[occ_in == 1])
+            # o3d.visualization.draw_geometries([pcd_in])
 
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
@@ -251,9 +308,12 @@ class SequentialTrainer(BaseTrainer):
             loss_weighted = loss_unweighted 
             
             loss = loss_weighted.sum(dim=-1).mean()
+            
+            if self.log_experiment: self.experiment.log_scalar('loss', loss.item(), self.iteration)
+            
             if is_training:         
                 self.visualize_logits(logits_sampled, p_stacked, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                # loss.backward()
+                loss.backward()
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1
@@ -262,9 +322,10 @@ class SequentialTrainer(BaseTrainer):
             total_loss += loss.item()
 
         if is_training:
+            if self.log_experiment: self.experiment.log_scalar('total_loss', total_loss / n_sequences / n_scenes, self.iteration)
             return total_loss / n_sequences
         else:
-            results.append(total_loss / n_sequences)
+            results.append(total_loss / n_sequences / n_scenes)
             return results
         
     def train_sequence_window(self, full_data_batch):
@@ -320,6 +381,9 @@ class SequentialTrainer(BaseTrainer):
             if encoded_latent.shape != self.empty_latent_code.shape:
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             self.voxel_grid.add_voxel(center, encoded_latent, overwrite = False)
+
+        for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied):
+            self.voxel_grid.add_pcd(center, input)
         
         latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied, encode_empty = encode_empty)
 
@@ -341,7 +405,9 @@ class SequentialTrainer(BaseTrainer):
             if encoded_latent.shape != self.empty_latent_code.shape:
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             voxel_grid_temp.add_voxel(center, encoded_latent)
-             
+        for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied):
+            voxel_grid_temp.add_pcd(center, input)
+            
         #stack the latents
         latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, encode_empty = encode_empty, is_precomputing = is_precomputing)
 
@@ -350,6 +416,9 @@ class SequentialTrainer(BaseTrainer):
         for i in range(len(centers_frame_occupied)):
             self.voxel_grid.add_voxel(centers_frame_occupied[i], latent_map_stacked_merged[i], overwrite = True)
 
+        for i in range(len(centers_frame_occupied)):
+            self.voxel_grid.add_pcd(centers_frame_occupied[i], inputs_frame_distributed_occupied[i])
+            
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
 
     def prepare_data_logits(self, latent_map, centers_frame_occupied, p_query_distributed, centers_query):
@@ -924,7 +993,7 @@ class SequentialTrainer(BaseTrainer):
                 index_x = centers_grid_shifted[i, 0].int().item()
                 index_y = centers_grid_shifted[i, 1].int().item()
                 index_z = centers_grid_shifted[i, 2].int().item()
-                # indexes_used.append((index_x, index_y, index_z))
+
                 latent = voxel_grid_occ.get_latent(centers_grid[i])
                 grid_latents[index_x, index_y, index_z] = latent
                 
@@ -955,7 +1024,6 @@ class SequentialTrainer(BaseTrainer):
         mask_centers_occupied_frame_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
         mask_centers_occupied_existing_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_existing_full)
 
-        indexes_used = []
         for i in range(centers_grid_shifted.shape[0]):
             occupancy_frame = mask_centers_occupied_frame_occupied[i]
             occupancy_existing = mask_centers_occupied_existing_occupied[i]
@@ -964,7 +1032,6 @@ class SequentialTrainer(BaseTrainer):
                 index_x = centers_grid_shifted[i, 0].int().item()
                 index_y = centers_grid_shifted[i, 1].int().item()
                 index_z = centers_grid_shifted[i, 2].int().item()
-                indexes_used.append((index_x, index_y, index_z))
                 if occupancy_frame:
                     latent = voxel_grid_occ_frame.get_latent(centers_grid[i])
                    
@@ -1008,7 +1075,9 @@ class SequentialTrainer(BaseTrainer):
         else:
             latents_precomputed, indexes_precomputed, centers_occupied_existing_full  = self.precomputed_storage.load_idx(self.precomputed_storage.scene_idx, self.precomputed_storage.sequence_idx)
             grid_latents_existing[indexes_precomputed[:, 0], indexes_precomputed[:, 1], indexes_precomputed[:, 2], :] = latents_precomputed
-                    
+            
+            # self.precomputed_storage.visualize_pcd() #TODO Remove used for debug
+            
         centers_occupied_frame_full = torch.stack(list(voxel_grid_occ_frame.centers_table.values()))
 
         mask_centers_occupied_frame_occupied = self.compute_mask_occupied(centers_grid, centers_occupied_frame_full)
@@ -1017,8 +1086,8 @@ class SequentialTrainer(BaseTrainer):
         if is_precomputing:
             precomputed_latents = torch.empty(sum(mask_centers_occupied_existing_occupied), *self.empty_latent_code.shape).to(self.device)
             precomputed_indices = torch.empty(sum(mask_centers_occupied_existing_occupied), 3, dtype = torch.int).to(self.device)
-                   
-        indexes_used = []
+            precomputed_centers = torch.empty(sum(mask_centers_occupied_existing_occupied), 3).to(self.device) #TODO Remove, used for debug
+            
         idx_indexes = 0
         for i in range(centers_grid_shifted.shape[0]):
             occupancy_frame = mask_centers_occupied_frame_occupied[i]
@@ -1028,7 +1097,6 @@ class SequentialTrainer(BaseTrainer):
                 index_x = centers_grid_shifted[i, 0].int().item()
                 index_y = centers_grid_shifted[i, 1].int().item()
                 index_z = centers_grid_shifted[i, 2].int().item()
-                indexes_used.append((index_x, index_y, index_z))
                 
                 if occupancy_frame:
                     latent = voxel_grid_occ_frame.get_latent(centers_grid[i])
@@ -1038,17 +1106,15 @@ class SequentialTrainer(BaseTrainer):
                     latent = voxel_grid_occ_existing.get_latent(centers_grid[i])
                     grid_latents_existing[index_x, index_y, index_z, :] = latent
                     precomputed_indices[idx_indexes] = torch.tensor([index_x, index_y, index_z])
+                    precomputed_centers[idx_indexes] = centers_grid[i] #TODO Remove, used for debug
+                    pcd = voxel_grid_occ_existing.get_pcd(centers_grid[i])
                     idx_indexes += 1
                         
-        if is_precomputing:
-            # l1 = len(precomputed_latents)
-            # l2 = len(precomputed_indices)
-            # l3 = len(centers_occupied_existing_full)
-            # assert l1 == l2 == l3
-            
+        if is_precomputing:           
             precomputed_latents = grid_latents_existing[precomputed_indices[:, 0], precomputed_indices[:, 1], precomputed_indices[:, 2], ...].clone()
             self.precomputed_storage.add_sequence_idx(precomputed_latents, precomputed_indices, centers_occupied_existing_full, torch.tensor([n_x, n_y, n_z]))
-
+            # self.precomputed_storage.create_pcd_full(precomputed_centers, voxel_grid_occ_existing, color = np.array([1.0, 0.5, 1.0])) #TODO Remove, used for debug
+            
         #complete the empty voxels by crossing 
         mask_complete_frame = (~mask_centers_occupied_frame_occupied) & mask_centers_occupied_existing_occupied #returns True where frame is empty and existing is occupied
         mask_complete_existing = (~mask_centers_occupied_existing_occupied) & mask_centers_occupied_frame_occupied #returns True where existing is empty and frame is occupied
@@ -1087,6 +1153,7 @@ class SequentialTrainer(BaseTrainer):
         latent_map_stacked_sumed = latent_map_stacked_reshaped.sum(dim = 1)
 
         return torch.cat((latent_map_stacked, latent_map_stacked), dim = 1)
+    
     def stack_latents(self, centers_frame_occupied, voxel_grid_temp, encode_empty = True, is_precomputing = False):
         # path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training/test_data'
         # torch.save(centers_frame_occupied, path + '/centers_frame_occupied.pt')
