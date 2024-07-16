@@ -164,7 +164,7 @@ class SequentialTrainer(BaseTrainer):
             
             if is_training:         
                 vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
-                # loss.backward()
+                loss.backward()
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
                 self.iteration += 1

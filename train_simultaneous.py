@@ -165,8 +165,6 @@ while True:
     batch_groups_val = create_batch_groups(val_loader, cfg['training']['batch_group_size'])
     
     for batch_group in batch_groups:
-        break 
-
         it += 1
         
         trainer.precompute_sequence(batch_group)
