@@ -17,7 +17,7 @@ import torch.profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 import copy
 import random
-import open3d as o3d
+# import open3d as o3d
 
 torch.manual_seed(42)
 
@@ -382,8 +382,8 @@ class SequentialTrainer(BaseTrainer):
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             self.voxel_grid.add_voxel(center, encoded_latent, overwrite = False)
 
-        for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied):
-            self.voxel_grid.add_pcd(center, input)
+        # for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied): #TODO Remove, was used for debugging
+        #     self.voxel_grid.add_pcd(center, input)
         
         latent_map_stacked = self.stack_latents_cold_start(centers_frame_occupied, encode_empty = encode_empty)
 
@@ -405,8 +405,8 @@ class SequentialTrainer(BaseTrainer):
             if encoded_latent.shape != self.empty_latent_code.shape:
                 print(f'encoded_latent.shape: {encoded_latent.shape}, empty_latent_code.shape: {self.empty_latent_code.shape}')
             voxel_grid_temp.add_voxel(center, encoded_latent)
-        for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied):
-            voxel_grid_temp.add_pcd(center, input)
+        # for center, input in zip(centers_frame_occupied, inputs_frame_distributed_occupied): #TODO Remove, was used for debugging
+        #     voxel_grid_temp.add_pcd(center, input)
             
         #stack the latents
         latent_map_stacked = self.stack_latents(centers_frame_occupied, voxel_grid_temp, encode_empty = encode_empty, is_precomputing = is_precomputing)
@@ -416,8 +416,8 @@ class SequentialTrainer(BaseTrainer):
         for i in range(len(centers_frame_occupied)):
             self.voxel_grid.add_voxel(centers_frame_occupied[i], latent_map_stacked_merged[i], overwrite = True)
 
-        for i in range(len(centers_frame_occupied)):
-            self.voxel_grid.add_pcd(centers_frame_occupied[i], inputs_frame_distributed_occupied[i])
+        # for i in range(len(centers_frame_occupied)): #TODO Remove, was used for debugging
+        #     self.voxel_grid.add_pcd(centers_frame_occupied[i], inputs_frame_distributed_occupied[i])
             
         return latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed_occupied
 
