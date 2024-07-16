@@ -39,7 +39,7 @@ training:
   batch_size: 1
   model_selection_metric: iou
   model_selection_mode: maximize
-  checkpoint_interval_minutes: 0
+  checkpoint_interval_minutes: 30
   print_every: 50
   backup_every: 100
 
