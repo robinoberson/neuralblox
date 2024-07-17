@@ -167,7 +167,7 @@ class SequentialTrainer(BaseTrainer):
                 self.optimizer.zero_grad()
                 self.iteration += 1
             else:
-                results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
+                results.append([p_stacked.cpu(), latents.cpu(), inputs_frame.cpu(), logits_sampled.cpu(), loss.item()])
             total_loss += loss.item()
 
         if is_training:
