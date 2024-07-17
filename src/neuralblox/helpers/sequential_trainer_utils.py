@@ -226,3 +226,9 @@ def centers_to_grid_indexes(centers, lb, query_crop_size):
     centers_shifted = torch.round((centers - (lb + query_crop_size / 2)) / query_crop_size * 10e4) / 10e4
 
     return centers_shifted
+
+def print_gradient_norms(iteration, model, print_every=100):
+    if iteration % print_every == 0:
+        mean_norm = torch.mean(torch.stack([torch.norm(p.grad.detach()) for p in model.parameters() if p.grad is not None]))
+        max_norm = torch.max(torch.stack([torch.norm(p.grad.detach()) for p in model.parameters() if p.grad is not None]))
+        print(f'Iteration {iteration}, Mean Gradient Norm: {mean_norm.item()}, Max Gradient Norm: {max_norm.item()}')

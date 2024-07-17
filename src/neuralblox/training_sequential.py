@@ -4,6 +4,7 @@ import math
 import numpy as np
 import time
 import yaml
+import torch.nn as nn
 from torch.nn import functional as F
 import random
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
@@ -109,7 +110,6 @@ class SequentialTrainer(BaseTrainer):
                         latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = False)
                     else:
                         latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
-
     def process_sequence(self, full_batch, is_training, return_flat = True):
         
         n_scenes = len(full_batch)
@@ -128,16 +128,7 @@ class SequentialTrainer(BaseTrainer):
             self.precomputed_storage.scene_idx = scene
             self.precomputed_storage.sequence_idx = idx_sequence 
             
-            # print(f'Processing scene {scene}, sequence {idx_sequence}')
-
             p_in, p_query = st_utils.get_inputs_from_scene(full_batch[scene], self.device)
-            
-            # pcd_in = o3d.geometry.PointCloud()
-            # points_in = p_in[idx_sequence].cpu().numpy().reshape(-1, 4)[:, :3]
-            # occ_in = p_in[idx_sequence].cpu().numpy().reshape(-1, 4)[:, 3]
-
-            # pcd_in.points = o3d.utility.Vector3dVector(points_in[occ_in == 1])
-            # o3d.visualization.draw_geometries([pcd_in])
 
             inputs_frame = p_in[idx_sequence]
             p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
@@ -150,7 +141,6 @@ class SequentialTrainer(BaseTrainer):
             
             p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
-            # self.visualize_cost(p_stacked, inputs_frame_distributed, mask_frame)
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
             
@@ -165,8 +155,16 @@ class SequentialTrainer(BaseTrainer):
             if is_training:         
                 vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_weighted, inputs_distributed = inputs_frame_distributed[mask_frame], force_viz = False)
                 loss.backward()
+                
+                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+                
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+                torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
+               
                 self.voxel_grid.detach_latents()
                 self.optimizer.step()
+                self.optimizer.zero_grad()
                 self.iteration += 1
             else:
                 results.append([p_stacked, latents, inputs_frame, logits_sampled, loss.item()])
