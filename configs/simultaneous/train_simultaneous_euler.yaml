@@ -13,7 +13,7 @@ training:
   save_data_viz: true
   log_comet: true
   n_voxels_max: 30
-  lr: 0.0005
+  lr: 0.0007
   batch_group_size: 12
 test:
   model_backbone_file: model.pt
