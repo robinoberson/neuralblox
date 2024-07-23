@@ -8,6 +8,7 @@ from src.checkpoints import CheckpointIO
 from src import layers
 import pickle
 import yaml
+import src.neuralblox.helpers.sequential_trainer_utils as st_utils
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -140,29 +141,13 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=cfg['t
 prev_lr = -1
 last_checkpoint_time = time.time()
 
-def create_batch_groups(train_loader, group_size): #TODO include this as a standard data loader
-    batch_groups = []
-    current_group = []
-    
-    for batch in train_loader:
-        current_group.append(batch)
-        if len(current_group) == group_size:
-            batch_groups.append(current_group)
-            current_group = []
-    
-    # Add any remaining batches
-    if current_group:
-        batch_groups.append(current_group)
-    
-    return batch_groups
-
 while True:
     torch.cuda.empty_cache()
     epoch_it += 1
     print(epoch_it)
     
-    batch_groups = create_batch_groups(train_loader, cfg['training']['batch_group_size'])
-    batch_groups_val = create_batch_groups(val_loader, cfg['training']['batch_group_size'])
+    batch_groups = st_utils.create_batch_groups(train_loader, cfg['training']['batch_group_size'])
+    batch_groups_val = st_utils.create_batch_groups(val_loader, cfg['training']['batch_group_size'])
     
     for batch_group in batch_groups:
         it += 1

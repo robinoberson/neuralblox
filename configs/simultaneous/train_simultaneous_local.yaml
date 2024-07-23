@@ -9,15 +9,14 @@ data:
   #   2024-06-27_15-11-37, 2024-06-27_15-11-38, 2024-06-27_15-11-41, 2024-06-27_15-11-45,
   #   2024-06-27_15-11-46, 2024-06-27_15-11-48, 2024-06-27_15-11-53]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
   classes:
-  path: 
-    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_overfit_straight
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_5_y_180_EVAL
   pointcloud_noise: 0.0
 generation:
   generation_dir_models: /scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
   generator_type: neighbors
-  model_backbone_file: model_backbone_600.pt
-  model_merging_file: model_merging_600.pt
+  model_backbone_file: model_backbone.pt
+  model_merging_file: model_merging.pt
   resolution_0: 50
   prob_threshold: 0.3
 test:
@@ -25,7 +24,7 @@ test:
   model_merging_file: model_merging.pt
 training:
   limited_gpu: true
-  log_comet: true
+  log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone_900.pt

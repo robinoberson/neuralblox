@@ -110,6 +110,7 @@ class SequentialTrainer(BaseTrainer):
                         latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_cold_start(inputs_frame, encode_empty = False)
                     else:
                         latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
+                        
     def process_sequence(self, full_batch, is_training, return_flat = True):
         
         n_scenes = len(full_batch)
@@ -131,7 +132,6 @@ class SequentialTrainer(BaseTrainer):
             p_in, p_query = st_utils.get_inputs_from_scene(full_batch[scene], self.device)
 
             inputs_frame = p_in[idx_sequence]
-            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
 
             if idx_sequence == 0:
                 self.voxel_grid.reset()
@@ -139,6 +139,7 @@ class SequentialTrainer(BaseTrainer):
             else:
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.fuse_inputs(inputs_frame, encode_empty = is_training)
             
+            p_query_distributed, centers_query = self.get_distributed_inputs(p_query[idx_sequence], self.n_max_points_query, self.occ_per_query, isquery = True)
             p_stacked, latents, centers, occ, mask_frame = self.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
             logits_sampled = self.get_logits(p_stacked, latents, centers)

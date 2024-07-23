@@ -232,3 +232,19 @@ def print_gradient_norms(iteration, model, print_every=100):
         mean_norm = torch.mean(torch.stack([torch.norm(p.grad.detach()) for p in model.parameters() if p.grad is not None]))
         max_norm = torch.max(torch.stack([torch.norm(p.grad.detach()) for p in model.parameters() if p.grad is not None]))
         print(f'Iteration {iteration}, Mean Gradient Norm: {mean_norm.item()}, Max Gradient Norm: {max_norm.item()}')
+
+def create_batch_groups(train_loader, group_size): #TODO include this as a standard data loader
+    batch_groups = []
+    current_group = []
+    
+    for batch in train_loader:
+        current_group.append(batch)
+        if len(current_group) == group_size:
+            batch_groups.append(current_group)
+            current_group = []
+    
+    # Add any remaining batches
+    if current_group:
+        batch_groups.append(current_group)
+    
+    return batch_groups

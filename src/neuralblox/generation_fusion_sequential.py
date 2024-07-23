@@ -4,6 +4,9 @@ from tqdm import trange
 import trimesh
 from src.utils import libmcubes
 from src.common import normalize_coord, add_key, coord2index
+import src.neuralblox.helpers.visualization_utils as vis_utils
+import src.neuralblox.helpers.sequential_trainer_utils as st_utils
+
 import time
 
 
@@ -94,50 +97,58 @@ class Generator3DSequential(object):
             mesh_list.append(mesh)
         return mesh_list, inputs_frame_list
     
-    def generate_mesh_at_index(self, batch, index, generate_mesh = False, memory_keep = False):
+    def generate_mesh_at_index(self, batch, index, generate_mesh = False, generate_logits = False, memory_keep = False):
         self.trainer.model.eval()
         self.trainer.model_merge.eval()
         
-        p_in = self.get_inputs(batch)
+        p_in, p_query = st_utils.get_inputs_from_scene(batch, self.device)
+
         n_sequence = p_in.shape[0]
         mesh_list = []
         inputs_frame_list = []
         times = []
+        logits = []
         
         inputs_frame = None
         
-        for i in range(n_sequence):
+        for idx_sequence in range(n_sequence):
             t0 = time.time()
-            if i > index:
+            if idx_sequence > index:
                 break
             if inputs_frame is None:
-                inputs_frame = p_in[i]
+                inputs_frame = p_in[idx_sequence]
             elif memory_keep:
-                inputs_frame = torch.cat((inputs_frame, p_in[i]), 0)
+                inputs_frame = torch.cat((inputs_frame, p_in[idx_sequence]), 0)
             else:
-                inputs_frame = p_in[i]
+                inputs_frame = p_in[idx_sequence]
 
             inputs_frame_list.append(inputs_frame)
             
-            if i == 0:
+            if idx_sequence == 0:
                 self.trainer.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
                 print(f'Voxel grid is empty, start with cold start')
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
                 print(f'Perform latent fusion')
             
             times.append(time.time() - t0)
             
+            if generate_logits:
+                p_query_distributed, centers_query = self.trainer.get_distributed_inputs(p_query[idx_sequence], self.trainer.n_max_points_query, self.trainer.occ_per_query, isquery = True)
+                p_stacked, latents, centers, occ, mask_frame = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
+                logits_sampled = self.trainer.get_logits(p_stacked, latents, centers)
+                logits.append([logits_sampled, p_stacked, inputs_frame_distributed[mask_frame]])
+
             stacked_latents, centers = self.stack_latents_all()
-            if generate_mesh or i == index - 1:
+            if generate_mesh or idx_sequence == index - 1:
                 
                 mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
                 mesh_list.append(mesh)
             
             times.append(time.time() - t0)
         
-        return mesh_list, inputs_frame_list, times
+        return mesh_list, inputs_frame_list, times, logits
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
@@ -185,17 +196,7 @@ class Generator3DSequential(object):
                     
         return stacked_latents, centers
         
-    def generate_logits(self, latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query, visualize=False):
-        with torch.no_grad():
-            p_stacked, latents, centers, occ, mask_frame = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
 
-            logits_sampled = self.trainer.get_logits(p_stacked, latents, centers)
-            inputs_distributed = self.get_inputs_map(centers_frame_occupied)
-            
-            if visualize:
-                self.trainer.visualize_logits(logits_sampled, p_stacked, inputs_distributed, force_viz = visualize)
-        return logits_sampled, p_stacked
-    
     def get_inputs_map(self, centers):
         inputs_distributed = None
         for center in centers:
