@@ -8,7 +8,7 @@ data:
   pointcloud_noise: 0.005
   # pointcloud_noise: 0.0
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_22_July_gt_robot_-180to180_9scenes
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_23_July_gt_robot_-180to180_9scenes
   starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_overfit_angle_-5to5_3scenes/model_backbone.pt
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_overfit_angle_-5to5_3scenes/model_merging.pt
   # out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_-10to10_5scenes_lr0001
