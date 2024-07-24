@@ -12,8 +12,8 @@ data:
   points_unpackbits: true
   unit_size: 0.02 # size of a voxel
   query_vol_size: 25
-  input_vol: 1.0
-  query_vol: 1.0
+  input_vol: 1.3
+  query_vol: 0.8
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent

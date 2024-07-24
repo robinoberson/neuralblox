@@ -75,26 +75,29 @@ class Generator3DSequential(object):
         self.hdim = unet_hdim
         
     def generate_sequence(self, batch):
-        p_in = self.get_inputs(batch)
+        self.trainer.model.eval()
+        self.trainer.model_merge.eval()
+        
+        p_in, _ = st_utils.get_inputs_from_scene(batch, self.device)
         n_sequence = p_in.shape[0]
         mesh_list = []
         inputs_frame_list = []
         
-        for i in range(n_sequence):
-        
-            inputs_frame = p_in[i]
+        for idx_sequence in range(n_sequence):        
+            inputs_frame = p_in[idx_sequence]
             inputs_frame_list.append(inputs_frame)
             
-            if i == 0:
+            if idx_sequence == 0:
                 self.trainer.voxel_grid.reset()
                 latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
                 print(f'Voxel grid is empty, start with cold start')
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False)
+                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
                 # print(f'Perform latent fusion')
             stacked_latents, centers = self.stack_latents_all()
-            mesh = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=True)
+            mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
             mesh_list.append(mesh)
+            
         return mesh_list, inputs_frame_list
     
     def generate_mesh_at_index(self, batch, index, generate_mesh = False, generate_logits = False, memory_keep = False):

@@ -46,7 +46,7 @@ def visualize_weights(weights, p_query, inputs_distributed):
         # Visualize using Open3D
     o3d.visualization.draw_geometries(geos)
     
-def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_distributed=None, force_viz = False):
+def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_distributed=None, force_viz = False, threshold = 0.1):
     geos = []
     
     current_dir = os.getcwd()
@@ -76,8 +76,6 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
     
     values_sampled = values_sampled.reshape(-1)
-
-    threshold = 0.01
 
     values_sampled[values_sampled < threshold] = 0
     values_sampled[values_sampled >= threshold] = 1
