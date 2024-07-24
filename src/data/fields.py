@@ -10,7 +10,7 @@ from src.common import coord2index, normalize_coord
 
 class IndexField(Field):
     ''' Basic index field.'''
-    def load(self, model_path, idx, category):
+    def load(self, model_path, category):
         ''' Loads the index field.
 
         Args:
@@ -18,7 +18,7 @@ class IndexField(Field):
             idx (int): ID of data point
             category (int): index of category
         '''
-        return idx
+        return None
 
     def check_complete(self, files):
         ''' Check if field is complete.
@@ -47,7 +47,7 @@ class PointsField(Field):
         self.unpackbits = unpackbits
         self.multi_files = multi_files
 
-    def load(self, model_path, idx, category):
+    def load(self, model_path, category):
         ''' Loads the data point.
 
         Args:
@@ -220,7 +220,7 @@ class PointCloudField(Field):
         self.multi_files = multi_files
         self.unpackbits = unpackbits
 
-    def load(self, model_path, idx, category):
+    def load(self, model_path, category):
         ''' Loads the data point.
 
         Args:
@@ -284,7 +284,7 @@ class PartialPointCloudField(Field):
         self.multi_files = multi_files
         self.part_ratio = part_ratio
 
-    def load(self, model_path, idx, category):
+    def load(self, model_path, category):
         ''' Loads the data point.
 
         Args:

@@ -77,15 +77,18 @@ class Shapes3dDataset(data.Dataset):
         self.no_except = no_except
         self.transform = transform
         self.cfg = cfg
+        
+        self.initialize_data(categories, split)
 
+    def initialize_data(self, categories=None, split=None):
         # If categories is None, use all subfolders
         if categories is None:
-            categories = os.listdir(dataset_folder)
+            categories = os.listdir(self.dataset_folder)
             categories = [c for c in categories
-                          if os.path.isdir(os.path.join(dataset_folder, c))]
+                          if os.path.isdir(os.path.join(self.dataset_folder, c))]
 
         # Read metadata file
-        metadata_file = os.path.join(dataset_folder, 'metadata.yaml')
+        metadata_file = os.path.join(self.dataset_folder, 'metadata.yaml')
 
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
@@ -102,7 +105,7 @@ class Shapes3dDataset(data.Dataset):
         # Get all models
         self.models = []
         for c_idx, c in enumerate(categories):
-            subpath = os.path.join(dataset_folder, c)
+            subpath = os.path.join(self.dataset_folder, c)
             if not os.path.isdir(subpath):
                 logger.warning('Category %s does not exist in dataset.' % c)
 
@@ -123,56 +126,51 @@ class Shapes3dDataset(data.Dataset):
                     {'category': c, 'model': m}
                     for m in models_c
                 ]
-        
-        # precompute
-        if self.cfg['data']['input_type'] == 'pointcloud_crop': 
-            self.split = split
-            # proper resolution for feature plane/volume of the ENTIRE scene
-            query_vol_metric = self.cfg['data']['padding'] + 1
-            unit_size = self.cfg['data']['unit_size']
-            recep_field = 2**(cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] + 2)
-            if 'unet' in cfg['model']['encoder_kwargs']:
-                depth = cfg['model']['encoder_kwargs']['unet_kwargs']['depth']
-            elif 'unet3d' in cfg['model']['encoder_kwargs']:
-                depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels']
-            
-            self.depth = depth
-            #! for sliding-window case, pass all points!
-            if self.cfg['generation']['sliding_window']:
-                self.total_input_vol, self.total_query_vol, self.total_reso = \
-                    decide_total_volume_range(100000, recep_field, unit_size, depth) # contain the whole scene
-            else:
-                self.total_input_vol, self.total_query_vol, self.total_reso = \
-                    decide_total_volume_range(query_vol_metric, recep_field, unit_size, depth)
+                
+        self.batch_groups = self.create_batch_groups()
 
+    def create_batch_groups(self):
+        ''' Create batch groups from the dataset.
+
+        Returns:
+            list: List of batch groups
+        '''
+        batch_groups = []
+        current_group = []
+        
+        for model_info in self.models:
+            current_group.append(model_info)
+            if len(current_group) == self.cfg['training']['batch_group_size']:
+                batch_groups.append(current_group)
+                current_group = []
+        
+        # Add any remaining batches
+        if current_group:
+            batch_groups.append(current_group)
+        
+        return batch_groups
             
     def __len__(self):
         ''' Returns the length of the dataset.
         '''
-        return len(self.models)
+        return len(self.batch_groups)
 
-    def __getitem__(self, idx):
+    def load_data_item(self, category, model):
         ''' Returns an item of the dataset.
 
         Args:
             idx (int): ID of data point
         '''
-        category = self.models[idx]['category']
-        model = self.models[idx]['model']
         c_idx = self.metadata[category]['idx']
 
         model_path = os.path.join(self.dataset_folder, category, model)
         data = {}
 
-        if self.cfg['data']['input_type'] == 'pointcloud_crop':
-            info = self.get_vol_info(model_path)
-            data['pointcloud_crop'] = True
-        else:
-            info = c_idx
+        info = c_idx
         
         for field_name, field in self.fields.items():
             try:
-                field_data = field.load(model_path, idx, info)
+                field_data = field.load(model_path, info)
             except Exception as e:
                 if self.no_except:
                     logger.warn(
@@ -198,55 +196,17 @@ class Shapes3dDataset(data.Dataset):
         if self.cfg['data']['return_category']: data['category'] = category
 
         return data
-    
-    def get_vol_info(self, model_path):
-        ''' Get crop information
+    def __getitem__(self, idx):
+        ''' Returns an item or a group of items from the dataset.
 
         Args:
-            model_path (str): path to the current data
+            idx (int): ID of data point or batch group
         '''
-        query_vol_size = self.cfg['data']['query_vol_size']
-        unit_size = self.cfg['data']['unit_size']
-        field_name = self.cfg['data']['pointcloud_file']
-        plane_type = self.cfg['model']['encoder_kwargs']['plane_type']
-        recep_field = 2**(self.cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] + 2)
+        # Return a group of batches
+        group = self.batch_groups[idx]
+        return [self.load_data_item(item['category'], item['model']) for item in group]
+       
 
-        if self.cfg['data']['multi_files'] is None:
-            file_path = os.path.join(model_path, field_name)
-        else:
-            num = np.random.randint(self.cfg['data']['multi_files'])
-            file_path = os.path.join(model_path, field_name, '%s_%02d.npz' % (field_name, num))
-        
-        points_dict = np.load(file_path)
-        p = points_dict['points']
-        if self.split == 'train':
-            # randomly sample a point as the center of input/query volume
-            p_c = [np.random.uniform(p[:,i].min(), p[:,i].max()) for i in range(3)]
-            # p_c = [np.random.uniform(-0.55, 0.55) for i in range(3)]
-            p_c = np.array(p_c).astype(np.float32)
-            
-            reso = query_vol_size + recep_field - 1
-            # make sure the defined reso can be properly processed by UNet
-            reso = update_reso(reso, self.depth)
-            input_vol_metric = reso * unit_size
-            query_vol_metric = query_vol_size * unit_size
-
-            # bound for the volumes
-            lb_input_vol, ub_input_vol = p_c - input_vol_metric/2, p_c + input_vol_metric/2
-            lb_query_vol, ub_query_vol = p_c - query_vol_metric/2, p_c + query_vol_metric/2
-
-            input_vol = [lb_input_vol, ub_input_vol]
-            query_vol = [lb_query_vol, ub_query_vol]
-        else:
-            reso = self.total_reso
-            input_vol = self.total_input_vol
-            query_vol = self.total_query_vol
-
-        vol_info = {'plane_type': plane_type,
-                    'reso'      : reso,
-                    'input_vol' : input_vol,
-                    'query_vol' : query_vol}
-        return vol_info
     
     def get_model_dict(self, idx):
         return self.models[idx]

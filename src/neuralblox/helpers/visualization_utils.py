@@ -77,7 +77,7 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     
     values_sampled = values_sampled.reshape(-1)
 
-    threshold = 0.1
+    threshold = 0.01
 
     values_sampled[values_sampled < threshold] = 0
     values_sampled[values_sampled >= threshold] = 1
@@ -88,9 +88,9 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     
     pcd = o3d.geometry.PointCloud()
     colors = np.zeros((values_gt.shape[0], 3))
-    colors[values_gt == 1] = [1, 0, 0] # red
-    colors[values_sampled == 1] = [0, 0, 1] # blue
-    colors[both_occ == 1] = [0, 1, 0] # green
+    colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
+    colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
+    colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
     
     mask = np.any(colors != [0, 0, 0], axis=1)
     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)

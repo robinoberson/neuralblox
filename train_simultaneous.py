@@ -9,6 +9,8 @@ from src import layers
 import pickle
 import yaml
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
+import torch.multiprocessing as mp
+mp.set_sharing_strategy('file_system')
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -84,14 +86,14 @@ torch.manual_seed(42)
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, 
     num_workers=cfg['training']['n_workers'], 
-    shuffle=False,
+    shuffle=True,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=batch_size, 
-    num_workers=cfg['training']['n_workers'], 
-    shuffle=True,
+    num_workers=2, 
+    shuffle=False,
     collate_fn=data.collate_remove_none,
     worker_init_fn=data.worker_init_fn)
 
@@ -146,10 +148,7 @@ while True:
     epoch_it += 1
     print(epoch_it)
     
-    batch_groups = st_utils.create_batch_groups(train_loader, cfg['training']['batch_group_size'])
-    batch_groups_val = st_utils.create_batch_groups(val_loader, cfg['training']['batch_group_size'])
-    
-    for batch_group in batch_groups:
+    for batch_group in train_loader:
         it += 1
         
         trainer.precompute_sequence(batch_group)
@@ -185,59 +184,60 @@ while True:
             print('Backup checkpoint')
             checkpoint_io_merging.save('model_merging_%d.pt' % it, epoch_it=epoch_it, it=it)
             checkpoint_io.save('model_backbone_%d.pt' % it, epoch_it=epoch_it, it=it)
-    # Save checkpoint
-    current_time = time.time()
-    if (current_time - last_checkpoint_time) >= checkpoint_interval:
-        last_checkpoint_time = current_time
+        
+        # Save checkpoint
+        current_time = time.time()
+        if (current_time - last_checkpoint_time) >= checkpoint_interval:
+            last_checkpoint_time = current_time
 
-        print('Saving checkpoint')
+            print('Saving checkpoint')
 
+              
+            torch.cuda.empty_cache()
+            checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
+            checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
+            
+    with torch.no_grad():
         path = os.path.join(cfg['training']['out_dir'], 'data_viz')
         if not os.path.exists(path):
             os.makedirs(path)
-            
-        torch.cuda.empty_cache()
-        checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
-        checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
+              
         if cfg['training']['save_data_viz']: 
 
-            with torch.no_grad():
-                trainer.model.eval()
-                trainer.model_merge.eval()
-                
+            trainer.model.eval()
+            trainer.model_merge.eval()
+            
+            for batch_idx, batch_group in enumerate(train_loader):
+                if batch_idx > 1:
+                    continue
+                trainer.precompute_sequence(batch_group)
+                tup = trainer.validate_sequence(batch_group)
+            
+                #dump all files 
+                with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
+                    pickle.dump(tup, f)
+                # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
+
+        tup = []
+        val_loss = 0
+        iter_val = 0
+        for batch_idx, batch_group in enumerate(val_loader):
+            if batch_idx > 5:
+                continue 
+            trainer.precompute_sequence(batch_group)
+            tup = trainer.validate_sequence(batch_group)                    #dump all files 
+            val_loss += tup[-1]
+            
+            if cfg['training']['save_data_viz']: 
                 print(f'Saving {os.path.join(path, f"data_viz_batch_idx_{epoch_it}.pkl")}')
+                with open(os.path.join(path, f"data_viz_val_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
+                    pickle.dump(tup, f)
+            # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
 
-                for batch_idx, batch_group in enumerate(batch_groups):
-                    if batch_idx > 10:
-                        continue
-                    trainer.precompute_sequence(batch_group)
-                    tup = trainer.validate_sequence(batch_group)
-                
-                    #dump all files 
-                    with open(os.path.join(path, f"data_viz_train_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
-                        pickle.dump(tup, f)
-                    # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
+            iter_val += 1
+            
+        val_loss = val_loss / iter_val
+        print(f'val_loss = {val_loss}, {iter_val}')
 
-                tup = []
-                val_loss = 0
-                iter_val = 0
-                for batch_idx, batch_group in enumerate(batch_groups_val):
-                    if batch_idx > 10:
-                        continue 
-                    trainer.precompute_sequence(batch_group)
-                    tup = trainer.validate_sequence(batch_group)                    #dump all files 
-                    val_loss += tup[-1]
-                    
-                    with open(os.path.join(path, f"data_viz_val_{batch_idx}_{epoch_it}.pkl"), 'wb') as f:
-                        pickle.dump(tup, f)
-                    # print(f'Saved {os.path.join(path, f"data_viz_{batch_idx}_{epoch_it}.pkl")}')
-
-                    iter_val += 1
-                    
-                val_loss = val_loss / iter_val
-                print(f'val_loss = {val_loss}, {iter_val}')
-
-                if log_comet: 
-                    experiment.log_metric('val_loss', val_loss, step=it)
-    else:
-        print('Not time to save checkpoint')
+        if log_comet: 
+            experiment.log_metric('val_loss', val_loss, step=it)
