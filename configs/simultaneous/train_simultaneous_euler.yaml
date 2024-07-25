@@ -5,7 +5,7 @@ data:
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot_x5_y180_s30_b20
   pointcloud_noise: 0.005
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_25_July_gt_robot_x5_y180_s30_b20
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_25_July_gt_robot_x5_y180_s30_b20-2
   starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_23_July_gt_robot_x5_y180_s10_b20/model_backbone.pt
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_23_July_gt_robot_x5_y180_s10_b20/model_merging.pt
   # out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_-10to10_5scenes_lr0001
