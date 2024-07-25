@@ -4,6 +4,7 @@ import os
 import yaml
 import numpy as np
 import torch 
+import src.neuralblox.helpers.sequential_trainer_utils as st_utils
 
 def visualize_weights(weights, p_query, inputs_distributed):
     """
@@ -89,6 +90,9 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
     colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
     colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
+    # colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
+    # colors[values_sampled == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # blue
+    # colors[both_occ == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # purple
     
     mask = np.any(colors != [0, 0, 0], axis=1)
     # print(mask.shape, values_gt.shape, values_sampled.shape, colors.shape)
@@ -109,3 +113,38 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     
     geos += [pcd, base_axis]
     o3d.visualization.draw_geometries(geos)
+    
+def visualize_batch(batch, device):
+    p_in, p_query = st_utils.get_inputs_from_scene(batch, device)
+    p_query_full = p_query.detach().cpu().numpy().reshape(-1, 4)
+    points_full = None
+    for i in range(p_in.shape[0]):
+        geos = []
+        pcd = o3d.geometry.PointCloud()
+        pcd_full = o3d.geometry.PointCloud()
+        # p_query_full = p_query[i].detach().cpu().numpy().reshape(-1, 4)
+
+        # print(f'sum: {p_in[i, ..., -1].sum()}')
+        
+        points = p_in[i].detach().cpu().numpy().reshape(-1, 4)
+                
+        # pcd.points = o3d.utility.Vector3dVector(points[..., :3][points[..., -1] == 1])
+        pcd.points = o3d.utility.Vector3dVector(points[..., :3])
+        pcd.paint_uniform_color(np.random.rand(3))
+        geos.append(pcd)
+
+        if points_full is None:
+            points_full = points
+        else:
+            # pcd_full.points = o3d.utility.Vector3dVector(points_full[..., :3])
+            pcd_full.points = o3d.utility.Vector3dVector(points_full[..., :3][points_full[..., -1] == 1])
+            points_full = np.concatenate([points_full, points])
+            pcd_full.paint_uniform_color([0.5, 0.5, 0.5])
+            geos.append(pcd_full)
+            
+    base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+    pcd_query = o3d.geometry.PointCloud()
+    pcd_query.points = o3d.utility.Vector3dVector(p_query_full[p_query_full[:, -1] == 1, :3])
+    pcd_query.paint_uniform_color([1.0, 0.5, 0.5])
+    geos.append(pcd_query)
+    o3d.visualization.draw_geometries(geos + [base_axis])

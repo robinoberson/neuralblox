@@ -451,7 +451,8 @@ class SequentialTrainer(BaseTrainer):
                 
                 # Update the indexes_keep tensor with the new line for the current sample
                 indexes_keep[i] = new_line
-            if indexes_line.sum() < int(n_max*0.0025):
+            # if indexes_line.sum() < int(n_max*0.0025):
+            if indexes_line.sum() < int(n_max*0.02):
                 # print(f'too little points for sample {i} : {indexes_line.sum()}, threshold = {int(n_max*0.0025)}')
                 indexes_keep[i] = torch.zeros_like(indexes_keep[i])
         # Select n_max points
@@ -460,7 +461,7 @@ class SequentialTrainer(BaseTrainer):
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
-        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 2
+        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 25 #TODO move this to config
 
         if not isquery:
             inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
@@ -476,7 +477,7 @@ class SequentialTrainer(BaseTrainer):
                 occupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 1]
                 unoccupied_inputs = distributed_inputs_short[i, distributed_inputs_short[i, :, 3] == 0]
                 n_sample = unoccupied_inputs.shape[0]
-                thresh = 0.03
+                thresh = 0.03 #distance to occupied points
                 
                 new_samples = st_utils.maintain_n_sample_points(centers_remove, crop_size, random_points, occupied_inputs, n_sample, thresh).clone()
                 distributed_inputs_short[i] = torch.cat((occupied_inputs, new_samples), dim=0)
