@@ -36,7 +36,7 @@ model:
   c_dim: 32
 training:
   out_dir: null
-  batch_size: 1
+  batch_size: 12
   model_selection_metric: iou
   model_selection_mode: maximize
   checkpoint_interval_minutes: 15
@@ -45,6 +45,7 @@ training:
 
   n_max_points: 2048 #max number of inputs per voxel (approx 400 occupied points per voxel)
   n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
+  n_fusions: 20
   occ_per_query: 0.5
   batch_group_size: 4
   n_workers: 8

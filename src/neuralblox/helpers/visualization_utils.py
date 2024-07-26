@@ -114,9 +114,10 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     geos += [pcd, base_axis]
     o3d.visualization.draw_geometries(geos)
     
-def visualize_batch(batch, device):
-    p_in, p_query = st_utils.get_inputs_from_scene(batch, device)
-    p_query_full = p_query.detach().cpu().numpy().reshape(-1, 4)
+def visualize_batch(batch, idx, device):
+    p_in_full, p_query_full = st_utils.get_inputs_from_scene(batch, device)
+    p_query_full = p_query_full[idx].detach().cpu().numpy().reshape(-1, 4)
+    p_in = p_in_full[idx]
     points_full = None
     for i in range(p_in.shape[0]):
         geos = []

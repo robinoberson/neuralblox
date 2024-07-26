@@ -79,11 +79,11 @@ def get_empty_inputs(centers, crop_size, n_max_points = 2048):
 
 def get_inputs_from_scene(batch, device):
         
-    p_in_3D = batch.get('inputs').to(device).squeeze(0)
-    p_in_occ = batch.get('inputs.occ').to(device).squeeze(0).unsqueeze(-1)
+    p_in_3D = batch.get('inputs').to(device)
+    p_in_occ = batch.get('inputs.occ').to(device).unsqueeze(-1)
             
-    p_query_3D = batch.get('points').to(device).squeeze(0)
-    p_query_occ = batch.get('points.occ').to(device).squeeze(0).unsqueeze(-1)
+    p_query_3D = batch.get('points').to(device)
+    p_query_occ = batch.get('points.occ').to(device).unsqueeze(-1)
     
     # print(f'p_in_3D: {p_in_3D.shape}, p_in_occ: {p_in_occ.shape}, p_query_3D: {p_query_3D.shape}, p_query_occ: {p_query_occ.shape}')
     p_in = torch.cat((p_in_3D, p_in_occ), dim=-1)

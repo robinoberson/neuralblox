@@ -100,12 +100,14 @@ class Generator3DSequential(object):
             
         return mesh_list, inputs_frame_list
     
-    def generate_mesh_at_index(self, batch, index, generate_mesh = False, generate_logits = False, memory_keep = False):
+    def generate_mesh_at_index(self, batch, index, batch_idx, generate_mesh = False, generate_logits = False, memory_keep = False):
         self.trainer.model.eval()
         self.trainer.model_merge.eval()
         
-        p_in, p_query = st_utils.get_inputs_from_scene(batch, self.device)
-
+        p_in_full, p_query_full = st_utils.get_inputs_from_scene(batch, self.device)
+        p_in = p_in_full[batch_idx]
+        p_query = p_query_full[batch_idx]
+        
         n_sequence = p_in.shape[0]
         mesh_list = []
         inputs_frame_list = []

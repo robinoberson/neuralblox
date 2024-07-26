@@ -1,7 +1,7 @@
 from torch import nn
 import os
 from src.encoder import encoder_dict
-from src.neuralblox import models, training, training_fusion, training_fusion_old, training_sequential
+from src.neuralblox import models, training, training_fusion, training_fusion_old, training_sequential_shuffled
 from src import data, config, layers
 from src.common import decide_total_volume_range, update_reso
 from src.checkpoints import CheckpointIO
@@ -39,49 +39,11 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
 
     # update the feature volume/plane resolution
     if cfg['data']['input_type'] == 'pointcloud_crop':
-        fea_type = cfg['model']['encoder_kwargs']['plane_type']
-        if dataset is not None:
-            if (dataset.split == 'train') or (cfg['generation']['sliding_window']):
-                recep_field = 2**(cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] + 2)
-                reso = cfg['data']['query_vol_size'] + recep_field - 1
-                if 'grid' in fea_type:
-                    encoder_kwargs['grid_resolution'] = update_reso(reso, dataset.depth)
-                    encoder_kwargs['grid_resolution'] = cfg['model']['encoder_kwargs']['grid_resolution']
-                if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
-                    encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.depth)
-            # if dataset.split == 'val': #TODO run validation in room level during training
-            else:
-                if 'grid' in fea_type:
-                    encoder_kwargs['grid_resolution'] = dataset.total_reso
-                if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
-                    encoder_kwargs['plane_resolution'] = dataset.total_reso
-        else:
-            encoder_kwargs['grid_resolution'] = cfg['model']['encoder_kwargs']['grid_resolution']
+        raise NotImplementedError
 
     if cfg['data']['input_type'] == 'pointcloud_merge' or cfg['data']['input_type'] == 'pointcloud_sequential':
-        fea_type = cfg['model']['encoder_kwargs']['plane_type']
-        # calculate the volume boundary
-        query_vol_metric = cfg['data']['padding'] + 1
-        unit_size = cfg['data']['unit_size']
-        recep_field = 2 ** (cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels'] + 2)
-        if 'unet' in cfg['model']['encoder_kwargs']:
-            depth = cfg['model']['encoder_kwargs']['unet_kwargs']['depth']
-        elif 'unet3d' in cfg['model']['encoder_kwargs']:
-            depth = cfg['model']['encoder_kwargs']['unet3d_kwargs']['num_levels']
-
-        vol_info = decide_total_volume_range(query_vol_metric, recep_field, unit_size, depth)
-
-        grid_reso = cfg['model']['encoder_kwargs']['grid_resolution']
-        input_vol_size = cfg['data']['input_vol']
-        query_vol_size = cfg['data']['query_vol']
-
-        if 'grid' in fea_type:
-            if cfg['data']['input_type'] == 'pointcloud_sequential':
-                encoder_kwargs['grid_resolution'] = grid_reso
-            else:
-                encoder_kwargs['grid_resolution'] = grid_reso
-                encoder_kwargs['input_crop_size'] = input_vol_size
-                encoder_kwargs['query_crop_size'] = query_vol_size
+        
+        raise NotImplementedError
 
     decoder = models.decoder_dict[decoder](
         dim=dim, c_dim=c_dim, padding=padding,
@@ -102,10 +64,8 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
         decoder, encoder, device=device
     )
 
-    if cfg['data']['input_type'] == 'pointcloud_sequential':
-        return model
-    else:
-        return model
+    
+    return model
 
 def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs):
     ''' Returns the trainer object.
@@ -132,7 +92,7 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
     return_flat = cfg['training']['return_flat']
     sigma = cfg['training']['sigma']
 
-    trainer = training_sequential.SequentialTrainer(
+    trainer = training_sequential_shuffled.SequentialTrainerShuffled(
         model, model_merge, optimizer, 
         cfg = cfg,
         device=device, 

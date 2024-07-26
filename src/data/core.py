@@ -153,14 +153,16 @@ class Shapes3dDataset(data.Dataset):
     def __len__(self):
         ''' Returns the length of the dataset.
         '''
-        return len(self.batch_groups)
+        return len(self.models)
 
-    def load_data_item(self, category, model):
+    def __getitem__(self, idx):
         ''' Returns an item of the dataset.
 
         Args:
             idx (int): ID of data point
         '''
+        category = self.models[idx]['category']
+        model = self.models[idx]['model']
         c_idx = self.metadata[category]['idx']
 
         model_path = os.path.join(self.dataset_folder, category, model)
@@ -196,18 +198,7 @@ class Shapes3dDataset(data.Dataset):
         if self.cfg['data']['return_category']: data['category'] = category
 
         return data
-    def __getitem__(self, idx):
-        ''' Returns an item or a group of items from the dataset.
-
-        Args:
-            idx (int): ID of data point or batch group
-        '''
-        # Return a group of batches
-        group = self.batch_groups[idx]
-        return [self.load_data_item(item['category'], item['model']) for item in group]
        
-
-    
     def get_model_dict(self, idx):
         return self.models[idx]
 

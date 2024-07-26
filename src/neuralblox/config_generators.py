@@ -1,8 +1,8 @@
 from torch import nn
 import os
 from src.encoder import encoder_dict
-from src.neuralblox import models, training, training_fusion, training_fusion_old, training_sequential
-from src import data, config, layers
+from src.neuralblox import models, training, training_fusion, training_fusion_old, training_sequential, config, config_training
+from src import data, layers
 from src.common import decide_total_volume_range, update_reso
 from src.checkpoints import CheckpointIO
 import torch.optim as optim
@@ -160,7 +160,7 @@ def get_generator_simultaneous(cfg, device):
                     'input_crop_size': input_vol_size,
                     'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
                     'reso': grid_reso}          
-    model = config.get_model(cfg, device=device)
+    model = config_training.get_model(cfg, device=device)
     model_merging = layers.Conv3D_one_input().to(device)
 
     checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
@@ -175,7 +175,7 @@ def get_generator_simultaneous(cfg, device):
         return None
     
     optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
-    trainer = config.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
+    trainer = config_training.get_trainer_sequence(model, model_merging, optimizer, cfg, device=device)
     
     generator = generation_fusion_neighbors.Generator3DNeighbors(
             model,
@@ -209,7 +209,7 @@ def get_generator_sequential(cfg, device):
                     'input_crop_size': input_vol_size,
                     'fea_type': cfg['model']['encoder_kwargs']['plane_type'],
                     'reso': grid_reso}          
-    model = config.get_model(cfg, device=device)
+    model = config_training.get_model(cfg, device=device)
     # num_blocks = 5
     # num_channels = [256, 256, 192, 192, 192, 128, 128, 128]
     # model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
@@ -228,7 +228,7 @@ def get_generator_sequential(cfg, device):
         return None
     
     optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
-    trainer = config.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
+    trainer = config_training.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
     
     generator = generation_fusion_sequential.Generator3DSequential(
             model,
