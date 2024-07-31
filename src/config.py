@@ -2,7 +2,7 @@ import yaml
 from torchvision import transforms
 from src import data
 from src import neuralblox
-
+import os
 
 method_dict = {
     'neuralblox': neuralblox
@@ -67,7 +67,7 @@ def get_model(cfg, device=None, dataset=None):
         dataset (dataset): dataset
     '''
     method = cfg['method']
-    model = method_dict[method].config.get_model(
+    model = method_dict[method].config_training.get_model(
         cfg, device=device, dataset=dataset)
     return model
 
@@ -83,7 +83,7 @@ def get_trainer(model, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer(
+    trainer = method_dict[method].config_training.get_trainer(
         model, optimizer, cfg, device)
     return trainer
 
@@ -97,7 +97,7 @@ def get_trainer_sequence(model, model_merge, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer_sequence(
+    trainer = method_dict[method].config_training.get_trainer_sequence(
         model, model_merge, optimizer, cfg, device)
     return trainer
 
@@ -111,7 +111,7 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer_sequential(
+    trainer = method_dict[method].config_training.get_trainer_sequential(
         model, model_merge, optimizer, cfg, device)
     return trainer
 
@@ -125,7 +125,7 @@ def get_trainer_overfit(model, model_merge, optimizer, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer_overfit(
+    trainer = method_dict[method].config_training.get_trainer_overfit(
         model, model_merge, optimizer, cfg, device)
     return trainer
 
@@ -140,7 +140,7 @@ def get_generator(model, cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    generator = method_dict[method].config.get_generator(model, cfg, device)
+    generator = method_dict[method].config_training.get_generator(model, cfg, device)
     return generator
 
 def get_generator_fusion(model, model_merge, trainer, cfg, sample_points = None, device = None):
@@ -154,7 +154,7 @@ def get_generator_fusion(model, model_merge, trainer, cfg, sample_points = None,
         device (device): pytorch device
     '''
     method = cfg['method']
-    generator = method_dict[method].config.get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points=sample_points)
+    generator = method_dict[method].config_training.get_generator_fusion(model, model_merge, trainer, cfg, device, sample_points=sample_points)
     return generator
 
 def get_generator_simultaneous(cfg, device):
@@ -168,7 +168,7 @@ def get_generator_simultaneous(cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    generator = method_dict[method].config.get_generator_simultaneous(cfg, device)
+    generator = method_dict[method].config_training.get_generator_simultaneous(cfg, device)
     return generator
 def get_generator_sequential(cfg, device):
     ''' Returns a generator instance.
@@ -181,7 +181,7 @@ def get_generator_sequential(cfg, device):
         device (device): pytorch device
     '''
     method = cfg['method']
-    generator = method_dict[method].config.get_generator_sequential(cfg, device)
+    generator = method_dict[method].config_training.get_generator_sequential(cfg, device)
     return generator
 # Datasets
 def get_dataset(mode, cfg, return_idx=False):
@@ -196,26 +196,31 @@ def get_dataset(mode, cfg, return_idx=False):
     dataset_type = cfg['data']['dataset']
     dataset_folder = cfg['data']['path']
     
-    if mode == 'train_gt':
-        mode = 'train'
-        dataset_folder = cfg['data']['path_gt']
-
-    # Get split
-    splits = {
-        'train': cfg['data']['train_split'],
-        'val': cfg['data']['val_split'],
-        'test': cfg['data']['test_split'],
-    }
-
-    split = splits[mode]
+    if mode == 'val':
+        categories = cfg['data']['val_classes']
+    elif mode == 'test':
+        categories = cfg['data']['test_classes']
+    else:
+        categories = cfg['data']['train_classes']
+        
+    if categories is None:
+        categories = sorted(os.listdir(dataset_folder))
+        categories = [c for c in categories
+                        if os.path.isdir(os.path.join(dataset_folder, c))]
+        
+        if len(categories) > 1:
+            if mode == 'train':
+                categories = categories[:int(0.8*len(categories))]
+            elif mode == 'val':
+                categories = categories[int(0.8*len(categories)):]
+        
+    split = None
     
-    categories = cfg['data']['classes']
-
     # Create dataset
     if dataset_type == 'Shapes3D':
         # Dataset fields
         # Method specific fields (usually correspond to output)
-        fields = method_dict[method].config.get_data_fields(mode, cfg)
+        fields = method_dict[method].config_training.get_data_fields(mode, cfg)
         # Input fields
         inputs_field = get_inputs_field(mode, cfg)
         if inputs_field is not None:
@@ -228,7 +233,8 @@ def get_dataset(mode, cfg, return_idx=False):
             dataset_folder, fields,
             split=split,
             categories=categories,
-            cfg = cfg
+            cfg = cfg,
+            transform=method_dict[method].config_training.get_transform(mode, cfg)
         )
     elif dataset_type == 'Scenes3D':
         # Dataset fields

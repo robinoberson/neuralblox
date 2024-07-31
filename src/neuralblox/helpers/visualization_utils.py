@@ -149,3 +149,100 @@ def visualize_batch(batch, idx, device):
     pcd_query.paint_uniform_color([1.0, 0.5, 0.5])
     geos.append(pcd_query)
     o3d.visualization.draw_geometries(geos + [base_axis])
+    
+def visualize_debug(self):
+    #### visualize
+    grid_inputs_frame_current = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_current2 = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_current = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_existing = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_existing2 = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_existing[occupied_existing_mask_padded] = inputs_existing.to(torch.device('cpu')).detach()
+    
+    grid_inputs_frame_current2[mask_complete_existing.to(torch.device('cpu'))] = grid_inputs_frame_existing[mask_complete_existing.to(torch.device('cpu'))]
+    grid_inputs_frame_existing2[mask_complete_current.to(torch.device('cpu'))] = grid_inputs_frame_current[mask_complete_current.to(torch.device('cpu'))]
+    
+    print(grid_inputs_frame_current2[..., 3].sum())
+    print(grid_inputs_frame_existing2[..., 3].sum())
+    
+    import open3d as o3d
+    pcd_existing = o3d.geometry.PointCloud()
+    pcd_current = o3d.geometry.PointCloud()
+    
+    pcd_existing2 = o3d.geometry.PointCloud()
+    pcd_current2 = o3d.geometry.PointCloud()
+    
+    points_existing = grid_inputs_frame_existing.reshape(-1, 4).detach().cpu().numpy()
+    points_current = grid_inputs_frame_current.reshape(-1, 4).detach().cpu().numpy()
+    
+    points_existing2 = grid_inputs_frame_existing2.reshape(-1, 4).detach().cpu().numpy()
+    points_current2 = grid_inputs_frame_current2.reshape(-1, 4).detach().cpu().numpy()
+    
+    pcd_existing.points = o3d.utility.Vector3dVector(points_existing[points_existing[:, 3] == 1, :3])
+    pcd_current.points = o3d.utility.Vector3dVector(points_current[points_current[:, 3] == 1, :3])
+    
+    pcd_existing2.points = o3d.utility.Vector3dVector(points_existing2[points_existing2[:, 3] == 1, :3])
+    pcd_current2.points = o3d.utility.Vector3dVector(points_current2[points_current2[:, 3] == 1, :3])
+            
+    pcd_existing.paint_uniform_color([0, 0, 1]) #blue
+    pcd_current.paint_uniform_color([1, 0, 0]) #red
+    
+    pcd_existing2.paint_uniform_color([0, 1, 1]) #yellow
+    pcd_current2.paint_uniform_color([0, 1, 0]) #magenta
+    
+    o3d.visualization.draw_geometries([pcd_existing, pcd_current, pcd_existing2, pcd_current2])       
+    
+    ## end visualize 
+    
+def visu_debug_2(self):
+    grid_inputs_frame_current = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_current2 = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_current[occupied_current_mask_padded] = occupied_inputs_interior_current.to(torch.device('cpu')).detach()
+    grid_inputs_frame_existing = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_existing2 = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(torch.device('cpu'))
+    grid_inputs_frame_existing[occupied_existing_mask_padded] = inputs_existing.to(torch.device('cpu')).detach()
+    
+    
+    grid_inputs_frame_existing2[mask_complete_existing.to(torch.device('cpu'))] = grid_inputs_frame_current[mask_complete_existing.to(torch.device('cpu'))]
+    grid_inputs_frame_current2[mask_complete_current.to(torch.device('cpu'))] = grid_inputs_frame_existing[mask_complete_current.to(torch.device('cpu'))]
+
+    grid_inputs_frame_current_temp = grid_inputs_frame_current.to(torch.device(self.device))[centers_current_shifted[..., 0], centers_current_shifted[..., 1], centers_current_shifted[..., 2]]
+    grid_inputs_frame_existing_temp = grid_inputs_frame_existing.to(torch.device(self.device))[centers_current_shifted[..., 0], centers_current_shifted[..., 1], centers_current_shifted[..., 2]]
+
+    import open3d as o3d
+    pcd_existing = o3d.geometry.PointCloud()
+    pcd_current = o3d.geometry.PointCloud()
+
+    points_existing = grid_inputs_frame_existing_temp.reshape(-1, 4).detach().cpu().numpy()
+    points_current = grid_inputs_frame_current_temp.reshape(-1, 4).detach().cpu().numpy()
+    
+    pcd_existing.points = o3d.utility.Vector3dVector(points_existing[points_existing[:, 3] == 1, :3])
+    pcd_current.points = o3d.utility.Vector3dVector(points_current[points_current[:, 3] == 1, :3])
+    
+    pcd_current.paint_uniform_color([1, 0, 0]) #red
+    pcd_existing.paint_uniform_color([0, 0, 1]) #blue
+    
+    pcd_existing_2 = o3d.geometry.PointCloud()
+    pcd_current_2 = o3d.geometry.PointCloud()
+        
+    points_existing_2 = grid_inputs_frame_existing2.reshape(-1, 4).detach().cpu().numpy()
+    points_current_2 = grid_inputs_frame_current2.reshape(-1, 4).detach().cpu().numpy()
+    
+    pcd_existing_2.points = o3d.utility.Vector3dVector(points_existing_2[points_existing_2[:, 3] == 1, :3])
+    pcd_current_2.points = o3d.utility.Vector3dVector(points_current_2[points_current_2[:, 3] == 1, :3])
+    
+    pcd_current_2.paint_uniform_color([1, 1, 0]) #yellow
+    pcd_existing_2.paint_uniform_color([0, 1, 0]) #green
+
+    pcd_existing_i = o3d.geometry.PointCloud()
+    pcd_current_i = o3d.geometry.PointCloud()
+    
+    for i in range(len(grid_inputs_frame_existing_temp)):
+        points_existing_i = grid_inputs_frame_existing_temp[i].reshape(-1, 4).detach().cpu().numpy()
+        points_current_i = grid_inputs_frame_current_temp[i].reshape(-1, 4).detach().cpu().numpy()
+        pcd_existing_i.points = o3d.utility.Vector3dVector(points_existing_i[points_existing_i[:, 3] == 1, :3])
+        pcd_current_i.points = o3d.utility.Vector3dVector(points_current_i[points_current_i[:, 3] == 1, :3])
+        pcd_existing_i.paint_uniform_color([1, 0, 1]) #cyan
+        pcd_current_i.paint_uniform_color([0, 1, 1]) #purple
+        
+    o3d.visualization.draw_geometries([pcd_existing, pcd_current, pcd_existing_2, pcd_current_2, pcd_existing_i, pcd_current_i])       

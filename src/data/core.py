@@ -80,12 +80,7 @@ class Shapes3dDataset(data.Dataset):
         
         self.initialize_data(categories, split)
 
-    def initialize_data(self, categories=None, split=None):
-        # If categories is None, use all subfolders
-        if categories is None:
-            categories = os.listdir(self.dataset_folder)
-            categories = [c for c in categories
-                          if os.path.isdir(os.path.join(self.dataset_folder, c))]
+    def initialize_data(self, categories, split=None):
 
         # Read metadata file
         metadata_file = os.path.join(self.dataset_folder, 'metadata.yaml')
@@ -130,26 +125,36 @@ class Shapes3dDataset(data.Dataset):
         self.batch_groups = self.create_batch_groups()
 
     def create_batch_groups(self):
-        ''' Create batch groups from the dataset.
+        ''' Create batch groups from the dataset, ensuring no duplicate categories in each group.
 
         Returns:
             list: List of batch groups
         '''
         batch_groups = []
         current_group = []
-        
-        for model_info in self.models:
-            current_group.append(model_info)
-            if len(current_group) == self.cfg['training']['batch_group_size']:
-                batch_groups.append(current_group)
-                current_group = []
-        
-        # Add any remaining batches
-        if current_group:
-            batch_groups.append(current_group)
-        
+        current_categories = set()
+        group_size = self.cfg['training']['batch_group_size']
+        #randomly shuffle models
+        models_grouping = random.sample(self.models, len(self.models))
+
+        while len(models_grouping) > 0:
+            for idx_model, model_info in enumerate(models_grouping): #models_grouping[0]
+                category = model_info['category']
+                if category not in current_categories:
+                    
+                    current_categories.add(category)
+                    current_group.append(model_info)
+                    models_grouping.pop(idx_model)
+                
+                    # Check if adding this model would exceed the batch group size or duplicate a category
+                    if len(current_group) == group_size or len(models_grouping) == 0:
+                        batch_groups.append(current_group)
+                        current_group = []
+                        current_categories = set()
+                    
+                    break
         return batch_groups
-            
+                
     def __len__(self):
         ''' Returns the length of the dataset.
         '''
@@ -193,10 +198,7 @@ class Shapes3dDataset(data.Dataset):
                 data[field_name] = field_data
 
         if self.transform is not None:
-            data = self.transform(data)
-        
-        if self.cfg['data']['return_category']: data['category'] = category
-
+            self.transform(data)
         return data
        
     def get_model_dict(self, idx):

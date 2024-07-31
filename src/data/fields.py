@@ -203,7 +203,7 @@ class PatchPointCloudField(Field):
         complete = (self.file_name in files)
         return complete
 
-class PointCloudField(Field):
+class PointCloudField(Field): #One currently used
     ''' Point cloud field.
 
     It provides the field used for point cloud data. These are the points

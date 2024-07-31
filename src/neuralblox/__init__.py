@@ -1,7 +1,7 @@
 from src.neuralblox import (
-    config, training, models
+    config_training, training, models
 )
 
 __all__ = [
-    config, training, models
+    config_training, training, models
 ]

@@ -1,7 +1,8 @@
 method: neuralblox
 data:
   input_type: pointcloud
-  classes: null
+  train_classes: null
+  val_classes: null
   path: null
   pointcloud_n: 4096 #number of inputs when loading for each frame
   pointcloud_noise: 0.005
@@ -14,6 +15,10 @@ data:
   query_vol_size: 25
   input_vol: 1.0
   query_vol: 1.0
+  transform:
+    angle_x: 0
+    angle_y: 0
+    angle_z: 0
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
@@ -36,7 +41,7 @@ model:
   c_dim: 32
 training:
   out_dir: null
-  batch_size: 12
+  batch_size: 10
   model_selection_metric: iou
   model_selection_mode: maximize
   checkpoint_interval_minutes: 15
@@ -47,7 +52,7 @@ training:
   n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
   n_fusions: 20
   occ_per_query: 0.5
-  batch_group_size: 4
+  batch_group_size: 1
   n_workers: 8
   n_workers_val: 4
   reset_training: true
@@ -55,7 +60,7 @@ training:
   log_comet: false
   lr: 0.001
   lr_reduce_factor: 0.9
-  lr_patience: 200
+  lr_patience: 50
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt

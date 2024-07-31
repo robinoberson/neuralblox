@@ -5,6 +5,8 @@ from src.neuralblox import models, training, training_fusion, training_fusion_ol
 from src import data, config, layers
 from src.common import update_reso
 from src.checkpoints import CheckpointIO
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 def get_model(cfg, device=None, dataset=None, **kwargs):
     ''' Return the Occupancy Network model.
@@ -220,3 +222,19 @@ def get_data_fields(mode, cfg):
             )
 
     return fields
+
+def get_transform(mode, cfg):
+    angle_x = cfg['data']['transform']['angle_x']
+    angle_y = cfg['data']['transform']['angle_y']
+    angle_z = cfg['data']['transform']['angle_z']
+    
+    def transform(data):
+        angles_deg = np.random.uniform(low=[-angle_x, -angle_y, -angle_z], high=[angle_x, angle_y, angle_z])
+        rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
+
+        for key in data:
+            if key == 'points' or key == 'inputs':
+                shape = data[key].shape
+                data[key] = rand_trans.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32)
+
+    return transform
