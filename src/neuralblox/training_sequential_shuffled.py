@@ -89,7 +89,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     def train_sequence(self, full_batch):
         with torch.no_grad():
             inputs_distributed_neighboured, query_distributed, centers_neighboured = self.precompute_sequence(full_batch)
-            loss = self.train_batch(inputs_distributed_neighboured, query_distributed, centers_neighboured)
+        loss = self.train_batch(inputs_distributed_neighboured, query_distributed, centers_neighboured)
         return loss
     
     def validate_sequence(self, full_batch):
@@ -165,11 +165,11 @@ class SequentialTrainerShuffled(BaseTrainer):
 
             loss_batch = self.train_batch_sequential(inputs_distributed_neighboured_batch, query_distributed_batch, centers_neighboured_batch, stacked_latents_merging_batch)
 
-            # loss_batch.backward()
-            # st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
-            # st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
-            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
-            # torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
+            loss_batch.backward()
+            st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
+            st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+            torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
             self.optimizer.step()
             
             inputs_distributed_neighboured_batch.to(torch.device('cpu')).detach()
