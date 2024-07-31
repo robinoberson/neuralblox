@@ -1,6 +1,6 @@
 
 from src.data.core import (
-    Shapes3dDataset, collate_remove_none, worker_init_fn, CategoryBatchSampler, OptiFusionDataset, CombinedLoss
+    Shapes3dDataset, collate_remove_none, worker_init_fn, OptiFusionDataset, CombinedLoss
 )
 from src.data.fields import (
     IndexField, PointsField,
@@ -13,7 +13,6 @@ from src.data.transforms import (
 __all__ = [
     # Core
     Shapes3dDataset,
-    CategoryBatchSampler,
     OptiFusionDataset,
     collate_remove_none,
     worker_init_fn,

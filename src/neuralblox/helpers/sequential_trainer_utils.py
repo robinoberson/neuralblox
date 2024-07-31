@@ -101,10 +101,11 @@ def get_grid_from_centers(centers, crop_size):
 def compute_vol_bound(inputs, query_crop_size, input_crop_size, padding = False):
     # inputs must have shape (n_points, 3)
     assert inputs.shape[1] == 3 and inputs.shape[0] > 0 and len(inputs.shape) == 2
+    device = inputs.device
 
     vol_bound = {}
 
-    lb_p = torch.min(inputs, dim=0).values - torch.tensor([0.01, 0.01, 0.01], device=inputs.device)
+    lb_p = torch.min(inputs, dim=0).values - torch.tensor([0.01, 0.01, 0.01], device=device)
     ub_p = torch.max(inputs, dim=0).values
     
     # print(lb_p, ub_p)
@@ -117,9 +118,9 @@ def compute_vol_bound(inputs, query_crop_size, input_crop_size, padding = False)
         ub += query_crop_size
     
     lb_query = torch.stack(torch.meshgrid(
-        torch.arange(lb[0], ub[0] - 0.01, query_crop_size, device='cuda:0'),
-        torch.arange(lb[1], ub[1] - 0.01, query_crop_size, device='cuda:0'),
-        torch.arange(lb[2], ub[2] - 0.01, query_crop_size, device='cuda:0'),
+        torch.arange(lb[0], ub[0] - 0.01, query_crop_size, device=device),
+        torch.arange(lb[1], ub[1] - 0.01, query_crop_size, device=device),
+        torch.arange(lb[2], ub[2] - 0.01, query_crop_size, device=device),
     ), dim=-1).reshape(-1, 3)
 
     ub_query = lb_query + query_crop_size

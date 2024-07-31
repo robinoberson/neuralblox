@@ -53,6 +53,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
+# device = torch.device("cpu")
 # Set t0
 t0 = time.time()
 
@@ -86,14 +87,14 @@ val_dataset = config.get_dataset('val', cfg)
 torch.manual_seed(42)
 
 train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=cfg['training']['batch_size'], 
+    train_dataset, batch_size=1, 
     num_workers=cfg['training']['n_workers'], 
     shuffle=True,
     collate_fn=data_src.collate_remove_none,
     worker_init_fn=data_src.worker_init_fn)
 
 val_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=cfg['training']['batch_size'], 
+    val_dataset, batch_size=1, 
     num_workers=cfg['training']['n_workers'], 
     shuffle=False,
     collate_fn=data_src.collate_remove_none,
@@ -145,6 +146,10 @@ while True:
     print(epoch_it)
     
     for batch in train_loader:
+        #squeeze batch
+        for key in batch:
+            batch[key] = batch[key].squeeze(0)
+            
         it += 1
     
         loss = trainer.train_sequence(batch)

@@ -227,14 +227,21 @@ def get_transform(mode, cfg):
     angle_x = cfg['data']['transform']['angle_x']
     angle_y = cfg['data']['transform']['angle_y']
     angle_z = cfg['data']['transform']['angle_z']
-    
-    def transform(data):
-        angles_deg = np.random.uniform(low=[-angle_x, -angle_y, -angle_z], high=[angle_x, angle_y, angle_z])
-        rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
-
-        for key in data:
-            if key == 'points' or key == 'inputs':
-                shape = data[key].shape
-                data[key] = rand_trans.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32)
+    def transform(data_list):
+        for data in data_list:
+            # Generate random rotation angles
+            angles_deg = np.random.uniform(low=[-angle_x, -angle_y, -angle_z], high=[angle_x, angle_y, angle_z])
+            print(f'angles_deg: {angles_deg}')
+            rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
+            
+            # Apply transformation to relevant keys
+            for key in data:
+                if key == 'points' or key == 'inputs':
+                    shape = data[key].shape
+                    # Ensure data[key] is a numpy array
+                    if isinstance(data[key], np.ndarray):
+                        data[key] = rand_trans.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32)
+                    else:
+                        raise TypeError(f"Expected numpy array for key '{key}', but got {type(data[key])}")
 
     return transform

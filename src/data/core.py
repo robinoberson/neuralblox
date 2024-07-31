@@ -34,24 +34,24 @@ class Field(object):
         '''
         raise NotImplementedError
 
-class CategoryBatchSampler(data.BatchSampler):
-    def __init__(self, dataset, batch_size, drop_last=True):
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.drop_last = drop_last
-        super().__init__(dataset, batch_size, drop_last)
+# class CategoryBatchSampler(data.BatchSampler):
+#     def __init__(self, dataset, batch_size, drop_last=True):
+#         self.dataset = dataset
+#         self.batch_size = batch_size
+#         self.drop_last = drop_last
+#         super().__init__(dataset, batch_size, drop_last)
     
-    def __iter__(self):
-        categories = list(self.dataset.metadata.keys())
-        random.shuffle(categories)
-        for category in categories:
-            batch = []
-            category_indices = [idx for idx, model in enumerate(self.dataset.models) if model['category'] == category]
-            random.shuffle(category_indices)
-            batch.extend(category_indices)
-            while len(batch) >= self.batch_size:                
-                yield batch[:self.batch_size]
-                batch = batch[self.batch_size:]
+#     def __iter__(self):
+#         categories = list(self.dataset.metadata.keys())
+#         random.shuffle(categories)
+#         for category in categories:
+#             batch = []
+#             category_indices = [idx for idx, model in enumerate(self.dataset.models) if model['category'] == category]
+#             random.shuffle(category_indices)
+#             batch.extend(category_indices)
+#             while len(batch) >= self.batch_size:                
+#                 yield batch[:self.batch_size]
+#                 batch = batch[self.batch_size:]
         
             
 class Shapes3dDataset(data.Dataset):
@@ -165,7 +165,7 @@ class Shapes3dDataset(data.Dataset):
     def __len__(self):
         ''' Returns the length of the dataset.
         '''
-        return len(self.models)
+        return len(self.batch_groups)
 
     def __getitem__(self, idx):
         ''' Returns an item of the dataset.
@@ -173,40 +173,63 @@ class Shapes3dDataset(data.Dataset):
         Args:
             idx (int): ID of data point
         '''
-        category = self.models[idx]['category']
-        model = self.models[idx]['model']
-        c_idx = self.metadata[category]['idx']
-
-        model_path = os.path.join(self.dataset_folder, category, model)
-        data = {}
-
-        info = c_idx
+        if idx >= len(self.batch_groups) or idx < 0:
+            raise IndexError('Index out of range.')
         
-        for field_name, field in self.fields.items():
-            try:
-                field_data = field.load(model_path, info)
-            except Exception as e:
-                if self.no_except:
-                    logger.warn(
-                        'Error occured when loading field %s of model %s, skipping. Error: %s'
-                        % (field_name, model, str(e))
-                    )
-                    return None
-                else:
-                    raise
+        batch_group = self.batch_groups[idx]
+        data_batch = []
+        
+        for model_info in batch_group:
 
-            if isinstance(field_data, dict):
-                for k, v in field_data.items():
-                    if k is None:
-                        data[field_name] = v
+            category = model_info['category']
+            model = model_info['model']
+            c_idx = self.metadata[category]['idx']
+        
+
+            model_path = os.path.join(self.dataset_folder, category, model)
+            data = {}
+
+            info = c_idx
+            
+            for field_name, field in self.fields.items():
+                try:
+                    field_data = field.load(model_path, info)
+                except Exception as e:
+                    if self.no_except:
+                        logger.warn(
+                            'Error occured when loading field %s of model %s, skipping. Error: %s'
+                            % (field_name, model, str(e))
+                        )
+                        return None
                     else:
-                        data['%s.%s' % (field_name, k)] = v
-            else:
-                data[field_name] = field_data
+                        raise
 
+                if isinstance(field_data, dict):
+                    for k, v in field_data.items():
+                        if k is None:
+                            data[field_name] = v
+                        else:
+                            data['%s.%s' % (field_name, k)] = v
+                else:
+                    data[field_name] = field_data
+
+            data_batch.append(data)
+            
         if self.transform is not None:
-            self.transform(data)
-        return data
+            self.transform(data_batch)
+            
+        # Initialize a dictionary to store lists of tensors
+        array_dict = {key: [] for key in data_batch[0].keys()}
+
+        # Collect tensors for each key
+        for item in data_batch:
+            for key in item.keys():
+                array_dict[key].append(item[key])
+
+        # Stack tensors for each key
+        data_batch = {key: np.stack(array_dict[key], axis=0) for key in array_dict}
+        
+        return data_batch
        
     def get_model_dict(self, idx):
         return self.models[idx]

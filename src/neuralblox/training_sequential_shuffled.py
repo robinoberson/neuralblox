@@ -66,7 +66,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.experiment = None
         self.log_experiment = False
         
-        self.debug = True
+        self.debug = False
                 
         current_dir = os.getcwd()
         
@@ -107,7 +107,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         inputs_distributed_neighboured = inputs_distributed_neighboured[mask]
         query_distributed = query_distributed[mask]
         centers_neighboured = centers_neighboured[mask]
-        stacked_latents_merging = self.stacked_latents_merging[mask]
+        stacked_latents_merging = self.stacked_latents_merging[mask].to(self.device)
 
         n_batch = int(np.ceil(inputs_distributed_neighboured.shape[0] / self.batch_size))
         loss = 0
@@ -275,7 +275,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                     
                     if frame_mask.sum() != frame_mask.shape[0]:
                         print(f'PROBLEM: Frame {frame_idx} has {frame_mask.sum()} occupied voxels instead of {frame_mask.shape[0]}')
-                        continue
+                        
                         
                     centers_frame = centers_frame[frame_mask]
                     centers_frame_query = centers_frame_query[query_mask]
@@ -295,7 +295,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             centers_flattened = [centers for sublist in centers_scene_list for centers in sublist]
             centers_full = torch.cat(centers_flattened, dim = 0)
-            self.centers_unique, indices_centers_unique = torch.unique(centers_full, dim = 0, return_inverse = True)
+            # self.centers_unique, indices_centers_unique = torch.unique(centers_full, dim = 0, return_inverse = True)
             
             c, h, w, d = self.empty_latent_code.shape
             # self.precomputed_merged_latents = torch.empty(self.centers_unique.shape[0], c, h, w, d)
@@ -303,15 +303,21 @@ class SequentialTrainerShuffled(BaseTrainer):
             # self.precomputed_merged_inputs = torch.empty(self.centers_unique.shape[0], self.n_max_points_input, 4)
             
             n_voxels_total = int(n_voxels.sum().item())
+            print(f'n_voxels_total = {n_voxels_total}')
+            inputs_distributed_neighboured = torch.zeros(n_voxels_total, 27, self.n_max_points_input, 4).to(torch.device('cpu'))
+            centers_neighboured = torch.zeros(n_voxels_total, 27, 3).to(torch.device('cpu'))
+            query_distributed = torch.zeros(n_voxels_total, self.n_max_points_query, 4).to(torch.device('cpu'))
             
-            inputs_distributed_neighboured = torch.zeros(n_voxels_total, 27, self.n_max_points_input, 4).to(self.device)
-            centers_neighboured = torch.zeros(n_voxels_total, 27, 3).to(self.device)
-            query_distributed = torch.zeros(n_voxels_total, self.n_max_points_query, 4).to(self.device)
-            
-            self.merged_latents = torch.zeros(n_voxels_total, c, h, w, d).to(self.device)
-            self.stacked_latents_merging = torch.zeros(n_voxels_total, c, 3*h, 3*w, 3*d).to(self.device)
+            self.merged_latents = torch.zeros(n_voxels_total, c, h, w, d).to(torch.device('cpu'))
+            dtype_size = torch.tensor([], dtype=torch.float32).element_size()
+            total_elements = n_voxels_total * c * 3 * h * 3 * w * 3 * d
+            memory_size_bytes = total_elements * dtype_size
+            memory_size_gb = memory_size_bytes / (1024 ** 3)
+            print(f'memory_size_gb = {memory_size_gb}')
+
+            self.stacked_latents_merging = torch.zeros(n_voxels_total, c, 3*h, 3*w, 3*d)
             if self.debug:
-                self.merged_inputs = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(self.device)
+                self.merged_inputs = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
             
             idx_start = 0
             for scene_idx in range(n_scenes):
@@ -324,9 +330,9 @@ class SequentialTrainerShuffled(BaseTrainer):
 
                     idx_end = idx_start + n_voxels[scene_idx, frame_idx]
                                         
-                    inputs_distributed_neighboured[idx_start:idx_end] = inputs_temp
-                    query_distributed[idx_start:idx_end] = query_frame
-                    centers_neighboured[idx_start:idx_end] = centers_temp
+                    inputs_distributed_neighboured[idx_start:idx_end] = inputs_temp.to(torch.device('cpu')).detach()
+                    query_distributed[idx_start:idx_end] = query_frame.to(torch.device('cpu')).detach()
+                    centers_neighboured[idx_start:idx_end] = centers_temp.to(torch.device('cpu')).detach()
                     
                     # print(f'idx_start = {idx_start}, idx_end = {idx_end}')
                     
@@ -340,9 +346,9 @@ class SequentialTrainerShuffled(BaseTrainer):
                     #get the centers and corresponding indexes of the current frame 
                     # find the indexes of centers_frame in centers_unique
                     # print(f'latent_map_stacked_merged.shape = {latent_map_stacked_merged.shape}')
-                    self.merged_latents[idx_start:idx_end] = latent_map_stacked_merged.clone()
-                    self.stacked_latents_merging[idx_start:idx_end] = latent_existing_temp_stacked.clone()
-                    if self.debug: self.merged_inputs[idx_start:idx_end] = inputs_frame.clone()
+                    self.merged_latents[idx_start:idx_end] = latent_map_stacked_merged.clone().to(torch.device('cpu')).detach()
+                    self.stacked_latents_merging[idx_start:idx_end] = latent_existing_temp_stacked.clone().to(torch.device('cpu')).detach()
+                    if self.debug: self.merged_inputs[idx_start:idx_end] = inputs_frame.clone().to(torch.device('cpu')).detach()
                     # match_matrix = (centers_frame[:, None, :] == self.centers_unique).all(dim=2)
                     # indices_frame_in_unique = match_matrix.nonzero(as_tuple=False)[:, 1]
                     
@@ -353,13 +359,6 @@ class SequentialTrainerShuffled(BaseTrainer):
                     end_prev = idx_end
                     
                     idx_start = idx_end
-            
-            inputs_distributed_neighboured = inputs_distributed_neighboured.to(torch.device('cpu')).detach()
-            query_distributed = query_distributed.to(torch.device('cpu')).detach()
-            centers_neighboured = centers_neighboured.to(torch.device('cpu')).detach()
-            self.merged_latents = self.merged_latents.to(torch.device('cpu')).detach()
-            self.stacked_latents_merging = self.stacked_latents_merging.to(torch.device('cpu')).detach()
-            if self.debug: self.merged_inputs = self.merged_inputs.to(torch.device('cpu')).detach()
             
             torch.cuda.empty_cache()
             gc.collect()
@@ -436,8 +435,8 @@ class SequentialTrainerShuffled(BaseTrainer):
         centers_interior_current = centers_list[scene_idx][frame_idx]
         centers_interior_existing = centers_list[scene_idx][frame_idx - 1]
 
-        if self.debug: inputs_interior_existing = self.merged_inputs[start_idx_prev:end_idx_prev]
-        latents_merged_existing = self.merged_latents[start_idx_prev:end_idx_prev]
+        if self.debug: inputs_interior_existing = self.merged_inputs[start_idx_prev:end_idx_prev].to(self.device)
+        latents_merged_existing = self.merged_latents[start_idx_prev:end_idx_prev].to(self.device)
         
         mask_existing_in_current = st_utils.compute_mask_occupied(centers_interior_existing, centers_interior_current)
         mask_current_in_existing = st_utils.compute_mask_occupied(centers_interior_current, centers_interior_existing)
