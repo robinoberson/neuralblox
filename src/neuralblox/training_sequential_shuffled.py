@@ -89,6 +89,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     def train_sequence(self, full_batch):
         with torch.no_grad():
             inputs_distributed_neighboured, query_distributed, centers_neighboured = self.precompute_sequence(full_batch)
+        print(f'Finished precomputing')
         loss = self.train_batch(inputs_distributed_neighboured, query_distributed, centers_neighboured)
         return loss
     
@@ -243,7 +244,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     def precompute_sequence(self, full_batch):
         self.model.eval()
         self.model_merge.eval()
-                
+        
         with torch.no_grad():
             #batch is [12, 20, 40960, 4] for points (gt points)
             #batch is [12, 20, 4096, 4] for inputs 
@@ -329,6 +330,8 @@ class SequentialTrainerShuffled(BaseTrainer):
                     inputs_temp, centers_temp = self.fill_inputs_centers(inputs_frame, centers_frame)
 
                     idx_end = idx_start + n_voxels[scene_idx, frame_idx]
+                    
+                    print(f'Precompute: scene_idx = {scene_idx}, frame_idx = {frame_idx}, idx_start = {idx_start}, idx_end = {idx_end}')
                                         
                     inputs_distributed_neighboured[idx_start:idx_end] = inputs_temp.to(torch.device('cpu')).detach()
                     query_distributed[idx_start:idx_end] = query_frame.to(torch.device('cpu')).detach()

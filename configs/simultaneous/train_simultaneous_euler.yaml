@@ -15,7 +15,7 @@ training:
   log_comet: true
   n_voxels_max: 30
   lr: 0.0007
-  batch_group_size: 6
+  batch_group_size: 3
 test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
