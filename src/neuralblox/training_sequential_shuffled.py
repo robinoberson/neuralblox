@@ -275,6 +275,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                     
                     if frame_mask.sum() != frame_mask.shape[0]:
                         print(f'PROBLEM: Frame {frame_idx} has {frame_mask.sum()} occupied voxels instead of {frame_mask.shape[0]}')
+                        continue
                         
                     centers_frame = centers_frame[frame_mask]
                     centers_frame_query = centers_frame_query[query_mask]
