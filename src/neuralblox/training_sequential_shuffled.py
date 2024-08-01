@@ -310,6 +310,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             query_distributed = torch.zeros(n_voxels_total, self.n_max_points_query, 4).to(torch.device('cpu'))
             
             self.merged_latents = torch.zeros(n_voxels_total, c, h, w, d).to(torch.device('cpu'))
+            
             dtype_size = torch.tensor([], dtype=torch.float32).element_size()
             total_elements = n_voxels_total * c * 3 * h * 3 * w * 3 * d
             memory_size_bytes = total_elements * dtype_size
