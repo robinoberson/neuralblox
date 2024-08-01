@@ -231,7 +231,7 @@ def get_transform(mode, cfg):
         for data in data_list:
             # Generate random rotation angles
             angles_deg = np.random.uniform(low=[-angle_x, -angle_y, -angle_z], high=[angle_x, angle_y, angle_z])
-            print(f'angles_deg: {angles_deg}')
+            # print(f'angles_deg: {angles_deg}')
             rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
             
             # Apply transformation to relevant keys

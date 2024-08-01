@@ -77,6 +77,23 @@ def get_empty_inputs(centers, crop_size, n_max_points = 2048):
 
     return random_points
 
+def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shifts):
+
+    # Convert centers and centers_lookup to appropriate dimensions
+    center_x, center_y, center_z = centers_idx[:, 0], centers_idx[:, 1], centers_idx[:, 2]
+    grid_offsets = centers_lookup[:, 0]
+
+    # Create index matrices for shifts
+    base_indices = grid_offsets + (center_x * grid_shapes[:, 1] + center_y) * grid_shapes[:, 2] + center_z
+
+    # Calculate shifted indices
+    shift_dx, shift_dy, shift_dz = shifts[:, 0], shifts[:, 1], shifts[:, 2]
+    shifted_indices = base_indices.unsqueeze(1) + (shift_dx.unsqueeze(0) * grid_shapes[:, 1].unsqueeze(1) + shift_dy.unsqueeze(0)) * grid_shapes[:, 2].unsqueeze(1) + shift_dz.unsqueeze(0)
+
+    # Fetch the shifted values
+    shifted_values = grids[shifted_indices]
+
+    return shifted_values
 def get_inputs_from_scene(batch, device):
         
     p_in_3D = batch.get('inputs').to(device)
