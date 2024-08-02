@@ -191,10 +191,10 @@ class SequentialTrainerShuffled(BaseTrainer):
                     indexes_lookup_frame = torch.tensor([idx_start, idx_end]).repeat(n_voxels_frame, 1).to(torch.device('cpu'))
                     
                     if frame_idx == 0:
-                        return centers_frame, inputs_frame
-                        centers_idx, inputs_frame_padded, frame_shapes, indexes_lookup, prev_merged_latents_padded = self.process_frame_cold_start(centers_frame, inputs_frame)
+                        prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev = self.process_frame_cold_start(centers_frame, inputs_frame)
                     else: 
-                        prev_merged_latents_padded = self.process_frame(centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame)
+                        return centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev
+                        prev_merged_latents_padded = self.process_frame(centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev)
             
             torch.cuda.empty_cache()
             gc.collect()
@@ -260,7 +260,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded = self.init_empty_latent_grid(vol_bounds_frame_padded)
 
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
-        return merged_latents_padded
+        return merged_latents_padded, centers_frame, vol_bounds_frame_padded
     
 
     def process_frame(self, centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev):
@@ -287,8 +287,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         distributed_latents = distributed_latents.reshape(-1, c, 3*h, 3*w, 3*d)
         
         #retrieve prev latent
-        centers_lookup_prev = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(prev_centers_frame), 1).to(self.device)
-        grid_shapes_prev = torch.tensor([n_x, n_y, n_z]).repeat(len(prev_centers_frame), 1).to(self.device)
+        n_x_p, n_y_p, n_z_p = vol_bounds_padded_prev['axis_n_crop'] #padded
+        centers_lookup_prev = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame), 1).to(self.device)
+        grid_shapes_prev = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame), 1).to(self.device)
         centers_frame_idx_prev = st_utils.centers_to_grid_indexes(prev_centers_frame, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
         
         distributed_latents_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts.to(self.device))
@@ -298,7 +299,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_frame, prev_centers_frame)
         
         distributed_latents_prev_temp = distributed_latents.clone()
-        distributed_latents_prev_temp[mask_current_in_prev] = distributed_latents_prev[mask_centers_prev_in_current]
+        distributed_latents_prev_temp[mask_centers_current_in_prev] = distributed_latents_prev[mask_centers_prev_in_current]
         
         stacked_frame = torch.cat((distributed_latents, distributed_latents_prev_temp), dim = 1)
         
