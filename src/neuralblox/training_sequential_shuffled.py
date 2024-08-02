@@ -291,9 +291,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         centers_lookup_prev = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame), 1).to(self.device)
         grid_shapes_prev = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame), 1).to(self.device)
         centers_frame_idx_prev = st_utils.centers_to_grid_indexes(prev_centers_frame, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
-        
+        prev_merged_latents_padded = prev_merged_latents_padded.reshape(-1, c, h, w, d)
         distributed_latents_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts.to(self.device))
-
+        distributed_latents_prev = distributed_latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
         #centers from prev frame present in this frame
         mask_centers_prev_in_current = st_utils.compute_mask_occupied(prev_centers_frame, centers_frame)
         mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_frame, prev_centers_frame)
