@@ -126,6 +126,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             # n_frames = 1
             
             n_voxels = torch.zeros(n_scenes, n_frames, dtype = torch.int32).to(device = self.device)
+            prob = 1/3
+            save_mask = torch.rand(n_scenes, n_frames, device=self.device) < prob         
+               
             # print(f'first pass through data')
             for scene_idx in range(n_scenes):
                 inputs_frame_distributed_padded_list = []
@@ -179,7 +182,8 @@ class SequentialTrainerShuffled(BaseTrainer):
                 axis_n_crop_scene_list.append(axis_n_crop_frame_list)
             
             # print(f'Second pass through data')
-            n_voxels_total = int(n_voxels.sum().item())
+            n_voxels_total = torch.sum(n_voxels[save_mask])
+            
             print(f'n_voxels_total = {n_voxels_total}')
             
             c, h, w, d = self.empty_latent_code.shape
@@ -242,17 +246,19 @@ class SequentialTrainerShuffled(BaseTrainer):
                         # happens when some inputs do not have query points 
                         # TODO: check why this happens + handle the case properly
                     else:
-                        centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
-                        query_points_full[idx_start:idx_end] = query_frame_padded.clone()
+                        if save_mask[scene_idx, frame_idx]:
 
-                        grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
-                        centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
-                        
-                        latents_full[idx_start:idx_end] = merged_latents_padded.clone()
-                        inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
-                        centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+                            centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
+                            query_points_full[idx_start:idx_end] = query_frame_padded.clone()
 
-                    idx_start = idx_end
+                            grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
+                            centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
+                            
+                            latents_full[idx_start:idx_end] = merged_latents_padded.clone()
+                            inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
+                            centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+
+                            idx_start = idx_end
             
             # Create a mask for occupied inputs
             mask_occupied = inputs_full[..., 3].sum(dim=-1) > 10
@@ -431,6 +437,7 @@ class SequentialTrainerShuffled(BaseTrainer):
 
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
+        
         return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
         
         if self.debug:
@@ -496,8 +503,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             # compare logits with query 
             loss_batch = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            inputs_current_batch_vis = inputs_current_batch.reshape(self.n_voxels_max, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
-            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
+            # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_voxels_max, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch.reshape(-1, self.n_max_points_input, 4), force_viz = False)
             
             loss_batch = loss_batch.sum(dim=-1).mean()
             loss_batch.backward()
@@ -523,9 +531,7 @@ class SequentialTrainerShuffled(BaseTrainer):
 
             grid_shapes_batch = grid_shapes_batch.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
             centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
-            query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel          
-            
-        
+            query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel
         
         if self.log_experiment and self.location != 'euler':
             max_mem = self.GPU_monitor.get_max_memory_usage()
