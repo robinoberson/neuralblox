@@ -69,8 +69,6 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.log_experiment = False
         self.shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
         self.cfg = cfg
-        self.GPU_monitor = GPUMonitor()
-        self.GPU_monitor.update_memory_usage()
 
         self.debug = False
                 
@@ -83,6 +81,10 @@ class SequentialTrainerShuffled(BaseTrainer):
         else:
             self.location = 'local'
 
+        if self.location != 'euler':
+            self.GPU_monitor = GPUMonitor()
+            self.GPU_monitor.update_memory_usage()
+            
         print(f'Location: {self.location}')
         
         if vis_dir is not None and not os.path.exists(vis_dir):
@@ -499,7 +501,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             loss_batch = loss_batch.sum(dim=-1).mean()
             loss_batch.backward()
-            self.GPU_monitor.update_memory_usage()
+            if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
             
             st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
             st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
@@ -523,14 +525,15 @@ class SequentialTrainerShuffled(BaseTrainer):
             centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel          
             
-        max_mem = self.GPU_monitor.get_max_memory_usage()
-        avg_mem = self.GPU_monitor.get_avg_memory_usage()
         
-        if self.log_experiment:
+        
+        if self.log_experiment and self.location != 'euler':
+            max_mem = self.GPU_monitor.get_max_memory_usage()
+            avg_mem = self.GPU_monitor.get_avg_memory_usage()
             self.experiment.log_metric('GPU max', max_mem, step = self.iteration)
             self.experiment.log_metric('GPU avg', avg_mem, step = self.iteration)
         
-        self.GPU_monitor.reset()
+            self.GPU_monitor.reset()
             
         return loss_full / iter_batch
             
