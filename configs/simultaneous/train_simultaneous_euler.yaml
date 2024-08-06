@@ -13,7 +13,7 @@ training:
   limited_gpu: true
   save_data_viz: true
   log_comet: true
-  n_voxels_max: 40
+  n_voxels_max: 30
   lr: 0.0005
   batch_group_size: 16
 test:
