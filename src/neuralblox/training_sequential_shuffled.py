@@ -466,12 +466,19 @@ class SequentialTrainerShuffled(BaseTrainer):
         n_empty_keep = int(n_occ * keep_fraction)
         
         random_indices = torch.nonzero(mask_empty_inputs).squeeze()
-        mask_force_keep_empty = torch.zeros_like(mask_empty_inputs)
+        mask_force_keep_empty = torch.zeros_like(mask_empty_inputs, dtype = bool)
 
-        if n_empty_keep > 0:
-            selected_indices = random_indices[torch.randperm(random_indices.size(0))[:n_empty_keep]]
-            mask_force_keep_empty[selected_indices] = True
-
+        try:
+            if n_empty_keep > 0 and random_indices.numel() > 0:
+                selected_indices = random_indices[torch.randperm(random_indices.size(0))[:n_empty_keep]]
+                mask_force_keep_empty[selected_indices] = True
+        except Exception as e:
+            print(e)
+            print(f'n_empty_keep: {n_empty_keep}')
+            print(f'random_indices.shape: {random_indices.shape}')
+            print(f'random_indices.numel(): {random_indices.numel()}')
+            print(f'random_indices: {random_indices}')
+            
         mask_force_keep_empty_padded = torch.nn.functional.pad(mask_force_keep_empty.reshape(n_x-2, n_y-2, n_z-2), (1, 1, 1, 1, 1, 1), value=False).reshape(-1)
         
         return mask_force_keep_empty_padded
