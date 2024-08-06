@@ -150,7 +150,7 @@ while True:
         for key in batch:
             batch[key] = batch[key].squeeze(0)
             
-        it = trainer.iteration
+        it += 1
     
         loss = trainer.train_sequence(batch)
         
