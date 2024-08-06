@@ -287,7 +287,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
             
             # print(f'finished precomputation batch')
-            
+            print(f'Batch contains {centers_idx_full.shape[0]} voxels')
             return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full
         
     def init_empty_latent_grid(self, vol_bounds_frame_padded):

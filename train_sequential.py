@@ -154,6 +154,9 @@ while True:
     
         loss = trainer.train_sequence(batch)
         
+        if log_comet:
+            experiment.log_metric("train_loss", loss, step=it)
+            
         scheduler.step(loss)
         
         for param_group in optimizer.param_groups:
