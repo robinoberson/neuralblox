@@ -18,6 +18,8 @@ class GPUMonitor:
     def get_avg_memory_usage(self):
         return sum(self.memory_usages) / len(self.memory_usages) if self.memory_usages else 0
 
+    def reset(self):
+        self.memory_usages = []
 def monitor_gpu_usage(gpu_monitor, duration=10, interval=1):
     start_time = time.time()
     while time.time() - start_time < duration:
