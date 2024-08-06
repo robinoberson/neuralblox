@@ -523,8 +523,8 @@ class SequentialTrainerShuffled(BaseTrainer):
             centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel          
             
-        max_mem = self.GPU_monitor.get_max_memory()
-        avg_mem = self.GPU_monitor.get_avg_memory()
+        max_mem = self.GPU_monitor.get_max_memory_usage()
+        avg_mem = self.GPU_monitor.get_avg_memory_usage()
         
         if self.log_experiment:
             self.experiment.log_metric('GPU max', max_mem, step = self.iteration)
