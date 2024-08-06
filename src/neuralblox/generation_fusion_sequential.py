@@ -150,7 +150,7 @@ class Generator3DSequential(object):
                 centers_frame_query = centers_frame_query[query_mask].reshape(-1, 3)
                 query_frame_distributed = query_frame_distributed_padded[query_mask].reshape(-1, self.trainer.n_max_points_query, 4)
 
-                print(f'Are centers the same? {torch.equal(centers_frame, centers_frame_query)}')
+                # print(f'Are centers the same? {torch.equal(centers_frame, centers_frame_query)}')
                 
                 p_stacked = query_frame_distributed.reshape(-1, self.trainer.n_max_points_query, 4)
                 centers = centers_frame_query.reshape(-1, 3)

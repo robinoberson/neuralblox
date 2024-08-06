@@ -69,6 +69,8 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.log_experiment = False
         self.shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
         self.cfg = cfg
+        self.points_threshold = 20 #TODO move to cfg
+        self.keep_empty_per = 0.3 #TODO move to cfg
 
         self.debug = False
                 
@@ -129,9 +131,8 @@ class SequentialTrainerShuffled(BaseTrainer):
             # n_frames = 1
             
             n_voxels = torch.zeros(n_scenes, n_frames, dtype = torch.int32).to(device = self.device)
-            prob = 1/3
+            prob = self.cfg['training']['prob']
             save_mask = torch.rand(n_scenes, n_frames, device=self.device) < prob         
-               
             print(f'first pass through data')
             for scene_idx in range(n_scenes):
                 inputs_frame_distributed_padded_list = []
@@ -207,7 +208,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             latents_full = torch.zeros(n_voxels_total, *self.empty_latent_code.shape).to(torch.device('cpu'))
             inputs_full = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
-                        
+
+            mask_force_save_empty = torch.zeros(n_voxels_total, dtype = torch.bool).to(torch.device('cpu'))
+
             # dtype_size = torch.tensor([], dtype=torch.float32).element_size()
             # total_elements = n_voxels_total * c * h * w * d
             # memory_size_bytes = total_elements * dtype_size
@@ -235,7 +238,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                         # return centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded
                         tup = self.process_frame(centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded)
 
-                    merged_latents_padded, prev_vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame = tup
+                    merged_latents_padded, prev_vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame, mask_force_keep_empty_padded = tup
 
                     prev_centers_frame_padded = centers_frame_padded.clone()
                     prev_centers_frame_idx = centers_frame_idx.clone()
@@ -244,7 +247,6 @@ class SequentialTrainerShuffled(BaseTrainer):
                     n_voxels_frame = centers_frame_idx.shape[0]
                     
                     idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
-
 
                     if save_mask[scene_idx, frame_idx]: #Decide if we drop the frame to get more diverse data
 
@@ -257,11 +259,17 @@ class SequentialTrainerShuffled(BaseTrainer):
                         latents_full[idx_start:idx_end] = merged_latents_padded.clone()
                         inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
                         centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+                        mask_force_save_empty[idx_start:idx_end] = mask_force_keep_empty_padded.clone()
 
                         idx_start = idx_end
             
             # Create a mask for occupied inputs
-            mask_occupied = inputs_full[..., 3].sum(dim=-1) > 10
+            mask_occupied = inputs_full[..., 3].sum(dim=-1) > self.points_threshold
+            # sum_occ = mask_occupied.sum()
+            # sum_force = mask_force_save_empty.sum()
+            
+            mask_occupied = torch.logical_or(mask_occupied, mask_force_save_empty) # mask_occupied or mask_force_save_empty
+            # sum_tot = mask_occupied.sum()
 
             # Apply the mask to filter the tensors
             filtered_centers_idx_full = centers_idx_full[mask_occupied]
@@ -294,7 +302,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     
     def encode_occupied_inputs_frame(self, inputs_frame, centers_frame, vol_bounds_frame_padded):
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
-        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > 10
+        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > self.points_threshold
         
         latents_occupied_frame = self.encode_distributed(inputs_frame[occupied_frame_mask], centers_frame[occupied_frame_mask])
 
@@ -313,7 +321,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             inputs_frame = inputs_frame.reshape(-1, self.n_max_points_input, 4)
             centers_frame = centers_frame.reshape(-1, 3)
                     
-        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > 10
+        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > self.points_threshold
         
         latents_occupied_frame = self.encode_distributed(inputs_frame[occupied_frame_mask], centers_frame[occupied_frame_mask])
        
@@ -367,7 +375,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
         
-        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
+        mask_force_keep_empty_padded = self.generate_force_keep_empty_mask(inputs_frame, n_x, n_y, n_z, self.keep_empty_per)
+        
+        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded, mask_force_keep_empty_padded]
         # if self.debug:
         #     return_tup.append(distributed_inputs)
             #  [merged_latents_padded, centers_frame, vol_bounds_frame_padded, centers_frame_idx, distributed_inputs, inputs_frame_padded]
@@ -436,7 +446,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
         
-        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
+        mask_force_keep_empty_padded = self.generate_force_keep_empty_mask(inputs_frame, n_x, n_y, n_z, self.keep_empty_per)
+        
+        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded, mask_force_keep_empty_padded]
         
         if self.debug:
             return_tup.append(distributed_inputs)
@@ -445,7 +457,23 @@ class SequentialTrainerShuffled(BaseTrainer):
             return_tup.append(mask_centers_current_in_prev)
 
         return return_tup
+    def generate_force_keep_empty_mask(self, inputs_frame, n_x, n_y, n_z, keep_fraction):
+        mask_occ_inputs = (inputs_frame[..., 3].sum(dim = -1) > self.points_threshold) #True is occupied
+        mask_empty_inputs = ~mask_occ_inputs
+        n_occ = mask_occ_inputs.sum()
         
+        # Keep keep_fraction of unoccupied points, select the indices at random
+        n_empty_keep = int(n_occ * keep_fraction)
+        
+        random_indices = torch.nonzero(mask_empty_inputs).squeeze()
+        selected_indices = random_indices[torch.randperm(random_indices.size(0))[:n_empty_keep]]
+
+        mask_force_keep_empty = torch.zeros_like(mask_empty_inputs)
+        mask_force_keep_empty[selected_indices] = True
+
+        mask_force_keep_empty_padded = torch.nn.functional.pad(mask_force_keep_empty.reshape(n_x-2, n_y-2, n_z-2), (1, 1, 1, 1, 1, 1), value=False).reshape(-1)
+        
+        return mask_force_keep_empty_padded
     def train_batch(self, centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full):
         self.model.train()
         self.model_merge.train()
@@ -538,8 +566,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             self.experiment.log_metric('GPU avg', avg_mem, step = self.iteration)
         
             self.GPU_monitor.reset()
-            
-        return loss_full / iter_batch
+        
+        if iter_batch == 0: return loss_full
+        else: return loss_full / iter_batch
             
     
     def get_logits(self, p_stacked, latents, centers):
@@ -745,7 +774,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
-        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 10 #TODO move this to config
+        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > self.points_threshold #TODO move this to config
 
         if isquery:
             for i in range(distributed_inputs.shape[0]):
