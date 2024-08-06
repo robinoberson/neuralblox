@@ -98,6 +98,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         with torch.no_grad():
             centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full = self.precompute_sequence(full_batch)
         print(f'Finished precomputing')
+        torch.cuda.empty_cache()
+        gc.collect()
+        
         loss = self.train_batch(centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full)
         print(f'Finished training batch, loss = {loss}')
         return loss
@@ -213,8 +216,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             idx_start = 0
             for scene_idx in range(n_scenes):
-                torch.cuda.empty_cache()
                 for frame_idx in range(n_frames):
+                    torch.cuda.empty_cache()
+
                     n_voxels_frame = n_voxels[scene_idx, frame_idx]
 
                     idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
@@ -278,8 +282,6 @@ class SequentialTrainerShuffled(BaseTrainer):
             grid_shapes_full = filtered_grid_shapes_full[permutation_mask]
             centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
             
-            torch.cuda.empty_cache()
-            gc.collect()
             # print(f'finished precomputation batch')
             
             return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full
