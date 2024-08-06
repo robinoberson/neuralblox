@@ -45,6 +45,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.model_merge = model_merge
         self.optimizer = optimizer
         self.device = device
+        # self.device = torch.device('cpu')
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
         self.vis_dir = vis_dir
@@ -66,7 +67,8 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.experiment = None
         self.log_experiment = False
         self.shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
-
+        self.cfg = cfg
+        
         self.debug = False
                 
         current_dir = os.getcwd()
@@ -89,9 +91,10 @@ class SequentialTrainerShuffled(BaseTrainer):
     
     def train_sequence(self, full_batch):
         with torch.no_grad():
-            inputs_distributed_neighboured, query_distributed, centers_neighboured = self.precompute_sequence(full_batch)
+            centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full = self.precompute_sequence(full_batch)
         print(f'Finished precomputing')
-        loss = self.train_batch(inputs_distributed_neighboured, query_distributed, centers_neighboured)
+        loss = self.train_batch(centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full)
+        print(f'Finished training batch, loss = {loss}')
         return loss
     
     def validate_sequence(self, full_batch):
@@ -118,88 +121,158 @@ class SequentialTrainerShuffled(BaseTrainer):
             # n_frames = 1
             
             n_voxels = torch.zeros(n_scenes, n_frames, dtype = torch.int32).to(device = self.device)
-                        
+            # print(f'first pass through data')
             for scene_idx in range(n_scenes):
-                inputs_frame_distributed_list = []
-                query_frame_distributed_list = []
+                inputs_frame_distributed_padded_list = []
+                query_frame_distributed_padded_list = []
                 centers_frame_list = []
                 axis_n_crop_frame_list = []
                 # for frame_idx in range(p_in_full.shape[1]):
                 for frame_idx in range(n_frames):
                     inputs_frame = p_in_full[scene_idx, frame_idx]
-                    inputs_frame_distributed, centers_frame, axis_n_crop = self.get_distributed_inputs(inputs_frame, self.n_max_points_input, 1.0, return_empty = True, isquery = False)
-                    
+                    inputs_frame_distributed_padded, centers_frame, vol_bound_frame = self.get_distributed_inputs(inputs_frame, self.n_max_points_input, 1.0, return_empty = True, isquery = False, padding = True)
+                    axis_n_crop = vol_bound_frame['axis_n_crop'] #padded
+
                     query_frame = p_query_full[scene_idx, frame_idx]
-                    query_frame_distributed, centers_frame_query, axis_n_crop = self.get_distributed_inputs(query_frame, self.n_max_points_query, self.occ_per_query, return_empty = True, isquery = True)
+                    query_frame_distributed_padded, centers_frame_query, vol_bound_frame_query = self.get_distributed_inputs(query_frame, self.n_max_points_query, self.occ_per_query, return_empty = True, isquery = True, padding = True)
 
                     frame_mask = st_utils.compute_mask_occupied(centers_frame, centers_frame_query)
                     query_mask = st_utils.compute_mask_occupied(centers_frame_query, centers_frame)
                     
+                    frame_mask_sum = frame_mask.sum()
+                    query_mask_sum = query_mask.sum()
+                    
                     if frame_mask.sum() != frame_mask.shape[0]:
                         print(f'PROBLEM: Frame {frame_idx} has {frame_mask.sum()} occupied voxels instead of {frame_mask.shape[0]}')
+                        out_dir = os.path.join(self.cfg['training']['out_dir'], 'debug')
+                        if not os.path.exists(out_dir):
+                            os.mkdir(out_dir)
+                            
+                        torch.save(inputs_frame, os.path.join(out_dir, f'inputs_frame_{self.iteration}_{frame_idx}.pt'))
+                        torch.save(query_frame, os.path.join(out_dir, f'query_frame_{self.iteration}_{frame_idx}.pt'))
+                        torch.save(axis_n_crop, os.path.join(out_dir, f'axis_n_crop_{self.iteration}_{frame_idx}.pt'))
                         
-                    centers_frame = centers_frame[frame_mask]
-                    centers_frame_query = centers_frame_query[query_mask]
+                    centers_frame = centers_frame[frame_mask].reshape(-1, 3)
+                    centers_frame_query = centers_frame_query[query_mask].reshape(-1, 3)
                     
-                    inputs_frame_distributed = inputs_frame_distributed[frame_mask]
-                    query_frame_distributed = query_frame_distributed[query_mask]
+                    inputs_frame_distributed_padded = inputs_frame_distributed_padded[frame_mask].reshape(-1, self.n_max_points_input, 4)
+                    query_frame_distributed_padded = query_frame_distributed_padded[query_mask].reshape(-1, self.n_max_points_query, 4)
                     
-                    inputs_frame_distributed_list.append(inputs_frame_distributed)
-                    query_frame_distributed_list.append(query_frame_distributed)
+                    inputs_frame_distributed_padded_list.append(inputs_frame_distributed_padded)
+                    query_frame_distributed_padded_list.append(query_frame_distributed_padded)
                     centers_frame_list.append(centers_frame)
                     axis_n_crop_frame_list.append(axis_n_crop)
                     
                     n_x, n_y, n_z = axis_n_crop
-                    n_voxels[scene_idx, frame_idx] = (n_x+2)*(n_y+2)*(n_z+2)
+                    n_voxels[scene_idx, frame_idx] = (n_x)*(n_y)*(n_z) #padded
+                    
+                    # return inputs_frame_distributed_padded, query_frame_distributed_padded, centers_frame
                 
-                inputs_scene_distributed_list.append(inputs_frame_distributed_list)
-                query_scene_distributed_list.append(query_frame_distributed_list)
+                inputs_scene_distributed_list.append(inputs_frame_distributed_padded_list)
+                query_scene_distributed_list.append(query_frame_distributed_padded_list)
                 centers_scene_list.append(centers_frame_list)
                 axis_n_crop_scene_list.append(axis_n_crop_frame_list)
-                       
+            
+            # print(f'Second pass through data')
             n_voxels_total = int(n_voxels.sum().item())
             print(f'n_voxels_total = {n_voxels_total}')
             
             c, h, w, d = self.empty_latent_code.shape
 
-            storage_centers_idx = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
-            storage_inputs = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
-            storage_frame_shapes = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
-            storage_indexes_lookup = torch.zeros(n_voxels_total, 2).to(torch.device('cpu'))
+            # storage_centers_idx = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
+            # storage_inputs = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
+            # storage_frame_shapes = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
+            # storage_indexes_lookup = torch.zeros(n_voxels_total, 2).to(torch.device('cpu'))
             
-            storage_latents_padded = torch.zeros(n_voxels_total, c, h, w, d).to(torch.device('cpu'))
-                        
-            dtype_size = torch.tensor([], dtype=torch.float32).element_size()
-            total_elements = n_voxels_total * c * h * w * d
-            memory_size_bytes = total_elements * dtype_size
-            memory_size_gb = memory_size_bytes / (1024 ** 3)
-            print(f'memory_size_gb = {memory_size_gb}')
+            # storage_latents_padded = torch.zeros(n_voxels_total, c, h, w, d).to(torch.device('cpu'))
+            
+            centers_idx_full = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # all centers contained in the frame with grid indices
+            centers_coord_full = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
 
-            if self.debug:
-                self.merged_inputs = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
+            grid_shapes_full = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # grid shapes contained in the frame
+            centers_lookup_full = torch.zeros(n_voxels_total, 2, dtype = torch.int32).to(torch.device('cpu')) # centers lookup contained in the frame, allows to retrieve the correct centers 
+            query_points_full = torch.zeros(n_voxels_total, self.n_max_points_query, 4).to(torch.device('cpu'))
+            
+            latents_full = torch.zeros(n_voxels_total, *self.empty_latent_code.shape).to(torch.device('cpu'))
+            inputs_full = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
+                        
+            # dtype_size = torch.tensor([], dtype=torch.float32).element_size()
+            # total_elements = n_voxels_total * c * h * w * d
+            # memory_size_bytes = total_elements * dtype_size
+            # memory_size_gb = memory_size_bytes / (1024 ** 3)
+            # print(f'memory_size_gb = {memory_size_gb}')
             
             idx_start = 0
             for scene_idx in range(n_scenes):
+                torch.cuda.empty_cache()
                 for frame_idx in range(n_frames):
-                    idx_end = idx_start + n_voxels[scene_idx, frame_idx]
-                    
                     n_voxels_frame = n_voxels[scene_idx, frame_idx]
-                    
-                    centers_frame = centers_scene_list[scene_idx][frame_idx]
-                    inputs_frame = inputs_scene_distributed_list[scene_idx][frame_idx]
-                    
-                    indexes_lookup_frame = torch.tensor([idx_start, idx_end]).repeat(n_voxels_frame, 1).to(torch.device('cpu'))
+
+                    idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
+                    # print(f'idx_start = {idx_start}, idx_end = {idx_end}')
+                    centers_frame_padded = centers_scene_list[scene_idx][frame_idx]
+                    inputs_frame_padded = inputs_scene_distributed_list[scene_idx][frame_idx]
+                    query_frame_padded = query_scene_distributed_list[scene_idx][frame_idx].reshape(-1, self.n_max_points_query, 4)
                     
                     if frame_idx == 0:
-                        prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev = self.process_frame_cold_start(centers_frame, inputs_frame)
+                        # return centers_frame_padded, inputs_frame_padded, query_frame_padded
+                        tup = self.process_frame_cold_start(centers_frame_padded, inputs_frame_padded)
+
                     else: 
-                        return centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev
-                        prev_merged_latents_padded = self.process_frame(centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev)
+                        # if torch.equal(centers_frame_padded, prev_centers_frame_padded):
+                        #     print('WARNING: centers_frame_padded == prev_centers_frame_padded')
+                        # else:
+                            # print('centers_frame_padded != prev_centers_frame_padded')
+                        # return centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded
+                        tup = self.process_frame(centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded)
+
+                    merged_latents_padded, prev_vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame = tup
+
+                    prev_centers_frame_padded = centers_frame_padded.clone()
+                    prev_centers_frame_idx = centers_frame_idx.clone()
+                    prev_inputs_frame_padded = inputs_frame_padded.clone()
+                    
+                    if n_voxels_frame != centers_frame_idx.shape[0]:
+                        print(f'WARNING: n_voxels_frame != centers_frame_padded.shape[0], n_voxels_frame = {n_voxels_frame}, centers_frame_idx.shape[0] = {centers_frame_idx.shape[0]}')
+                        # happens when some inputs do not have query points 
+                        # TODO: check why this happens + handle the case properly
+                    else:
+                        centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
+                        query_points_full[idx_start:idx_end] = query_frame_padded.clone()
+
+                        grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
+                        centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
+                        
+                        latents_full[idx_start:idx_end] = merged_latents_padded.clone()
+                        inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
+                        centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+
+                    idx_start = idx_end
+            
+            # Create a mask for occupied inputs
+            mask_occupied = inputs_full[..., 3].sum(dim=-1) > 10
+
+            # Apply the mask to filter the tensors
+            filtered_centers_idx_full = centers_idx_full[mask_occupied]
+            filtered_query_points_full = query_points_full[mask_occupied]
+            filtered_grid_shapes_full = grid_shapes_full[mask_occupied]
+            filtered_centers_lookup_full = centers_lookup_full[mask_occupied]
+
+            # Generate a random permutation
+            permutation_mask = torch.randperm(filtered_centers_idx_full.shape[0])
+
+            # Apply the permutation mask
+            centers_idx_full = filtered_centers_idx_full[permutation_mask]
+            query_points_full = filtered_query_points_full[permutation_mask]
+            grid_shapes_full = filtered_grid_shapes_full[permutation_mask]
+            centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
             
             torch.cuda.empty_cache()
             gc.collect()
-
-            return inputs_distributed_neighboured, query_distributed, centers_neighboured
+            # print(f'finished precomputation batch')
+            
+            return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full
+        
     def init_empty_latent_grid(self, vol_bounds_frame_padded):
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
         
@@ -210,7 +283,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         return empty_latent_grid
     
-    def encode_occupied_inputs(self, inputs_frame, centers_frame, vol_bounds_frame_padded):
+    def encode_occupied_inputs_frame(self, inputs_frame, centers_frame, vol_bounds_frame_padded):
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
         occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > 10
         
@@ -225,31 +298,54 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         return grid_latents_frame_current
     
-    def pad_inputs(self, inputs_frame, vol_bounds_frame_padded):
+    def encode_occupied_inputs_flat(self, inputs_frame, centers_frame):
+        assert inputs_frame.shape[0] == centers_frame.shape[0]
+        if len(inputs_frame.shape) != 3:
+            inputs_frame = inputs_frame.reshape(-1, self.n_max_points_input, 4)
+            centers_frame = centers_frame.reshape(-1, 3)
+                    
+        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > 10
+        
+        latents_occupied_frame = self.encode_distributed(inputs_frame[occupied_frame_mask], centers_frame[occupied_frame_mask])
+       
+        grid_latents_frame_current = self.empty_latent_code.repeat(inputs_frame.shape[0], 1, 1, 1, 1).clone()
+        grid_latents_frame_current[occupied_frame_mask] = latents_occupied_frame
+        
+        return grid_latents_frame_current
+    
+    
+    def pad_points(self, inputs_frame, vol_bounds_frame_padded, n_points):
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
-        inputs_frame_padded = torch.zeros(n_x, n_y, n_z, self.n_max_points_input, 4).to(self.device)
-        inputs_frame_padded[1:-1, 1:-1, 1:-1] = inputs_frame.reshape(n_x-2, n_y-2, n_z-2, self.n_max_points_input, 4)
-        inputs_frame_padded = inputs_frame_padded.reshape(-1, self.n_max_points_input, 4)
+        inputs_frame_padded = torch.zeros(n_x, n_y, n_z, n_points, 4).to(self.device)
+        inputs_frame_padded[1:-1, 1:-1, 1:-1] = inputs_frame.reshape(n_x-2, n_y-2, n_z-2, n_points, 4)
+        inputs_frame_padded = inputs_frame_padded.reshape(-1, n_points, 4)
         
         return inputs_frame_padded
-    def process_frame_cold_start(self, centers_frame, inputs_frame):
-        vol_bounds_frame_padded, centers_frame_padded = st_utils.compute_vol_bound(centers_frame, self.query_crop_size, self.input_crop_size, padding = True)
+    def process_frame_cold_start(self, centers_frame_padded, inputs_frame_padded):
+        vol_bounds_frame_padded, _ = st_utils.compute_vol_bound(centers_frame_padded, self.query_crop_size, self.input_crop_size)
 
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop'] #padded
-        
+        centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
+        inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.n_max_points_input, 4)
+
         if len(centers_frame) != (n_x-2)*(n_y-2)*(n_z-2):
             print(f'PROBLEM: {len(centers_frame)} != {(n_x-2)*(n_y-2)*(n_z-2)}')
             
-        grid_latents_frame_current = self.encode_occupied_inputs(inputs_frame, centers_frame, vol_bounds_frame_padded)
+        grid_latents_frame_current = self.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bounds_frame_padded) #contains padded empty latents
         
         centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
-        grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
-        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
-        
-        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts.to(self.device))
+        centers_lookup_padded = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame_padded), 1).to(self.device)
 
-        inputs_frame_padded = self.pad_inputs(inputs_frame, vol_bounds_frame_padded)
-        distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts.to(self.device))
+        grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
+        grid_shapes_padded = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame_padded), 1).to(self.device)
+        
+        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_frame_idx_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+
+        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
+
+        inputs_frame_padded = self.pad_points(inputs_frame, vol_bounds_frame_padded, self.n_max_points_input)
+        distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
         
         c, h, w, d = self.empty_latent_code.shape
 
@@ -260,27 +356,39 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded = self.init_empty_latent_grid(vol_bounds_frame_padded)
 
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
-        return merged_latents_padded, centers_frame, vol_bounds_frame_padded
+        merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
+        
+        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
+        # if self.debug:
+        #     return_tup.append(distributed_inputs)
+            #  [merged_latents_padded, centers_frame, vol_bounds_frame_padded, centers_frame_idx, distributed_inputs, inputs_frame_padded]
+
+        return return_tup
     
 
-    def process_frame(self, centers_frame, inputs_frame, prev_merged_latents_padded, prev_centers_frame, vol_bounds_padded_prev):
-        vol_bounds_frame_padded, centers_frame_padded = st_utils.compute_vol_bound(centers_frame, self.query_crop_size, self.input_crop_size, padding = True)
+    def process_frame(self, centers_frame_padded, inputs_frame_padded, prev_merged_latents_padded, prev_centers_frame_padded, vol_bounds_padded_prev, prev_undist_inputs_padded = None):
+        vol_bounds_frame_padded, _ = st_utils.compute_vol_bound(centers_frame_padded, self.query_crop_size, self.input_crop_size)
 
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop'] #padded
-        
+        centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
+        inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.n_max_points_input, 4)
+
         if len(centers_frame) != (n_x-2)*(n_y-2)*(n_z-2):
             print(f'PROBLEM: {len(centers_frame)} != {(n_x-2)*(n_y-2)*(n_z-2)}')
             
-        grid_latents_frame_current = self.encode_occupied_inputs(inputs_frame, centers_frame, vol_bounds_frame_padded)
+        grid_latents_frame_current = self.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bounds_frame_padded)
         
         centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
+        centers_lookup_padded = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame_padded), 1).to(self.device)
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
+        grid_shapes_padded = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame_padded), 1).to(self.device)
         centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_frame_idx_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
         
-        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts.to(self.device))
+        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
 
-        inputs_frame_padded = self.pad_inputs(inputs_frame, vol_bounds_frame_padded)
-        distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts.to(self.device))
+        if self.debug:
+            distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
         
         c, h, w, d = self.empty_latent_code.shape
 
@@ -288,189 +396,132 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         #retrieve prev latent
         n_x_p, n_y_p, n_z_p = vol_bounds_padded_prev['axis_n_crop'] #padded
+        prev_centers_frame = prev_centers_frame_padded.reshape(n_x_p, n_y_p, n_z_p, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         centers_lookup_prev = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame), 1).to(self.device)
         grid_shapes_prev = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame), 1).to(self.device)
         centers_frame_idx_prev = st_utils.centers_to_grid_indexes(prev_centers_frame, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
-        prev_merged_latents_padded = prev_merged_latents_padded.reshape(-1, c, h, w, d)
-        distributed_latents_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts.to(self.device))
+        
+        distributed_latents_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
         distributed_latents_prev = distributed_latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
+
+        if self.debug:
+            distributed_inputs_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_undist_inputs_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
+
         #centers from prev frame present in this frame
         mask_centers_prev_in_current = st_utils.compute_mask_occupied(prev_centers_frame, centers_frame)
         mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_frame, prev_centers_frame)
         
-        distributed_latents_prev_temp = distributed_latents.clone()
+
+        distributed_latents_prev_temp = distributed_latents.clone() # allows to merge with itself where possible 
+        # print(f'distributed_latents_prev_temp: {distributed_latents_prev_temp.shape}, mask_centers_current_in_prev: {mask_centers_current_in_prev.shape}')
+        # print(f'mask_centers_prev_in_current shape: {mask_centers_prev_in_current.shape}, sum: {mask_centers_prev_in_current.sum()}')
         distributed_latents_prev_temp[mask_centers_current_in_prev] = distributed_latents_prev[mask_centers_prev_in_current]
         
+
+        # print(f'Process frame, overlapping voxels : {mask_centers_current_in_prev.sum()}')
         stacked_frame = torch.cat((distributed_latents, distributed_latents_prev_temp), dim = 1)
         
         merged_latents = self.merge_latent_map(stacked_frame)
         merged_latents_padded = self.init_empty_latent_grid(vol_bounds_frame_padded)
 
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
-        return merged_latents_padded
+        merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
+        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
         
-    def fuse(self, inputs_list, centers_list, scene_idx, frame_idx, start_idx_prev, end_idx_prev):
-        centers_interior_current = centers_list[scene_idx][frame_idx]
-        inputs_interior_current = inputs_list[scene_idx][frame_idx]
-        occupied_current_mask = inputs_interior_current[..., 3].sum(dim = -1) > 10
-        
-        vol_bounds, centers_temp = st_utils.compute_vol_bound(centers_interior_current, self.query_crop_size, self.input_crop_size, padding = True)
-        n_x, n_y, n_z = vol_bounds['axis_n_crop']
-
-        occupied_inputs_interior_current = inputs_interior_current[occupied_current_mask]
-        occupied_centers_interior_current = centers_interior_current[occupied_current_mask]
-        
-        latents_current = self.encode_distributed(occupied_inputs_interior_current, occupied_centers_interior_current)
         if self.debug:
-            latents_existing, inputs_existing, mask_current_in_existing = self.retrieve_existing_latents(centers_list, inputs_list, scene_idx, frame_idx, start_idx_prev, end_idx_prev)
-        else:
-            latents_existing, mask_current_in_existing = self.retrieve_existing_latents(centers_list, inputs_list, scene_idx, frame_idx, start_idx_prev, end_idx_prev)
-        
-        expanded_shape = (vol_bounds['n_crop'],) + self.empty_latent_code.shape #padded 
-        
-        grid_latents_frame_current = self.empty_latent_code.unsqueeze(0)
-        grid_latents_frame_current = grid_latents_frame_current.expand(expanded_shape)
-        grid_latents_frame_current = grid_latents_frame_current.reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).clone()
-        
-        grid_latents_frame_existing = grid_latents_frame_current.clone()        
-        
-        occupied_current_mask_padded = torch.zeros((n_x, n_y, n_z), dtype = torch.bool).to(self.device)
-        occupied_existing_mask_padded = torch.zeros((n_x, n_y, n_z), dtype = torch.bool).to(self.device)
-        
-        occupied_current_mask_padded[1:-1, 1:-1, 1:-1] = occupied_current_mask.reshape(n_x-2, n_y-2, n_z-2)
-        occupied_existing_mask_padded[1:-1, 1:-1, 1:-1] = mask_current_in_existing.reshape(n_x-2, n_y-2, n_z-2)
-        
-        grid_latents_frame_current[occupied_current_mask_padded] = latents_current.clone()
-        grid_latents_frame_existing[occupied_existing_mask_padded] = latents_existing.clone().to(self.device)
-            
-        mask_complete_current = (~occupied_current_mask_padded) & occupied_existing_mask_padded # current is empty and existing is occupied
-        mask_complete_existing = (~occupied_existing_mask_padded) & occupied_current_mask_padded # existing is empty and current is occupied
-        
-        grid_latents_frame_current[mask_complete_current] = grid_latents_frame_existing[mask_complete_current]
-        grid_latents_frame_existing[mask_complete_existing] = grid_latents_frame_current[mask_complete_existing]
-        
-        # print(f'mask_complete_current = {mask_complete_current.sum()}, mask_complete_existing = {mask_complete_existing.sum()}')
-        
-        lb = vol_bounds['lb']
-        
-        shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
-        centers_current_shifted = st_utils.centers_to_grid_indexes(centers_interior_current.clone(), lb, self.query_crop_size).int() #.reshape(*centers_temp_interior.shape)
-        centers_current_shifted = centers_current_shifted.unsqueeze(1) + shifts.unsqueeze(0)
-        
-        # centers_temp_shifted = centers_temp_shifted.reshape(*centers_temp.shape).int()
-        # return centers_temp_shifted, grid_latents_frame
-        latent_current_temp = grid_latents_frame_current[centers_current_shifted[..., 0], centers_current_shifted[..., 1], centers_current_shifted[..., 2]]
-        latent_existing_temp = grid_latents_frame_existing[centers_current_shifted[..., 0], centers_current_shifted[..., 1], centers_current_shifted[..., 2]]
-        
-        # inputs_temp = grid_inputs_frame[centers_temp_shifted[..., 0], centers_temp_shifted[..., 1], centers_temp_shifted[..., 2]]
-        c, h, w, d = self.empty_latent_code.shape
+            return_tup.append(distributed_inputs)
+            return_tup.append(distributed_inputs_prev)
+            return_tup.append(mask_centers_prev_in_current)
+            return_tup.append(mask_centers_current_in_prev)
 
-        latent_current_temp_stacked = latent_current_temp.reshape(len(centers_interior_current), c, 3 * h, 3 * w, 3 * d)
-        latent_existing_temp_stacked = latent_existing_temp.reshape(len(centers_interior_current), c, 3 * h, 3 * w, 3 * d)
+        return return_tup
         
-        latent_map_stacked = torch.cat((latent_current_temp_stacked, latent_existing_temp_stacked), dim = 1)
-        latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
-
-        return latent_map_stacked_merged, latent_existing_temp_stacked
-    
-    def retrieve_existing_latents(self, centers_list, inputs_list, scene_idx, frame_idx, start_idx_prev, end_idx_prev):
-        centers_interior_current = centers_list[scene_idx][frame_idx]
-        centers_interior_existing = centers_list[scene_idx][frame_idx - 1]
-
-        if self.debug: inputs_interior_existing = self.merged_inputs[start_idx_prev:end_idx_prev].to(self.device)
-        latents_merged_existing = self.merged_latents[start_idx_prev:end_idx_prev].to(self.device)
-        
-        mask_existing_in_current = st_utils.compute_mask_occupied(centers_interior_existing, centers_interior_current)
-        mask_current_in_existing = st_utils.compute_mask_occupied(centers_interior_current, centers_interior_existing)
-        
-        if sum(mask_existing_in_current) == 0:
-            raise Exception('No overlap found')
-        
-        latents_existing = latents_merged_existing[mask_existing_in_current]
-        if self.debug: 
-            inputs_existing = inputs_interior_existing[mask_existing_in_current]
-            return latents_existing, inputs_existing, mask_current_in_existing    
-            
-        return latents_existing, mask_current_in_existing
-    
-    def fuse_cold_start(self, inputs_temp_interior, centers_temp_interior):
-        # centers_temp_interior = centers_temp.reshape(-1, 3,3,3,3)[:,1,1,1,:]
-        # inputs_temp_interior = inputs_temp.reshape(-1, 3, 3, 3, self.n_max_points_input, 4)[:, 1,1,1, :, :]
-        # print(f'inputs_temp_centers.shape = {inputs_temp_interior.shape}')        
-        occupied_mask = inputs_temp_interior[..., 3].sum(dim = -1) > 10
-        
-        vol_bounds, centers_temp = st_utils.compute_vol_bound(centers_temp_interior, self.query_crop_size, self.input_crop_size, padding = True)
-        n_x, n_y, n_z = vol_bounds['axis_n_crop']
-
-        occupied_inputs_interior = inputs_temp_interior[occupied_mask]
-        occupied_centers_interior = centers_temp_interior[occupied_mask]
-        
-        # import open3d as o3d
-        # pcd = o3d.geometry.PointCloud()
-        # points = occupied_inputs_interior[..., :3].detach().cpu().numpy()
-        # occ = occupied_inputs_interior[..., 3].detach().cpu().numpy()
-        # pcd.points = o3d.utility.Vector3dVector(points[occ == 1].reshape(-1, 3))
-
-        # o3d.visualization.draw_geometries([pcd])
-        
-        latents = self.encode_distributed(occupied_inputs_interior, occupied_centers_interior)
-        
-        expanded_shape = (vol_bounds['n_crop'],) + self.empty_latent_code.shape #padded 
-        
-        grid_latents_frame = self.empty_latent_code.unsqueeze(0)
-        grid_latents_frame = grid_latents_frame.expand(expanded_shape)
-        grid_latents_frame = grid_latents_frame.reshape(n_x, n_y, n_z, *self.empty_latent_code.shape).clone()
-        
-        occupied_mask_padded = torch.zeros((n_x, n_y, n_z), dtype = torch.bool).to(self.device)
-        occupied_mask_padded[1:-1, 1:-1, 1:-1] = occupied_mask.reshape(n_x-2, n_y-2, n_z-2)
-        # occupied_mask_padded = occupied_mask_padded.reshape(-1)
-        grid_latents_frame[occupied_mask_padded] = latents.clone()
-        
-        # grid_inputs_frame = torch.zeros((n_x, n_y, n_z, self.n_max_points_input, 4)).to(self.device)
-        # grid_inputs_frame[occupied_mask_padded] = occupied_inputs_interior
-        
-        lb = vol_bounds['lb']
-        
-        shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
-        centers_temp_shifted = st_utils.centers_to_grid_indexes(centers_temp_interior.clone(), lb, self.query_crop_size).int() #.reshape(*centers_temp_interior.shape)
-        centers_temp_shifted = centers_temp_shifted.unsqueeze(1) + shifts.unsqueeze(0)
-        
-        # centers_temp_shifted = centers_temp_shifted.reshape(*centers_temp.shape).int()
-        # return centers_temp_shifted, grid_latents_frame
-        latent_temp = grid_latents_frame[centers_temp_shifted[..., 0], centers_temp_shifted[..., 1], centers_temp_shifted[..., 2]]
-        # inputs_temp = grid_inputs_frame[centers_temp_shifted[..., 0], centers_temp_shifted[..., 1], centers_temp_shifted[..., 2]]
-        c, h, w, d = self.empty_latent_code.shape
-
-        latent_map_stacked_temp = latent_temp.reshape(len(centers_temp_interior), c, 3 * h, 3 * w, 3 * d)
-        latent_map_stacked = torch.cat((latent_map_stacked_temp, latent_map_stacked_temp), dim = 1)
-        latent_map_stacked_merged = self.merge_latent_map(latent_map_stacked)
-
-        # inputs_map_stacked = inputs_temp.reshape(len(centers_temp_interior), 27*self.n_max_points_input, 4)
-        
-        # return latent_map_stacked, inputs_map_stacked
-        return latent_map_stacked_merged, latent_map_stacked_temp
-
-    def fill_inputs_centers(self, inputs_distributed_neighboured, centers_frame):
-        shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
-
-        
-        vol_bounds_p, centers_grid_padded = st_utils.compute_vol_bound(centers_frame, self.query_crop_size, self.input_crop_size, padding = True)
-        n_x_p, n_y_p, n_z_p = vol_bounds_p['axis_n_crop']
-        n_x, n_y, n_z = n_x_p - 2, n_y_p - 2, n_z_p - 2
-        zeroed_padded_inputs = torch.zeros(n_x_p, n_y_p, n_z_p, self.n_max_points_input, 4).to(self.device)
-        zeroed_padded_inputs[1:-1, 1:-1, 1:-1] = inputs_distributed_neighboured.reshape(n_x, n_y, n_z, self.n_max_points_input, 4)
+    def train_batch(self, centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full):
+        self.model.train()
+        self.model_merge.train()
                 
-        centers_grid_padded = centers_grid_padded.reshape(n_x_p, n_y_p, n_z_p, 3)
+        n_batch = len(centers_idx_full) // self.n_voxels_max
+        idx_start = 0
+        iter_batch = 0
+        loss_full = 0
+        
+        c, h, w, d = self.empty_latent_code.shape
 
-        lb = vol_bounds_p['lb'] #+ torch.Tensor([self.query_crop_size, self.query_crop_size, self.query_crop_size]).to(self.device)
-        centers_grid_shifted = st_utils.centers_to_grid_indexes(centers_frame, lb, self.query_crop_size)
-        centers_grid_shifted = centers_grid_shifted.unsqueeze(1) + shifts.unsqueeze(0)
-        centers_grid_shifted = centers_grid_shifted.int()
+        for i in range(n_batch):
+            torch.cuda.empty_cache()
+           
+            self.optimizer.zero_grad()
+            self.empty_latent_code = self.get_empty_latent_representation()
+
+            idx_end = idx_start + self.n_voxels_max
+    
+            # print(f'Process batch {i} out of {n_batch}, starting from {idx_start} to {idx_end}, tot length: {len(centers_idx_full)}')           
+            centers_idx_batch = centers_idx_full[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel in its frame
+
+            grid_shapes_batch = grid_shapes_full[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel in its frame
+            centers_lookup_batch = centers_lookup_full[idx_start:idx_end].to(self.device) # centers lookup corresponding to the voxel in its frame
+            query_points_batch = query_points_full[idx_start:idx_end].to(self.device) # query points corresponding to the voxel          
+            
+            if len(centers_idx_batch) == 0:
+                continue
+            
+            latents_existing = st_utils.get_distributed_voxel(centers_idx_batch, latents_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
+            latents_existing = latents_existing.reshape(-1, c, 3*h, 3*w, 3*d)
+            
+            # compute the latents
+            inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch, inputs_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
+            centers_distributed_batch = st_utils.get_distributed_voxel(centers_idx_batch, centers_coord_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
+
+            centers_coord_batch = centers_distributed_batch.reshape(self.n_voxels_max, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
         
-        return zeroed_padded_inputs, centers_grid_padded, centers_grid_shifted
+            latents_current = self.encode_occupied_inputs_flat(inputs_current_batch, centers_distributed_batch)
+            latents_current = latents_current.reshape(-1, c, 3*h, 3*w, 3*d)
+
+            stacked_latents = torch.cat((latents_current, latents_existing), dim = 1)
         
-    def cube_distribution(self, source_tensor, centers_grid_shifted):
-        return source_tensor[centers_grid_shifted[..., 0], centers_grid_shifted[..., 1], centers_grid_shifted[..., 2]]
+            merged_latents = self.merge_latent_map(stacked_latents)
+            
+            # compute logits : latents
+            p_stacked = query_points_batch.reshape(-1, self.n_max_points_query, 4)
+            centers = centers_coord_batch.reshape(-1, 3)
+            occ = query_points_batch[..., 3]
+
+            # return p_stacked, occ, merged_latents, centers
+            logits_sampled = self.get_logits(p_stacked, merged_latents, centers)
+            
+            # compare logits with query 
+            loss_batch = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            inputs_current_batch_vis = inputs_current_batch.reshape(self.n_voxels_max, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
+            
+            loss_batch = loss_batch.sum(dim=-1).mean()
+            loss_batch.backward()
+            
+            st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
+            st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+            torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
+            self.optimizer.step()
+            
+            self.iteration += 1
+            iter_batch += 1
+            
+            if self.log_experiment: self.experiment.log_metric('loss', loss_batch.item(), step = self.iteration)
+            # print(f'iteration: {self.iteration}, loss: {loss_batch:.2f}')
+            
+            loss_full += loss_batch
+            
+            idx_start = idx_end
+            
+            centers_idx_batch = centers_idx_batch.to(torch.device('cpu')) # centers indices corresponding to the voxel in its frame
+
+            grid_shapes_batch = grid_shapes_batch.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
+            centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
+            query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel          
+            
+
+        return loss_full / iter_batch
+            
     
     def get_logits(self, p_stacked, latents, centers):
     
@@ -565,7 +616,14 @@ class SequentialTrainerShuffled(BaseTrainer):
 
         return empty_latent_code.squeeze(0)
     
-    def encode_distributed(self, inputs, centers):
+    def encode_distributed(self, inputs_raw, centers_raw):
+        
+        if len(inputs_raw.shape) != 3 or len(centers_raw.shape) != 2: #n_batch, n_points, 4
+            inputs = inputs_raw.reshape(-1, self.n_max_points_input, 4)
+            centers = centers_raw.reshape(-1, 3)
+        else:
+            inputs = inputs_raw
+            centers = centers_raw
         
         vol_bound = st_utils.get_grid_from_centers(centers, self.input_crop_size)
 
@@ -608,14 +666,16 @@ class SequentialTrainerShuffled(BaseTrainer):
                 latent_map = torch.cat((latent_map, latent_map_batch), dim=0)  # Concatenate latent maps
                 
         latent_map_shape = latent_map.shape
-        return latent_map.reshape(n_crop, *latent_map_shape[1:])
+        latent_map = latent_map.reshape(n_crop, *latent_map_shape[1:])
+            
+        return latent_map
 
-    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0, return_empty = False, isquery = False):
+    def get_distributed_inputs(self, distributed_inputs_raw, n_max = 2048, occ_perc = 1.0, return_empty = False, isquery = False, padding = False):
         # Clone the input tensor
         distributed_inputs = distributed_inputs_raw.clone()
         
-        vol_bound, centers = st_utils.compute_vol_bound(distributed_inputs[:, :3].reshape(-1, 3), self.query_crop_size, self.input_crop_size)
-        
+        vol_bound, centers = st_utils.compute_vol_bound(distributed_inputs[:, :3].reshape(-1, 3), self.query_crop_size, self.input_crop_size, padding = padding)
+
         n_crops = vol_bound['n_crop']
         
         distributed_inputs = distributed_inputs.repeat(n_crops, 1, 1)
@@ -685,6 +745,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 
             inputs_frame_occupied = distributed_inputs_short
             centers_frame_occupied = centers
+        
 
         else:
             if return_empty:
@@ -694,5 +755,6 @@ class SequentialTrainerShuffled(BaseTrainer):
             else:
                 inputs_frame_occupied = distributed_inputs_short[voxels_occupied]
                 centers_frame_occupied = centers[voxels_occupied]
+    
             
-        return inputs_frame_occupied, centers_frame_occupied, vol_bound['axis_n_crop']
+        return inputs_frame_occupied, centers_frame_occupied, vol_bound

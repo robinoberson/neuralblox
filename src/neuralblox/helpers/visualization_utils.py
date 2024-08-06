@@ -65,8 +65,8 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     if not(force_viz or config['visualization']):
         return    
     
-    if weights is not None:
-        visualize_weights(weights, p_query, inputs_distributed)
+    # if weights is not None:
+    #     visualize_weights(weights, p_query, inputs_distributed)
     
     p_stacked = p_query[..., :3]
     

@@ -194,6 +194,8 @@ while True:
             checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
             checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
         print(f'epoch: {epoch_it}, it: {it}, loss: {loss}')
+        
     # for batch in val_loader:
-    #     loss = trainer.validate_sequence(batch)
+    #     with torch.no_grad():
+    #         loss = trainer.validate_sequence(batch)
     

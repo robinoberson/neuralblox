@@ -6,7 +6,7 @@ from src.utils import libmcubes
 from src.common import normalize_coord, add_key, coord2index
 import src.neuralblox.helpers.visualization_utils as vis_utils
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
-
+from src.neuralblox.helpers.voxel_grid import VoxelGrid
 import time
 
 
@@ -73,40 +73,44 @@ class Generator3DSequential(object):
         self.reso = vol_bound['reso']
         self.factor = 2**unet_depth
         self.hdim = unet_hdim
+        self.voxel_grid = VoxelGrid()
         
-    def generate_sequence(self, batch):
+    def generate_sequence(self, batch, idx_batch):
         self.trainer.model.eval()
         self.trainer.model_merge.eval()
+        self.voxel_grid.reset()
         
         p_in, _ = st_utils.get_inputs_from_scene(batch, self.device)
-        n_sequence = p_in.shape[0]
+        n_sequence = p_in.shape[1]
         mesh_list = []
         inputs_frame_list = []
         
         for idx_sequence in range(n_sequence):        
-            inputs_frame = p_in[idx_sequence]
+            inputs_frame = p_in[idx_batch][idx_sequence]
             inputs_frame_list.append(inputs_frame)
             
             if idx_sequence == 0:
-                self.trainer.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
-                print(f'Voxel grid is empty, start with cold start')
+                merged_latents, centers_frame, inputs_frame = self.fuse_cold_start(inputs_frame)
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
+                merged_latents, centers_frame, inputs_frame = self.fuse(inputs_frame)
                 # print(f'Perform latent fusion')
-            stacked_latents, centers = self.stack_latents_all()
+                
+            for merged_latent, center, inputs_frame in zip(merged_latents, centers_frame, inputs_frame):
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True)
+                
+            stacked_latents, centers, pcds = self.stack_latents_all()
             mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
             mesh_list.append(mesh)
             
         return mesh_list, inputs_frame_list
     
-    def generate_mesh_at_index(self, batch, index, batch_idx, generate_mesh = False, generate_logits = False, memory_keep = False):
+    def generate_mesh_at_index(self, batch, index, idx_batch, generate_mesh = False, generate_logits = False, memory_keep = False):
         self.trainer.model.eval()
         self.trainer.model_merge.eval()
         
         p_in_full, p_query_full = st_utils.get_inputs_from_scene(batch, self.device)
-        p_in = p_in_full[batch_idx]
-        p_query = p_query_full[batch_idx]
+        p_in = p_in_full[idx_batch]
+        p_query = p_query_full[idx_batch]
         
         n_sequence = p_in.shape[0]
         mesh_list = []
@@ -130,22 +134,32 @@ class Generator3DSequential(object):
             inputs_frame_list.append(inputs_frame)
             
             if idx_sequence == 0:
-                self.trainer.voxel_grid.reset()
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_cold_start(inputs_frame, encode_empty = False)
-                print(f'Voxel grid is empty, start with cold start')
+                merged_latents, centers_frame, inputs_frame = self.fuse_cold_start(inputs_frame)
             else:
-                latent_map_stacked_merged, centers_frame_occupied, inputs_frame_distributed = self.trainer.fuse_inputs(inputs_frame, encode_empty = False, is_precomputing=True)
-                print(f'Perform latent fusion')
+                merged_latents, centers_frame, inputs_frame = self.fuse(inputs_frame)
             
             times.append(time.time() - t0)
             
+            for merged_latent, center, inputs_frame in zip(merged_latents, centers_frame, inputs_frame):
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True)
+                
             if generate_logits:
-                p_query_distributed, centers_query = self.trainer.get_distributed_inputs(p_query[idx_sequence], self.trainer.n_max_points_query, self.trainer.occ_per_query, isquery = True)
-                p_stacked, latents, centers, occ, mask_frame = self.trainer.prepare_data_logits(latent_map_stacked_merged, centers_frame_occupied, p_query_distributed, centers_query)
-                logits_sampled = self.trainer.get_logits(p_stacked, latents, centers)
-                logits.append([logits_sampled, p_stacked, inputs_frame_distributed[mask_frame]])
+                query_frame_distributed_padded, centers_frame_query, vol_bound_frame_query = self.trainer.get_distributed_inputs(p_query[idx_sequence], self.trainer.n_max_points_query, self.trainer.occ_per_query, return_empty = True, isquery = True, padding = True)
+        
+                query_mask = st_utils.compute_mask_occupied(centers_frame_query, centers_frame)
+                centers_frame_query = centers_frame_query[query_mask].reshape(-1, 3)
+                query_frame_distributed = query_frame_distributed_padded[query_mask].reshape(-1, self.trainer.n_max_points_query, 4)
 
-            stacked_latents, centers = self.stack_latents_all()
+                print(f'Are centers the same? {torch.equal(centers_frame, centers_frame_query)}')
+                
+                p_stacked = query_frame_distributed.reshape(-1, self.trainer.n_max_points_query, 4)
+                centers = centers_frame_query.reshape(-1, 3)
+                occ = query_frame_distributed[..., 3]
+            
+                logits_sampled = self.trainer.get_logits(p_stacked, merged_latents, centers)
+                logits.append([logits_sampled, p_stacked, inputs_frame])
+
+            stacked_latents, centers, pcds = self.stack_latents_all()
             if generate_mesh or idx_sequence == index:
                 
                 mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
@@ -168,7 +182,7 @@ class Generator3DSequential(object):
             for y in range(y_limit[0], y_limit[1]):
                 for z in range(z_limit[0], z_limit[1]):
                     center = (x, y, z)
-                    latent = self.trainer.voxel_grid.get_latent(center)
+                    latent = self.voxel_grid.get_latent(center)
                     
                     if latent is not None:
                         if stacked_latents is None:
@@ -182,8 +196,9 @@ class Generator3DSequential(object):
     
     def stack_latents_all(self):
         stacked_latents = None
-        centers_list = list(self.trainer.voxel_grid.centers_table.values())
+        centers_list = list(self.voxel_grid.centers_table.values())
         centers = None
+        pcds = []
         for center in centers_list:
             if centers is None:
                 centers = center.unsqueeze(0)
@@ -191,7 +206,9 @@ class Generator3DSequential(object):
                 centers = torch.cat((centers, center.unsqueeze(0)), 0)
         
         for center in centers:
-            latent = self.trainer.voxel_grid.get_latent(center).unsqueeze(0)
+            latent = self.voxel_grid.get_latent(center).unsqueeze(0)
+            pcd = self.voxel_grid.get_pcd(center)
+            pcds.append(pcd)
             
             if latent is not None:
                 if stacked_latents is None:
@@ -199,13 +216,13 @@ class Generator3DSequential(object):
                 else:
                     stacked_latents = torch.cat((stacked_latents, latent), 0)
                     
-        return stacked_latents, centers
+        return stacked_latents, centers, pcds
         
 
     def get_inputs_map(self, centers):
         inputs_distributed = None
         for center in centers:
-            inputs = self.trainer.voxel_grid.get_points(center)
+            inputs = self.voxel_grid.get_points(center)
             if inputs is not None:
                 if inputs_distributed is None:
                     inputs_distributed = inputs.unsqueeze(0)
@@ -352,3 +369,63 @@ class Generator3DSequential(object):
         mesh = trimesh.Trimesh(vertices/scaling_factor - shift_vector, triangles, vertex_normals=None, process=False)
 
         return mesh, pp_full
+    
+    def fuse_cold_start(self, inputs_frame_raw):
+        inputs_frame_padded, centers_frame_padded, vol_bound_frame_padded = self.trainer.get_distributed_inputs(inputs_frame_raw, self.trainer.n_max_points_input, 1.0, return_empty = True, isquery = False, padding = True)
+        n_x, n_y, n_z = vol_bound_frame_padded['axis_n_crop'] #padded
+
+        centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
+        inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.trainer.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.trainer.n_max_points_input, 4)
+
+        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded) #contains padded empty latents
+        centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
+        grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
+
+        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bound_frame_padded['lb'], self.trainer.query_crop_size).int().reshape(-1, 3)
+
+        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.trainer.shifts)
+        c, h, w, d = self.trainer.empty_latent_code.shape
+
+        distributed_latents = distributed_latents.reshape(-1, c, 3*h, 3*w, 3*d)
+        stacked_frame = torch.cat((distributed_latents, distributed_latents), dim = 1)
+        merged_latents = self.trainer.merge_latent_map(stacked_frame)
+        
+        return merged_latents, centers_frame, inputs_frame
+    
+    def fuse(self, inputs_frame_raw):
+        inputs_frame_padded, centers_frame_padded, vol_bound_frame_padded = self.trainer.get_distributed_inputs(inputs_frame_raw, self.trainer.n_max_points_input, 1.0, return_empty = True, isquery = False, padding = True)
+        n_x, n_y, n_z = vol_bound_frame_padded['axis_n_crop'] #padded
+
+        centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
+        inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.trainer.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.trainer.n_max_points_input, 4)
+
+        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded) #contains padded empty latents
+        centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
+        grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
+
+        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bound_frame_padded['lb'], self.trainer.query_crop_size).int().reshape(-1, 3)
+
+        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.trainer.shifts)
+        c, h, w, d = self.trainer.empty_latent_code.shape
+        distributed_latents = distributed_latents.reshape(-1, c, 3*h, 3*w, 3*d)
+        
+        ### retrieve existing latents 
+        grid_latents_frame_existing = grid_latents_frame_current.clone()
+        grid_latents_frame_existing = grid_latents_frame_existing.reshape(n_x, n_y, n_z, *self.trainer.empty_latent_code.shape)
+        
+        existing_latent = 0
+        for center_idx, center_coords in zip(centers_frame_idx, centers_frame):
+            merged_latent = self.voxel_grid.get_latent(center_coords)
+            if merged_latent is not None:
+                grid_latents_frame_existing[center_idx[0], center_idx[1], center_idx[2]] = merged_latent
+            existing_latent += 1
+        
+        grid_latents_frame_existing = grid_latents_frame_existing.reshape(-1, c, h, w, d)
+        distributed_latents_existing = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_existing, grid_shapes, centers_lookup, self.trainer.shifts)
+        distributed_latents_existing = distributed_latents_existing.reshape(-1, c, 3*h, 3*w, 3*d)
+        
+        stacked_frame = torch.cat((distributed_latents, distributed_latents_existing), dim = 1)
+        merged_latents = self.trainer.merge_latent_map(stacked_frame)
+        print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
+        
+        return merged_latents, centers_frame, inputs_frame

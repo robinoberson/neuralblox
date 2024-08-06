@@ -228,7 +228,7 @@ def get_generator_sequential(cfg, device):
         return None
     
     optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
-    trainer = config_training.get_trainer_sequential(model, model_merging, optimizer, cfg, device=device)
+    trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer, cfg, device=device)
     
     generator = generation_fusion_sequential.Generator3DSequential(
             model,

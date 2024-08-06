@@ -91,7 +91,7 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     shifted_indices = base_indices.unsqueeze(1) + (shift_dx.unsqueeze(0) * grid_shapes[:, 1].unsqueeze(1) + shift_dy.unsqueeze(0)) * grid_shapes[:, 2].unsqueeze(1) + shift_dz.unsqueeze(0)
 
     # Fetch the shifted values
-    shifted_values = grids[shifted_indices]
+    shifted_values = grids[shifted_indices.to(grids.device)]
 
     return shifted_values
 def get_inputs_from_scene(batch, device):
