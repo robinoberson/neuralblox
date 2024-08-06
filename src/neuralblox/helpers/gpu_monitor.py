@@ -1,28 +1,22 @@
 import time
-from pynvml import nvmlInit, nvmlShutdown, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
+import GPUtil
 
 class GPUMonitor:
     def __init__(self, gpu_index=0):
         self.gpu_index = gpu_index
         self.memory_usages = []
-        nvmlInit()
-        self.handle = nvmlDeviceGetHandleByIndex(gpu_index)
 
     def update_memory_usage(self):
-        info = nvmlDeviceGetMemoryInfo(self.handle)
-        self.memory_usages.append(info.used / (1024 ** 2))  # Convert to MB
-        
-    def reset(self):
-        self.memory_usages = []
+        gpus = GPUtil.getGPUs()
+        if gpus and len(gpus) > self.gpu_index:
+            gpu = gpus[self.gpu_index]
+            self.memory_usages.append(gpu.memoryUsed)
 
     def get_max_memory_usage(self):
         return max(self.memory_usages) if self.memory_usages else 0
 
     def get_avg_memory_usage(self):
         return sum(self.memory_usages) / len(self.memory_usages) if self.memory_usages else 0
-
-    def shutdown(self):
-        nvmlShutdown()
 
 def monitor_gpu_usage(gpu_monitor, duration=10, interval=1):
     start_time = time.time()
@@ -31,7 +25,6 @@ def monitor_gpu_usage(gpu_monitor, duration=10, interval=1):
         time.sleep(interval)
     max_memory_usage = gpu_monitor.get_max_memory_usage()
     avg_memory_usage = gpu_monitor.get_avg_memory_usage()
-    gpu_monitor.shutdown()
     return max_memory_usage, avg_memory_usage
 
 if __name__ == "__main__":
