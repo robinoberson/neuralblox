@@ -140,9 +140,11 @@ class Generator3DSequential(object):
             
             times.append(time.time() - t0)
             
-            for merged_latent, center, inputs_frame in zip(merged_latents, centers_frame, inputs_frame):
-                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True)
-                
+            for merged_latent, center, inputs_frame_lat in zip(merged_latents, centers_frame, inputs_frame):
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame_lat, overwrite=True)
+            
+            occupied_voxels = inputs_frame[..., 3].sum(dim = -1) > 10
+
             if generate_logits:
                 query_frame_distributed_padded, centers_frame_query, vol_bound_frame_query = self.trainer.get_distributed_inputs(p_query[idx_sequence], self.trainer.n_max_points_query, self.trainer.occ_per_query, return_empty = True, isquery = True, padding = True)
         
@@ -152,17 +154,17 @@ class Generator3DSequential(object):
 
                 # print(f'Are centers the same? {torch.equal(centers_frame, centers_frame_query)}')
                 
-                p_stacked = query_frame_distributed.reshape(-1, self.trainer.n_max_points_query, 4)
-                centers = centers_frame_query.reshape(-1, 3)
+                p_stacked = query_frame_distributed
+                centers = centers_frame_query
                 occ = query_frame_distributed[..., 3]
             
                 logits_sampled = self.trainer.get_logits(p_stacked, merged_latents, centers)
-                logits.append([logits_sampled, p_stacked, inputs_frame])
+                logits.append([logits_sampled[occupied_voxels], p_stacked[occupied_voxels], inputs_frame[occupied_voxels], centers[occupied_voxels]])
 
             stacked_latents, centers, pcds = self.stack_latents_all()
             if generate_mesh or idx_sequence == index:
                 
-                mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
+                mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers[occupied_voxels], crop_size = self.trainer.query_crop_size, return_stats=False)
                 mesh_list.append(mesh)
             
             times.append(time.time() - t0)
