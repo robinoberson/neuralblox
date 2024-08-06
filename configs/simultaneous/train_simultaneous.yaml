@@ -16,8 +16,8 @@ data:
   input_vol: 1.0
   query_vol: 1.0
   transform:
-    angle_x: 5
-    angle_y: 180
+    angle_x: 0
+    angle_y: 0
     angle_z: 0
 model:
   local_coord: True

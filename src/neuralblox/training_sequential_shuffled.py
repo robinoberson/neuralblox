@@ -219,10 +219,6 @@ class SequentialTrainerShuffled(BaseTrainer):
                 for frame_idx in range(n_frames):
                     torch.cuda.empty_cache()
 
-                    n_voxels_frame = n_voxels[scene_idx, frame_idx]
-
-                    idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
-                    # print(f'idx_start = {idx_start}, idx_end = {idx_end}')
                     centers_frame_padded = centers_scene_list[scene_idx][frame_idx]
                     inputs_frame_padded = inputs_scene_distributed_list[scene_idx][frame_idx]
                     query_frame_padded = query_scene_distributed_list[scene_idx][frame_idx].reshape(-1, self.n_max_points_query, 4)
@@ -245,24 +241,24 @@ class SequentialTrainerShuffled(BaseTrainer):
                     prev_centers_frame_idx = centers_frame_idx.clone()
                     prev_inputs_frame_padded = inputs_frame_padded.clone()
                     
-                    if n_voxels_frame != centers_frame_idx.shape[0]:
-                        print(f'WARNING: n_voxels_frame != centers_frame_padded.shape[0], n_voxels_frame = {n_voxels_frame}, centers_frame_idx.shape[0] = {centers_frame_idx.shape[0]}')
-                        # happens when some inputs do not have query points 
-                        # TODO: check why this happens + handle the case properly
-                    else:
-                        if save_mask[scene_idx, frame_idx]:
+                    n_voxels_frame = centers_frame_idx.shape[0]
+                    
+                    idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
 
-                            centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
-                            query_points_full[idx_start:idx_end] = query_frame_padded.clone()
 
-                            grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
-                            centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
-                            
-                            latents_full[idx_start:idx_end] = merged_latents_padded.clone()
-                            inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
-                            centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+                    if save_mask[scene_idx, frame_idx]: #Decide if we drop the frame to get more diverse data
 
-                            idx_start = idx_end
+                        centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
+                        query_points_full[idx_start:idx_end] = query_frame_padded.clone()
+
+                        grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
+                        centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
+                        
+                        latents_full[idx_start:idx_end] = merged_latents_padded.clone()
+                        inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
+                        centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
+
+                        idx_start = idx_end
             
             # Create a mask for occupied inputs
             mask_occupied = inputs_full[..., 3].sum(dim=-1) > 10
@@ -749,7 +745,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
-        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 25 #TODO move this to config
+        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > 10 #TODO move this to config
 
         if isquery:
             for i in range(distributed_inputs.shape[0]):

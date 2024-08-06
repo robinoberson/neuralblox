@@ -150,7 +150,7 @@ while True:
         for key in batch:
             batch[key] = batch[key].squeeze(0)
             
-        it += 1
+        it = trainer.iteration
     
         loss = trainer.train_sequence(batch)
         
@@ -162,21 +162,7 @@ while True:
                 print("Learning rate changed to:", current_lr)
                 prev_lr = current_lr
                 if log_comet:
-                    experiment.log_metric("learning_rate", current_lr, step=it)
-                    
-        # if log_comet: 
-        #     experiment.log_metric('train_loss', loss, step=it)
-        
-        # Print output
-        if print_every > 0 and (it % print_every) == 0:
-            t = datetime.datetime.now()
-            print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
-                    % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
-            
-            if log_comet: 
-                for param_group in optimizer.param_groups:
-                    lr = param_group['lr']
-                    experiment.log_metric("learning_rate", lr, step=it)
+                    experiment.log_metric("learning_rate", current_lr, step=it)   
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):
