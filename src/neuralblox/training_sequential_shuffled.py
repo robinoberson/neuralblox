@@ -129,7 +129,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             prob = 1/3
             save_mask = torch.rand(n_scenes, n_frames, device=self.device) < prob         
                
-            # print(f'first pass through data')
+            print(f'first pass through data')
             for scene_idx in range(n_scenes):
                 inputs_frame_distributed_padded_list = []
                 query_frame_distributed_padded_list = []
