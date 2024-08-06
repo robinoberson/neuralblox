@@ -164,7 +164,7 @@ class Generator3DSequential(object):
             stacked_latents, centers, pcds = self.stack_latents_all()
             if generate_mesh or idx_sequence == index:
                 
-                mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers[occupied_voxels], crop_size = self.trainer.query_crop_size, return_stats=False)
+                mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
                 mesh_list.append(mesh)
             
             times.append(time.time() - t0)
@@ -428,6 +428,6 @@ class Generator3DSequential(object):
         
         stacked_frame = torch.cat((distributed_latents, distributed_latents_existing), dim = 1)
         merged_latents = self.trainer.merge_latent_map(stacked_frame)
-        print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
+        # print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
         
         return merged_latents, centers_frame, inputs_frame

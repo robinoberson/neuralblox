@@ -27,14 +27,14 @@ class VoxelGrid:
             
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
-    def add_voxel_wi(self, center, latent, inputs, overwrite=False, threshold=100):
+    def add_voxel_wi(self, center, latent, inputs, overwrite=False, threshold=20):
         h = self.compute_hash(center)
         list_keys = list(self.centers_table.keys())
         n_occ_inputs = inputs[..., 3].sum()
         # if n_occ_inputs < threshold and overwrite:
             # print(f'Not enough points in the occ input, skipping {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
-        if overwrite or h not in list(self.centers_table.keys()) and n_occ_inputs > threshold:
-            print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
+        if (h not in list(self.centers_table.keys()) and n_occ_inputs > threshold) or (overwrite and h in list(self.centers_table.keys()) and n_occ_inputs > 4 * threshold):
+            # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
             self.centers_table[h] = center
             self.latents_table[h] = latent
             

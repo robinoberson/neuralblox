@@ -246,3 +246,57 @@ def visu_debug_2(self):
         pcd_current_i.paint_uniform_color([0, 1, 1]) #purple
         
     o3d.visualization.draw_geometries([pcd_existing, pcd_current, pcd_existing_2, pcd_current_2, pcd_existing_i, pcd_current_i])       
+    
+
+def visualize_mesh_and_points(inputs_frame_list, mesh_list, points_perc = 1.0):
+    """
+    Visualize a 3D mesh and a point cloud.
+
+    Parameters:
+    - inputs_frame (torch.Tensor): The input frame tensor of shape (N, M).
+    - mesh (object): The mesh object containing vertices and faces.
+    - point_threshold (int): The threshold value for points to be included.
+    - point_interval (int): Interval for selecting points.
+
+    Returns:
+    None
+    """
+    points_full = None
+    for i in range(len(inputs_frame_list)):
+        if points_full is None:
+            points_full = inputs_frame_list[i].detach().cpu().numpy().reshape(-1, 4)
+        else:
+            points_full = np.concatenate([points_full, inputs_frame_list[i].detach().cpu().numpy().reshape(-1, 4)])
+            
+    inputs_frame = inputs_frame_list[-1]
+    mesh = mesh_list[-1]
+
+    # Extract points where the last dimension is equal to the threshold value
+    points_unt = inputs_frame.detach().cpu().numpy()
+    points = points_unt[points_unt[:, -1] == 1, :3]
+    
+    # Select percentage of points
+    random_indices = np.random.choice(points_full.shape[0], int(points_full.shape[0] * points_perc), replace=False)
+    points_full = points_full[random_indices]
+    points_full = points_full[points_full[:, -1] == 1, :3]
+
+    # Create the mesh for visualization
+    mesho3d = o3d.geometry.TriangleMesh()
+    mesho3d.vertices = o3d.utility.Vector3dVector(mesh.vertices)
+    mesho3d.triangles = o3d.utility.Vector3iVector(mesh.faces)
+    mesho3d.compute_vertex_normals()
+
+    # Create a coordinate frame for reference
+    base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+
+    # Create a point cloud for the selected points
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points + np.array([0, 0.05, 0.0]))
+    pcd.paint_uniform_color(np.random.rand(3))
+    
+    pcd_full = o3d.geometry.PointCloud()
+    pcd_full.points = o3d.utility.Vector3dVector(points_full + np.array([0, 0.05, 0.0]))
+    pcd_full.paint_uniform_color(np.random.rand(3))
+
+    # Visualize the mesh, point cloud, and coordinate frame
+    o3d.visualization.draw_geometries([mesho3d, pcd, base_axis, pcd_full])
