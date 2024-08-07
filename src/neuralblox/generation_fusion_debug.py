@@ -24,10 +24,13 @@ inputs = torch.cat((inputs, occ), 2)
 latents = torch.randn(4, 128, 6, 6, 6)
 
 pcd = o3d.geometry.PointCloud()
+print(f'init pcd')
 points = inputs[..., :3].reshape(-1, 3)
 pcd.points = o3d.utility.Vector3dVector(points.cpu().detach().numpy())
+print(f'pcd points: {pcd.points}')
 pcd.paint_uniform_color([0.5, 0.5, 0.5])
-o3d.visualization.draw_geometries([pcd])
+print(f'pcd colors: {pcd.colors}')
+# o3d.visualization.draw_geometries([pcd])
 
 for i in range(4):
     center = centers[i]
