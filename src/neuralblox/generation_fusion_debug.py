@@ -11,6 +11,7 @@ import src.neuralblox.helpers.visualization_utils as vis_utils
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
 from src.neuralblox.helpers.voxel_grid import VoxelGrid
 import time
+import open3d as o3d
 
 
 voxel_grid = VoxelGrid()
@@ -21,6 +22,12 @@ occ = torch.ones(4, 1000, 1)
 
 inputs = torch.cat((inputs, occ), 2)
 latents = torch.randn(4, 128, 6, 6, 6)
+
+pcd = o3d.geometry.PointCloud()
+points = inputs[..., :3].reshape(-1, 3)
+pcd.points = o3d.utility.Vector3dVector(points.cpu().detach().numpy())
+pcd.paint_uniform_color([0.5, 0.5, 0.5])
+o3d.visualization.draw_geometries([pcd])
 
 for i in range(4):
     center = centers[i]
