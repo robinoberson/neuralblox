@@ -2,6 +2,9 @@ import torch
 import numpy as np
 from tqdm import trange
 import trimesh
+import sys
+import os
+sys.path.append(os.getcwd())
 from src.utils import libmcubes
 from src.common import normalize_coord, add_key, coord2index
 import src.neuralblox.helpers.visualization_utils as vis_utils
