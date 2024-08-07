@@ -19,8 +19,8 @@ training:
   lr: 0.001
   batch_group_size: 12
 generation:
-  generation_dir_models: /scratch/roberson/neuralblox/out_simultaneous/models
-  generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
+  generation_dir_models: /cluster/scratch/roberson/neuralblox/out_simultaneous/models
+  generation_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/meshes
   model_backbone_file: model_backbone.pt
   model_merging_file: model_merging.pt
   resolution_0: 50
