@@ -69,7 +69,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     else:
         return model
 
-def get_trainer_sequential_shuffled(model, model_merge, optimizer, cfg, device, **kwargs):
+def get_trainer_sequential_shuffled(model, model_merge, optimizer_backbone, optimizer_merging, cfg, device, **kwargs):
     ''' Returns the trainer object.
 
     Args:
@@ -96,7 +96,7 @@ def get_trainer_sequential_shuffled(model, model_merge, optimizer, cfg, device, 
     
     
     trainer = training_sequential_shuffled.SequentialTrainerShuffled(
-        model, model_merge, optimizer, 
+        model, model_merge, optimizer_backbone, optimizer_merging,
         cfg = cfg,
         device=device, 
         input_type=input_type,

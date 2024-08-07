@@ -118,8 +118,10 @@ except FileExistsError as e:
     
 load_dict = dict()
     
-optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=learning_rate)
-trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer, cfg, device=device)
+optimizer_backbone = optim.Adam(list(model.parameters()), lr=learning_rate)
+optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rate/10, weight_decay=1e-5)
+
+trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_merging, cfg, device=device)
 
 if log_comet:
     trainer.set_experiment(experiment)
@@ -135,7 +137,8 @@ print('Total number of parameters: %d' % nparameters)
 print('Total number of parameters in merging model: %d' % nparameters_merging)
 
 print('output path: ', cfg['training']['out_dir'])
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
+scheduler_backbone = ReduceLROnPlateau(optimizer_backbone, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
+scheduler_merging = ReduceLROnPlateau(optimizer_merging, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 
 prev_lr = -1
 last_checkpoint_time = time.time()
@@ -157,7 +160,8 @@ while True:
         if log_comet:
             experiment.log_metric("train_loss", loss, step=it)
             
-        scheduler.step(loss)
+        scheduler_backbone.step(loss)
+        scheduler_merging.step(loss)
         
         for param_group in optimizer.param_groups:
             current_lr = param_group['lr']
@@ -178,7 +182,8 @@ while True:
         if (current_time - last_checkpoint_time) >= checkpoint_interval:
             last_checkpoint_time = current_time
 
-            print('Saving checkpoint')
+            print(f'Saving checkpoint, epoch: {epoch_it}, it: {it}')
+            print(f'output path: {cfg["training"]["out_dir"]}')
              
             checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
             checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)

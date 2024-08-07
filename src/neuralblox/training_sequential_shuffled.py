@@ -39,14 +39,14 @@ class SequentialTrainerShuffled(BaseTrainer):
     '''
 
 
-    def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
+    def __init__(self, model, model_merge, optimizer_backbone, optimizer_merge, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
                  vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
                  sigma = 0.8):
         self.model = model
         self.model_merge = model_merge
-        self.optimizer = optimizer
+        self.optimizer_backbone = optimizer_backbone
+        self.optimizer_merge = optimizer_merge
         self.device = device
-        # self.device = torch.device('cpu')
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
         self.vis_dir = vis_dir
@@ -62,7 +62,6 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.voxel_grid = VoxelGrid()
         self.return_flat = return_flat
         self.sigma = sigma
-        # self.voxel_grid.verbose = True
         self.empty_latent_code = self.get_empty_latent_representation()
         self.timing_counter = 0
         self.experiment = None
@@ -496,7 +495,9 @@ class SequentialTrainerShuffled(BaseTrainer):
         for i in range(n_batch):
             torch.cuda.empty_cache()
            
-            self.optimizer.zero_grad()
+            self.optimizer_backbone.zero_grad()
+            self.optimizer_merge.zero_grad()
+
             self.empty_latent_code = self.get_empty_latent_representation()
 
             idx_end = idx_start + self.n_voxels_max
@@ -547,9 +548,11 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
             st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
             torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
-            self.optimizer.step()
+            
+            self.optimizer_backbone.step()
+            self.optimizer_merge.step()
             
             self.iteration += 1
             iter_batch += 1
@@ -566,14 +569,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             grid_shapes_batch = grid_shapes_batch.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
             centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel
-        
-        if self.log_experiment and self.location != 'euler':
-            max_mem = self.GPU_monitor.get_max_memory_usage()
-            avg_mem = self.GPU_monitor.get_avg_memory_usage()
-            self.experiment.log_metric('GPU max', max_mem, step = self.iteration)
-            self.experiment.log_metric('GPU avg', avg_mem, step = self.iteration)
-        
-            self.GPU_monitor.reset()
+
         
         if iter_batch == 0: return loss_full
         else: return loss_full / iter_batch

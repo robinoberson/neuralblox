@@ -38,12 +38,13 @@ class SequentialTrainer(BaseTrainer):
     '''
 
 
-    def __init__(self, model, model_merge, optimizer, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
+    def __init__(self, model, model_merge, optimizer_model, optimizer_merge, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
                  vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
                  sigma = 0.8):
         self.model = model
         self.model_merge = model_merge
-        self.optimizer = optimizer
+        self.optimizer_model = optimizer_model
+        self.optimizer_merge = optimizer_merge
         self.device = device
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
@@ -164,8 +165,13 @@ class SequentialTrainer(BaseTrainer):
                 torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
                
                 self.voxel_grid.detach_latents()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+                
+                self.optimizer_model.step()
+                self.optimizer_merge.step()
+                
+                self.optimizer_model.zero_grad()
+                self.optimizer_merge.zero_grad()
+                
                 self.iteration += 1
             else:
                 results.append([p_stacked.cpu(), latents.cpu(), inputs_frame.cpu(), logits_sampled.cpu(), loss.item()])
