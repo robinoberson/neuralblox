@@ -1,6 +1,7 @@
 import torch
 import copy
 import open3d as o3d
+import numpy as np
 
 class VoxelGrid:
     def __init__(self):
@@ -42,9 +43,9 @@ class VoxelGrid:
             self.latents_table[h] = latent
             
             pcd = o3d.geometry.PointCloud()
-            points = torch.from_numpy(inputs.cpu().detach().numpy())[..., :3]
-            occ = torch.from_numpy(inputs.cpu().detach().numpy())[..., 3]
-            pcd.points = o3d.utility.Vector3dVector(points[occ == 1].cpu().detach().numpy())
+            points = inputs.cpu().detach().numpy().astype(np.float64)[..., :3]
+            occ = inputs.cpu().detach().numpy().astype(np.float64)[..., 3]
+            pcd.points = o3d.utility.Vector3dVector(points[occ == 1])
             pcd.paint_uniform_color([1.0, 0.5, 0.0])
             self.pcd_table[h] = pcd
             
