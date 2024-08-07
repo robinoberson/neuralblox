@@ -91,6 +91,7 @@ def get_trainer_sequential_shuffled(model, model_merge, optimizer_backbone, opti
     n_max_points = cfg['training']['n_max_points']
     n_max_points_query = cfg['training']['n_max_points_query']
     n_voxels_max = cfg['training']['n_voxels_max']
+    n_batch = cfg['training']['n_batch']
     return_flat = cfg['training']['return_flat']
     sigma = cfg['training']['sigma']
     
@@ -110,6 +111,7 @@ def get_trainer_sequential_shuffled(model, model_merge, optimizer_backbone, opti
         query_crop_size = query_crop_size,
         n_voxels_max = n_voxels_max,
         n_max_points = n_max_points,
+        n_batch = n_batch,
         n_max_points_query = n_max_points_query,
         return_flat=return_flat,
         sigma = sigma

@@ -68,6 +68,7 @@ training:
   limited_gpu: true
   save_data_viz: true
   n_voxels_max: 40
+  n_batch: 20
   return_flat: true # if true, cost computed on all voxels, if false, cost computed on some (not all) flat voxels + elevated voxels
   sigma: 0.8 # used for the weighting of the cost, lower sigma -> higher emphasis on points close to inputs
 test:

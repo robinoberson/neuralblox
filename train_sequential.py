@@ -140,7 +140,9 @@ print('output path: ', cfg['training']['out_dir'])
 scheduler_backbone = ReduceLROnPlateau(optimizer_backbone, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 scheduler_merging = ReduceLROnPlateau(optimizer_merging, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 
-prev_lr = -1
+prev_lr_backbone = -1
+prev_lr_merging = -1
+
 last_checkpoint_time = time.time()
 
 while True:
@@ -164,19 +166,20 @@ while True:
         scheduler_merging.step(loss)
         
         for param_group in optimizer_backbone.param_groups:
-            current_lr = param_group['lr']
-            if current_lr != prev_lr:
-                print("Learning rate backbone changed to:", current_lr)
-                prev_lr = current_lr
+            current_lr_backbone = param_group['lr']
+            if current_lr_backbone != prev_lr_backbone:
+                print("Learning rate backbone changed to:", current_lr_backbone)
+                prev_lr_backbone = current_lr_backbone
                 if log_comet:
-                    experiment.log_metric("learning rate backbone", current_lr, step=it)   
+                    experiment.log_metric("learning rate backbone", current_lr_backbone, step=it)   
+        
         for param_group in optimizer_merging.param_groups:
-            current_lr = param_group['lr']
-            if current_lr != prev_lr:
-                print("Learning rate merging changed to:", current_lr)
-                prev_lr = current_lr
+            current_lr_merging = param_group['lr']
+            if current_lr_merging != prev_lr_merging:
+                print("Learning rate merging changed to:", current_lr_merging)
+                prev_lr_merging = current_lr_merging
                 if log_comet:
-                    experiment.log_metric("learning rate merging", current_lr, step=it)
+                    experiment.log_metric("learning rate merging", current_lr_merging, step=it)
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):

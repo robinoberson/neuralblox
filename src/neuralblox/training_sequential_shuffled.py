@@ -40,7 +40,7 @@ class SequentialTrainerShuffled(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer_backbone, optimizer_merge, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
+                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_batch = 40, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
                  sigma = 0.8):
         self.model = model
         self.model_merge = model_merge
@@ -56,6 +56,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.reso = grid_reso
         self.iteration = 0
         self.n_voxels_max = n_voxels_max
+        self.n_batch = n_batch
         self.n_max_points_input = n_max_points
         self.n_max_points_query = n_max_points_query
         self.occ_per_query = occ_per_query
@@ -153,15 +154,15 @@ class SequentialTrainerShuffled(BaseTrainer):
                     frame_mask_sum = frame_mask.sum()
                     query_mask_sum = query_mask.sum()
                     
-                    if frame_mask.sum() != frame_mask.shape[0]:
-                        print(f'PROBLEM: Frame {frame_idx} has {frame_mask.sum()} occupied voxels instead of {frame_mask.shape[0]}')
-                        out_dir = os.path.join(self.cfg['training']['out_dir'], 'debug')
-                        if not os.path.exists(out_dir):
-                            os.mkdir(out_dir)
+                    # if frame_mask.sum() != frame_mask.shape[0]:
+                    #     # print(f'PROBLEM: Frame {frame_idx} has {frame_mask.sum()} occupied voxels instead of {frame_mask.shape[0]}')
+                    #     out_dir = os.path.join(self.cfg['training']['out_dir'], 'debug')
+                    #     if not os.path.exists(out_dir):
+                    #         os.mkdir(out_dir)
                             
-                        torch.save(inputs_frame, os.path.join(out_dir, f'inputs_frame_{self.iteration}_{frame_idx}.pt'))
-                        torch.save(query_frame, os.path.join(out_dir, f'query_frame_{self.iteration}_{frame_idx}.pt'))
-                        torch.save(axis_n_crop, os.path.join(out_dir, f'axis_n_crop_{self.iteration}_{frame_idx}.pt'))
+                    #     torch.save(inputs_frame, os.path.join(out_dir, f'inputs_frame_{self.iteration}_{frame_idx}.pt'))
+                    #     torch.save(query_frame, os.path.join(out_dir, f'query_frame_{self.iteration}_{frame_idx}.pt'))
+                    #     torch.save(axis_n_crop, os.path.join(out_dir, f'axis_n_crop_{self.iteration}_{frame_idx}.pt'))
                         
                     centers_frame = centers_frame[frame_mask].reshape(-1, 3)
                     centers_frame_query = centers_frame_query[query_mask].reshape(-1, 3)
@@ -485,14 +486,14 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.model.train()
         self.model_merge.train()
                 
-        n_batch = len(centers_idx_full) // self.n_voxels_max
+        n_batch_div = len(centers_idx_full) // self.n_batch
         idx_start = 0
         iter_batch = 0
         loss_full = 0
         
         c, h, w, d = self.empty_latent_code.shape
 
-        for i in range(n_batch):
+        for i in range(n_batch_div):
             torch.cuda.empty_cache()
            
             self.optimizer_backbone.zero_grad()
@@ -500,9 +501,9 @@ class SequentialTrainerShuffled(BaseTrainer):
 
             self.empty_latent_code = self.get_empty_latent_representation()
 
-            idx_end = idx_start + self.n_voxels_max
+            idx_end = idx_start + self.n_batch
     
-            # print(f'Process batch {i} out of {n_batch}, starting from {idx_start} to {idx_end}, tot length: {len(centers_idx_full)}')           
+            # print(f'Process batch {i} out of {n_batch_div}, starting from {idx_start} to {idx_end}, tot length: {len(centers_idx_full)}')           
             centers_idx_batch = centers_idx_full[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel in its frame
 
             grid_shapes_batch = grid_shapes_full[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel in its frame
@@ -519,7 +520,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch, inputs_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
             centers_distributed_batch = st_utils.get_distributed_voxel(centers_idx_batch, centers_coord_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
 
-            centers_coord_batch = centers_distributed_batch.reshape(self.n_voxels_max, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
+            centers_coord_batch = centers_distributed_batch.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
         
             latents_current = self.encode_occupied_inputs_flat(inputs_current_batch, centers_distributed_batch)
             latents_current = latents_current.reshape(-1, c, 3*h, 3*w, 3*d)
@@ -538,7 +539,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             # compare logits with query 
             loss_batch = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_voxels_max, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
             vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch.reshape(-1, self.n_max_points_input, 4), force_viz = False)
             
@@ -548,7 +549,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
             st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
             torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
             
             self.optimizer_backbone.step()
