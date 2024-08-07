@@ -11,6 +11,7 @@ import yaml
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
 import torch.multiprocessing as mp
 mp.set_sharing_strategy('file_system')
+import gc
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -145,12 +146,14 @@ last_checkpoint_time = time.time()
 
 while True:
     torch.cuda.empty_cache()
+
     epoch_it += 1
     print(epoch_it)
     
     for batch_group in train_loader:
         it += 1
-        
+        gc.collect()
+
         trainer.precompute_sequence(batch_group)
         
         loss = trainer.train_sequence_window(batch_group)
