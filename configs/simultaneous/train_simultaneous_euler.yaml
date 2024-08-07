@@ -15,7 +15,7 @@ training:
   save_data_viz: true
   log_comet: true
   n_voxels_max: 30
-  n_batch: 50
+  n_batch: 60
   lr: 0.001
   batch_group_size: 12
 test:
