@@ -228,8 +228,8 @@ def get_generator_sequential(cfg, device):
         return None
     
     optimizer_backbone = optim.Adam(list(model.parameters()), lr=cfg['training']['lr'])
-    optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=cfg['training']['lr'])
-    trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer, cfg, device=device)
+    optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=cfg['training']['lr']/10)
+    trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_backbone, cfg, device=device)
     
     generator = generation_fusion_sequential.Generator3DSequential(
             model,
