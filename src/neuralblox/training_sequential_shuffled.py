@@ -70,7 +70,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.shifts = torch.tensor([[x, y, z] for x in [-1, 0, 1] for y in [-1, 0, 1] for z in [-1, 0, 1]]).to(self.device)
         self.cfg = cfg
         self.points_threshold = 20 #TODO move to cfg
-        self.keep_empty_per = 0.3 #TODO move to cfg
+        self.keep_empty_per = 0.7 #TODO move to cfg
 
         self.debug = False
                 
@@ -538,10 +538,20 @@ class SequentialTrainerShuffled(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, merged_latents, centers)
             
             # compare logits with query 
-            loss_batch = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
+
+            loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            loss_batch = loss_batch_unweighted * weights
+
+            loss_batch_unweighted_sum = loss_batch_unweighted.sum()
+            loss_batch_sum = loss_batch.sum()
+            
+            loss_batch = loss_batch * (loss_batch_unweighted_sum / loss_batch_sum)
+            loss_batch_sum = loss_batch.sum()
             # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
-            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch.reshape(-1, self.n_max_points_input, 4), force_viz = False)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch.reshape(-1, self.n_max_points_input, 4), force_viz = False)
             
             loss_batch = loss_batch.sum(dim=-1).mean()
             loss_batch.backward()

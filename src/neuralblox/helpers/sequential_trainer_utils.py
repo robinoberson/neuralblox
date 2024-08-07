@@ -13,7 +13,7 @@ def compute_gaussian_weights(gt_points_batch, input_points_batch, sigma=1.0):
     batch_size = gt_points_batch.shape[0]
     n_gt = gt_points_batch.shape[1]
     
-    weights_batch = torch.zeros(batch_size, n_gt, device=gt_points_batch.device)
+    weights_batch = torch.ones(batch_size, n_gt, device=gt_points_batch.device)
 
     for b in range(batch_size):
         gt_points = gt_points_batch[b]
@@ -23,6 +23,8 @@ def compute_gaussian_weights(gt_points_batch, input_points_batch, sigma=1.0):
         gt_points_flat = gt_points[..., :3].reshape(-1, 3)
         inputs_flat = input_points[input_points[..., 3] == 1, :3].reshape(-1, 3)
         
+        if inputs_flat.shape[0] == 0:
+            continue
         # Compute pairwise distances
         distances = torch.cdist(gt_points_flat, inputs_flat)
         
