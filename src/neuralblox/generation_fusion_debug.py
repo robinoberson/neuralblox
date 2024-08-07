@@ -13,7 +13,6 @@ from src.neuralblox.helpers.voxel_grid import VoxelGrid
 import time
 import open3d as o3d
 
-
 voxel_grid = VoxelGrid()
 
 centers = torch.tensor([[1,0,0], [0,1,0], [0,0,1], [1,1,1]])
