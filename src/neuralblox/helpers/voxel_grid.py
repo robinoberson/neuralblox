@@ -33,6 +33,7 @@ class VoxelGrid:
         n_occ_inputs = inputs[..., 3].sum()
         # if n_occ_inputs < threshold and overwrite:
             # print(f'Not enough points in the occ input, skipping {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
+        # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
         if (h not in list(self.centers_table.keys()) and n_occ_inputs > threshold) or (overwrite and h in list(self.centers_table.keys()) and n_occ_inputs > 4 * threshold):
             # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
             self.centers_table[h] = center
