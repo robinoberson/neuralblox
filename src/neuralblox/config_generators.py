@@ -227,7 +227,8 @@ def get_generator_sequential(cfg, device):
         print(f'No checkpoint file found! {e}')
         return None
     
-    optimizer = optim.Adam(list(model.parameters()) + list(model_merging.parameters()), lr=cfg['training']['lr'])
+    optimizer_backbone = optim.Adam(list(model.parameters()), lr=cfg['training']['lr'])
+    optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=cfg['training']['lr'])
     trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer, cfg, device=device)
     
     generator = generation_fusion_sequential.Generator3DSequential(
