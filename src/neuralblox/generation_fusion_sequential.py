@@ -161,9 +161,10 @@ class Generator3DSequential(object):
                 logits_sampled = self.trainer.get_logits(p_stacked, merged_latents, centers)
                 logits.append([logits_sampled[occupied_voxels], p_stacked[occupied_voxels], inputs_frame[occupied_voxels], centers[occupied_voxels]])
 
-            stacked_latents, centers, pcds = self.stack_latents_all()
             if generate_mesh or idx_sequence == index:
                 print(f'Generating mesh at index {idx_sequence}')
+                stacked_latents, centers, pcds = self.stack_latents_all()
+
                 mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
                 mesh_list.append(mesh)
             
