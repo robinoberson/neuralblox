@@ -549,8 +549,8 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
             st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
-            torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+            torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=1.0)
             
             self.optimizer_backbone.step()
             self.optimizer_merge.step()
