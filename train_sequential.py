@@ -163,13 +163,20 @@ while True:
         scheduler_backbone.step(loss)
         scheduler_merging.step(loss)
         
-        for param_group in optimizer.param_groups:
+        for param_group in optimizer_backbone.param_groups:
             current_lr = param_group['lr']
             if current_lr != prev_lr:
-                print("Learning rate changed to:", current_lr)
+                print("Learning rate backbone changed to:", current_lr)
                 prev_lr = current_lr
                 if log_comet:
-                    experiment.log_metric("learning_rate", current_lr, step=it)   
+                    experiment.log_metric("learning rate backbone", current_lr, step=it)   
+        for param_group in optimizer_merging.param_groups:
+            current_lr = param_group['lr']
+            if current_lr != prev_lr:
+                print("Learning rate merging changed to:", current_lr)
+                prev_lr = current_lr
+                if log_comet:
+                    experiment.log_metric("learning rate merging", current_lr, step=it)
 
         # Backup if necessary
         if (backup_every > 0 and (it % backup_every) == 0):

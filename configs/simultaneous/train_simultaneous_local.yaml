@@ -30,7 +30,7 @@ test:
   model_merging_file: model_merging.pt
 training:
   limited_gpu: true
-  log_comet: false
+  log_comet: true
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
@@ -40,4 +40,4 @@ training:
   n_voxels_max: 12
   batch_group_size: 3
 
-visualization: true
+visualization: false
