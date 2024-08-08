@@ -226,13 +226,22 @@ def get_data_fields(mode, cfg):
     return fields
 
 def get_transform(mode, cfg):
+    specific_angle = cfg['data']['transform']['specific_angle']
     angle_x = cfg['data']['transform']['angle_x']
     angle_y = cfg['data']['transform']['angle_y']
     angle_z = cfg['data']['transform']['angle_z']
+    
+    if specific_angle:
+        low = [angle_x, angle_y, angle_z]
+        high = [angle_x, angle_y, angle_z]
+    else:
+        low=[-angle_x, -angle_y, -angle_z]
+        high=[angle_x, angle_y, angle_z]
+        
     def transform(data_list):
         for data in data_list:
             # Generate random rotation angles
-            angles_deg = np.random.uniform(low=[-angle_x, -angle_y, -angle_z], high=[angle_x, angle_y, angle_z])
+            angles_deg = np.random.uniform(low=low, high=high)
             # print(f'angles_deg: {angles_deg}')
             rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
             

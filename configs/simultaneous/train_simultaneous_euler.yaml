@@ -6,6 +6,7 @@ data:
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
   pointcloud_noise: 0.000
   transform:
+    specific_angle: true
     angle_x: 0
     angle_y: 0
     angle_z: 0
