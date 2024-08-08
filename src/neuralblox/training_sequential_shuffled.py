@@ -493,6 +493,8 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         c, h, w, d = self.empty_latent_code.shape
 
+        accumulation_steps = 4  # Accumulate gradients over 4 batches
+
         for i in range(n_batch_div):
             torch.cuda.empty_cache()
            
@@ -558,22 +560,24 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             loss_batch = loss_batch.sum(dim=-1).mean()
             loss_batch.backward()
-            if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
-            
-            st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
-            st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
-            torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=5.0)
-            
-            self.optimizer_backbone.step()
-            self.optimizer_merge.step()
-            
-            self.iteration += 1
-            iter_batch += 1
-            
-            if self.log_experiment: self.experiment.log_metric('loss', loss_batch.item(), step = self.iteration)
+            if (i + 1) % accumulation_steps == 0:
+
+                if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
+                
+                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
+                torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=1.0)
+                
+                self.optimizer_backbone.step()
+                self.optimizer_merge.step()
+                
+                self.iteration += 1
+                
+                if self.log_experiment: self.experiment.log_metric('loss', loss_batch.item(), step = self.iteration)
             # print(f'iteration: {self.iteration}, loss: {loss_batch:.2f}')
-            
+            iter_batch += 1
+
             loss_full += loss_batch
             
             idx_start = idx_end

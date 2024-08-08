@@ -46,30 +46,30 @@ class ResnetBlockFC(nn.Module):
         return x_s + dx
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
+    def __init__(self, in_channels, out_channels, stride=1, num_groups=32):
         super(ResidualBlock, self).__init__()
         self.conv1 = nn.Conv3d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
-        self.bn1 = nn.BatchNorm3d(out_channels)
+        self.gn1 = nn.GroupNorm(num_groups=num_groups, num_channels=out_channels)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv3d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm3d(out_channels)
+        self.gn2 = nn.GroupNorm(num_groups=num_groups, num_channels=out_channels)
 
         self.downsample = None
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 nn.Conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm3d(out_channels)
+                nn.GroupNorm(num_groups=num_groups, num_channels=out_channels)
             )
 
     def forward(self, x):
         identity = x
 
         out = self.conv1(x)
-        out = self.bn1(out)
+        out = self.gn1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.gn2(out)
 
         if self.downsample is not None:
             identity = self.downsample(x)
@@ -78,14 +78,15 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
 
         return out
+
 class Conv3D_one_input(nn.Module):
-    def __init__(self, num_blocks = 4, num_channels = [256, 256, 192, 192, 128, 128, 128]):
+    def __init__(self, num_blocks=4, num_channels=[256, 256, 192, 192, 128, 128, 128], num_groups=32):
         super(Conv3D_one_input, self).__init__()
 
         assert num_channels[0] == 256 and num_channels[-1] == 128, "Input must have 256 channels and output must have 128 channels"
 
         self.initial_conv = nn.Conv3d(num_channels[0], num_channels[1], kernel_size=3, padding=0)
-        self.initial_bn = nn.BatchNorm3d(num_channels[1])
+        self.initial_gn = nn.GroupNorm(num_groups=num_groups, num_channels=num_channels[1])
         self.initial_relu = nn.ReLU(inplace=True)
 
         self.layers = nn.ModuleList()
@@ -94,35 +95,28 @@ class Conv3D_one_input(nn.Module):
             if i in [0]:
                 stride = 2
             
-            self.layers.append(ResidualBlock(num_channels[i+1], num_channels[i + 2], stride=stride))
+            self.layers.append(ResidualBlock(num_channels[i+1], num_channels[i + 2], stride=stride, num_groups=num_groups))
 
         self.final_conv = nn.Conv3d(num_channels[-2], num_channels[-1], kernel_size=3, padding=0)
-        self.final_bn = nn.BatchNorm3d(num_channels[-1])
+        self.final_gn = nn.GroupNorm(num_groups=num_groups, num_channels=num_channels[-1])
         self.final_relu = nn.ReLU(inplace=True)
-        
-        # self.final_conv2 = nn.Conv3d(num_channels[-1], num_channels[-1], kernel_size=4, padding=0)
-        # self.final_bn2 = nn.BatchNorm3d(num_channels[-1])
-        # self.final_relu2 = nn.ReLU(inplace=True)
-        # Initialize weights
+
         self._initialize_weights()
 
     def forward(self, fea):
         z = fea['latent']
 
         z = self.initial_conv(z)
-        z = self.initial_bn(z)
+        z = self.initial_gn(z)
         z = self.initial_relu(z)
 
         for layer in self.layers:
             z = layer(z)
 
         z = self.final_conv(z)
-        z = self.final_bn(z)
+        z = self.final_gn(z)
         z = self.final_relu(z)
-        # z = self.final_conv2(z)
-        # z = self.final_bn2(z)
-        # z = self.final_relu2(z)
-        
+
         return z
 
     def _initialize_weights(self):
@@ -131,9 +125,10 @@ class Conv3D_one_input(nn.Module):
                 init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm3d):
+            elif isinstance(m, (nn.BatchNorm3d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
     
 # class Conv3D_one_input(nn.Module):
 #     ''' 2-layer 3D convolutional networks.
