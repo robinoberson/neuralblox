@@ -22,6 +22,7 @@ data:
 model:
   local_coord: True
   encoder: pointnet_crop_local_pool_latent
+  batch_norm: True
   encoder_kwargs:
     grid_resolution: 24
     hidden_dim: 32

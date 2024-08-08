@@ -104,7 +104,8 @@ print(f'Number of training samples: {len(train_dataset)}')
 print(f'Number of validation samples: {len(val_dataset)}')
 # Model
 model = config.get_model(cfg, device=device, dataset=train_dataset)
-model_merging = layers.Conv3D_one_input().to(device)
+batch_norm = cfg['model']['batch_norm']
+model_merging = layers.Conv3D_one_input(batch_norm = batch_norm).to(device)
 
 checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
 checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)

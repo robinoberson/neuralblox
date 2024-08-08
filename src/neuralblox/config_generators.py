@@ -213,8 +213,8 @@ def get_generator_sequential(cfg, device):
     # num_blocks = 5
     # num_channels = [256, 256, 192, 192, 192, 128, 128, 128]
     # model_merging = layers.Conv3D_one_input(num_blocks=num_blocks, num_channels=num_channels).to(device)
-
-    model_merging = layers.Conv3D_one_input().to(device)
+    batch_norm = cfg['model']['batch_norm']
+    model_merging = layers.Conv3D_one_input(batch_norm = batch_norm).to(device)
 
     checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
     checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
