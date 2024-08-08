@@ -87,7 +87,7 @@ class CheckpointIO(object):
                 raise ValueError('Invalid checkpoint format.')
         else:
             print('Warning: Could not find %s in checkpoint!' % filename)
-            raise FileNotFoundError('Checkpoint file not found.')
+            raise FileExistsError('Checkpoint file not found.')
 
 
     def load_url(self, url):
