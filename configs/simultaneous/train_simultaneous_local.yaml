@@ -37,7 +37,7 @@ training:
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
   # starting_model_backbone_file: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit/model_backbone.pt
   # starting_model_merging_file: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit/model_merging.pt
-  n_voxels_max: 12
-  batch_group_size: 2
+  n_voxels_max: 10
+  batch_group_size: 3
 
-visualization: true
+visualization: false
