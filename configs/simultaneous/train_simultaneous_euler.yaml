@@ -7,8 +7,8 @@ data:
   pointcloud_noise: 0.000
   transform:
     specific_angle: true
-    angle_x: 0
-    angle_y: 0
+    angle_x: 2
+    angle_y: 33
     angle_z: 0
 training:
   out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_08_August_x5_y180_gt_robot_s20_b3_l20-lr0_001_overfit
