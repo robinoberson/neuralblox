@@ -136,30 +136,35 @@ class Shapes3dDataset(data.Dataset):
         group_size = self.cfg['training']['batch_group_size']
         #randomly shuffle models
         models_grouping = random.sample(self.models, len(self.models))
-        if group_size > len(models_grouping) / 2:
-            print(f'group size too large, setting to {len(models_grouping) / 2}')
-            group_size = len(models_grouping) / 2
+        
+        if group_size > len(models_grouping):
+            print(f'group size {group_size} is larger than number of models {len(self.models)}')
+            while len(current_group) < group_size:
+                current_group += random.sample(self.models, len(self.models))[:group_size - len(current_group)]
 
-        print(f'shuffled models: {len(models_grouping)}')
-        it = 0
-        while len(models_grouping) > 0 and it < 1000:
-            for idx_model, model_info in enumerate(models_grouping): #models_grouping[0]
-                category = model_info['category']
-                if category not in current_categories:
+            batch_groups.append(current_group)
+            print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
+        else:
+            print(f'group size: {group_size}, total models: {len(self.models)}')
+            it = 0
+            while len(models_grouping) > 0 and it < 1000:
+                for idx_model, model_info in enumerate(models_grouping): #models_grouping[0]
+                    category = model_info['category']
+                    if category not in current_categories:
+                        
+                        current_categories.add(category)
+                        current_group.append(model_info)
+                        models_grouping.pop(idx_model)
                     
-                    current_categories.add(category)
-                    current_group.append(model_info)
-                    models_grouping.pop(idx_model)
-                
-                    # Check if adding this model would exceed the batch group size or duplicate a category
-                    if len(current_group) == group_size or len(models_grouping) == 0 or it > 1000:
-                        print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
-                        batch_groups.append(current_group)
-                        current_group = []
-                        current_categories = set()
-                        it = 0
-                    break
-            it += 1
+                        # Check if adding this model would exceed the batch group size or duplicate a category
+                        if len(current_group) == group_size or len(models_grouping) == 0 or it > 1000:
+                            print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
+                            batch_groups.append(current_group)
+                            current_group = []
+                            current_categories = set()
+                            it = 0
+                        break
+                it += 1
         return batch_groups
                 
     def __len__(self):

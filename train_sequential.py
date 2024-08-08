@@ -119,8 +119,8 @@ except FileExistsError as e:
     
 load_dict = dict()
     
-optimizer_backbone = optim.Adam(list(model.parameters()), lr=learning_rate, weight_decay=1e-4)
-optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rate/10, weight_decay=1e-4)
+optimizer_backbone = optim.Adam(list(model.parameters()), lr=learning_rate)
+optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rate)
 
 trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_merging, cfg, device=device)
 
