@@ -292,11 +292,11 @@ def visualize_mesh_and_points(inputs_frame_list, mesh_list, points_perc = 1.0):
     # Create a point cloud for the selected points
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points + np.array([0, 0.05, 0.0]))
-    pcd.paint_uniform_color(np.random.rand(3))
+    pcd.paint_uniform_color([1, 0, 0])
     
     pcd_full = o3d.geometry.PointCloud()
     pcd_full.points = o3d.utility.Vector3dVector(points_full + np.array([0, 0.05, 0.0]))
-    pcd_full.paint_uniform_color(np.random.rand(3))
+    pcd_full.paint_uniform_color([0,0,1])
 
     # Visualize the mesh, point cloud, and coordinate frame
-    o3d.visualization.draw_geometries([mesho3d, pcd, base_axis, pcd_full])
+    o3d.visualization.draw_geometries([mesho3d, base_axis, pcd_full, pcd])
