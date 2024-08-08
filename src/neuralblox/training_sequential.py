@@ -146,7 +146,7 @@ class SequentialTrainer(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, latents, centers)
             loss_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
             
-            weights = st_utils.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
+            # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_frame_distributed[mask_frame], sigma = self.sigma)
 
             loss_weighted = loss_unweighted 
             

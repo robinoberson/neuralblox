@@ -458,27 +458,29 @@ class SequentialTrainerShuffled(BaseTrainer):
 
         return return_tup
     def generate_force_keep_empty_mask(self, inputs_frame, n_x, n_y, n_z, keep_fraction):
-        mask_occ_inputs = (inputs_frame[..., 3].sum(dim = -1) > self.points_threshold) #True is occupied
-        mask_empty_inputs = ~mask_occ_inputs
-        n_occ = mask_occ_inputs.sum()
+        # mask_occ_inputs = (inputs_frame[..., 3].sum(dim = -1) > self.points_threshold) #True is occupied
+        # mask_empty_inputs = ~mask_occ_inputs
+        # n_occ = mask_occ_inputs.sum()
+        # n_empty = mask_empty_inputs.sum()
         
-        # Keep keep_fraction of unoccupied points, select the indices at random
-        n_empty_keep = int(n_occ * keep_fraction)
+        # # Keep keep_fraction of unoccupied points, select the indices at random
+        # n_empty_keep = int(n_occ * keep_fraction)
         
-        random_indices = torch.nonzero(mask_empty_inputs).squeeze()
-        mask_force_keep_empty = torch.zeros_like(mask_empty_inputs, dtype = bool)
+        # random_indices = torch.nonzero(mask_empty_inputs).squeeze()
+        # mask_force_keep_empty = torch.zeros_like(mask_empty_inputs, dtype = bool)
 
-        try:
-            if n_empty_keep > 0 and random_indices.numel() > 0:
-                selected_indices = random_indices[torch.randperm(random_indices.size(0))[:n_empty_keep]]
-                mask_force_keep_empty[selected_indices] = True
-        except Exception as e:
-            print(e)
-            print(f'n_empty_keep: {n_empty_keep}')
-            print(f'random_indices.shape: {random_indices.shape}')
-            print(f'random_indices.numel(): {random_indices.numel()}')
-            print(f'random_indices: {random_indices}')
-            
+        # try:
+        #     if n_empty_keep > 0 and random_indices.numel() > 0:
+        #         selected_indices = random_indices[torch.randperm(random_indices.size(0))[:n_empty_keep]]
+        #         mask_force_keep_empty[selected_indices] = True
+        # except Exception as e:
+        #     print(e)
+        #     print(f'n_empty_keep: {n_empty_keep}')
+        #     print(f'random_indices.shape: {random_indices.shape}')
+        #     print(f'random_indices.numel(): {random_indices.numel()}')
+        #     print(f'random_indices: {random_indices}')
+        
+        mask_force_keep_empty = torch.ones(n_x - 2, n_y - 2, n_z - 2, dtype = bool)
         mask_force_keep_empty_padded = torch.nn.functional.pad(mask_force_keep_empty.reshape(n_x-2, n_y-2, n_z-2), (1, 1, 1, 1, 1, 1), value=False).reshape(-1)
         
         return mask_force_keep_empty_padded
@@ -493,7 +495,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         c, h, w, d = self.empty_latent_code.shape
 
-        accumulation_steps = 4  # Accumulate gradients over 4 batches
+        accumulation_steps = 1  # Accumulate gradients over 4 batches
 
         for i in range(n_batch_div):
             torch.cuda.empty_cache()
@@ -541,13 +543,13 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             # compare logits with query 
             inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
-            weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
+            # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
 
             # max_weights = torch.max(weights)
             # min_weights = torch.min(weights)
             
             loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            loss_batch = loss_batch_unweighted * weights
+            loss_batch = loss_batch_unweighted
 
             # loss_batch_unweighted_sum = loss_batch_unweighted.sum()
             # loss_batch_sum = loss_batch.sum()
@@ -567,7 +569,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
                 st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
-                torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
                 
                 self.optimizer_backbone.step()
                 self.optimizer_merge.step()
