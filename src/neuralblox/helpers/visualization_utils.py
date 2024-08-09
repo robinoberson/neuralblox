@@ -149,6 +149,7 @@ def visualize_batch(batch, idx, device):
     pcd_query.paint_uniform_color([1.0, 0.5, 0.5])
     geos.append(pcd_query)
     o3d.visualization.draw_geometries(geos + [base_axis])
+    return pcd_query
     
 def visualize_debug(self):
     #### visualize
