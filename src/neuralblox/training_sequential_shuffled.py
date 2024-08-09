@@ -477,7 +477,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     
     def generate_empty_inputs(self, start_idx):
         n_points = 10000
-        points = torch.stack([torch.rand(n_points) * 9.99 + 0.01, torch.rand(n_points) * 2 - 1, torch.rand(n_points) * 9.99 + 0.01], dim=1)
+        points = torch.stack([torch.rand(n_points) * 19.99 + 0.01, torch.rand(n_points) * 2 - 1, torch.rand(n_points) * 19.99 + 0.01], dim=1)
         occ = torch.zeros(n_points, 1)
 
         inputs = torch.cat([points, occ], dim = -1).to(self.device)
@@ -505,6 +505,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             inputs_frame_occupied,
             centers_frame_occupied
         )
+        print(f'Generated empty inputs, {torch.sum(mask_keep)} voxels')
         return return_tup
     
     def train_batch(self, centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full):
