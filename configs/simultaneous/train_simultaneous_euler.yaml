@@ -6,7 +6,7 @@ data:
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
   pointcloud_noise: 0.000
   transform:
-    specific_angle: false
+    specific_angle: true
     angle_x: 5
     angle_y: 33
     angle_z: 0
@@ -22,7 +22,7 @@ training:
   n_voxels_max: 30
   n_batch: 50
   lr: 0.001
-  batch_group_size: 10
+  batch_group_size: 8
 generation:
   generation_dir_models: /cluster/scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/meshes
