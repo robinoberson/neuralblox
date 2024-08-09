@@ -477,7 +477,7 @@ class SequentialTrainerShuffled(BaseTrainer):
     
     def generate_empty_inputs(self, start_idx):
         n_points = 10000
-        points = torch.stack([torch.rand(n_points) * 29.99 + 0.01, torch.rand(n_points) * 2 - 1, torch.rand(n_points) * 29.99 + 0.01], dim=1)
+        points = torch.stack([torch.rand(n_points) * 19.99 + 0.01, torch.rand(n_points) * 2 - 1, torch.rand(n_points) * 19.99 + 0.01], dim=1)
         occ = torch.zeros(n_points, 1)
 
         inputs = torch.cat([points, occ], dim = -1).to(self.device)
