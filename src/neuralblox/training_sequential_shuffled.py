@@ -497,14 +497,15 @@ class SequentialTrainerShuffled(BaseTrainer):
         # needed: centers_frame_idx, query_frame_padded, grid_shapes_frame, centers_lookup_frame, merged_latents_padded, inputs_frame_padded, centers_frame_padded
         
         return_tup = (
-            centers_frame_idx_padded[mask_keep],
-            query_frame_occupied[mask_keep],
-            grid_shapes_padded[mask_keep],
-            centers_lookup_padded[mask_keep] + start_idx,
-            merged_latents_padded,
-            inputs_frame_occupied,
-            centers_frame_occupied
+            centers_frame_idx_padded[mask_keep].repeat(2, 1),
+            query_frame_occupied[mask_keep].repeat(2, 1),
+            grid_shapes_padded[mask_keep].repeat(2, 1),
+            (centers_lookup_padded[mask_keep] + start_idx).repeat(2, 1),
+            merged_latents_padded.repeat(2, 1),
+            inputs_frame_occupied.repeat(2, 1),
+            centers_frame_occupied.repeat(2, 1)
         )
+
         print(f'Generated empty inputs, {torch.sum(mask_keep)} voxels')
         return return_tup
     
