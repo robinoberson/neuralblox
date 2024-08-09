@@ -585,10 +585,10 @@ class SequentialTrainerShuffled(BaseTrainer):
             # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
             # saving_path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training_shuffled/debug_files'
 
-            torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
-            torch.save(inputs_existing, os.path.join(saving_path, f'inputs_existing_{self.iteration}.pt'))
-            torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
-            torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
+            # torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
+            # torch.save(inputs_existing, os.path.join(saving_path, f'inputs_existing_{self.iteration}.pt'))
+            # torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
+            # torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
 
             vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch, force_viz = False)
             
