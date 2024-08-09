@@ -72,7 +72,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.points_threshold = 20 #TODO move to cfg
         self.keep_empty_per = 0.7 #TODO move to cfg
 
-        self.debug = True
+        self.debug = False
                 
         current_dir = os.getcwd()
         
