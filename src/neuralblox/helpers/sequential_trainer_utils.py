@@ -92,6 +92,12 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     shift_dx, shift_dy, shift_dz = shifts[:, 0], shifts[:, 1], shifts[:, 2]
     shifted_indices = base_indices.unsqueeze(1) + (shift_dx.unsqueeze(0) * grid_shapes[:, 1].unsqueeze(1) + shift_dy.unsqueeze(0)) * grid_shapes[:, 2].unsqueeze(1) + shift_dz.unsqueeze(0)
 
+    shifted_indices_min = torch.min(shifted_indices)
+    shifted_indices_max = torch.max(shifted_indices)
+    
+    # Check if any indices are out of bounds
+    if (shifted_indices_min < 0).any() or (shifted_indices_max >= grids.shape[0]).any():
+        raise ValueError("Some indices are out of bounds")
     # Fetch the shifted values
     shifted_values = grids[shifted_indices.to(grids.device)]
 
