@@ -19,7 +19,10 @@ data:
   pointcloud_noise: 0.0
   transform:
     specific_angle: true
-    angle_x: 2
+    # angle_x: 2
+    # angle_y: -33
+    # angle_z: 0
+    angle_x: 0
     angle_y: 33
     angle_z: 0
 generation:
