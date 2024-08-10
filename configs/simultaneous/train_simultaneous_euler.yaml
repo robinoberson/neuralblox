@@ -22,7 +22,7 @@ training:
   n_voxels_max: 30
   n_batch: 50
   lr: 0.001
-  batch_group_size: 10
+  batch_group_size: 8
 generation:
   generation_dir_models: /cluster/scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/meshes
