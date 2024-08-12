@@ -14,17 +14,16 @@ data:
   val_classes:
   # path: 
     # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
-  path: 
-    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
   pointcloud_noise: 0.0
   transform:
     specific_angle: true
-    # angle_x: 2
-    # angle_y: -33
-    # angle_z: 0
     angle_x: 0
-    angle_y: 33
+    angle_y: -33
     angle_z: 0
+    # angle_x: 0
+    # angle_y: 33
+    # angle_z: 0
 generation:
   generation_dir_models: /scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /scratch/roberson/neuralblox/simultaneous/meshes
