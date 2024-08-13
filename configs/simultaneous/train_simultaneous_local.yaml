@@ -36,15 +36,16 @@ test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
 training:
+  checkpoint_interval_minutes: 0
   limited_gpu: true
   log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
-  # starting_model_backbone_file: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit/model_backbone.pt
-  # starting_model_merging_file: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit/model_merging.pt
+  # starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_backbone.pt
+  # starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_merging.pt
   n_voxels_max: 10
   batch_group_size: 1
 
-visualization: true
+visualization: false

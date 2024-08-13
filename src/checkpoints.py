@@ -80,7 +80,7 @@ class CheckpointIO(object):
                 self.module_dict['model'].load_state_dict(new_state_dict, strict=False)
 
                 # Load other scalars
-                scalars = {k: v for k, v in state_dict.items() if k not in ['model', 'optimizer']}
+                scalars = {k: v for k, v in state_dict.items() if k not in ['model']}
                 return scalars
             else:
                 print('Warning: No model found in checkpoint state dict!')

@@ -111,16 +111,20 @@ checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
 checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
 
 try:
-    checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
-    checkpoint_io_merging.load(cfg['training']['starting_model_merging_file'])
+    load_dict = checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
+    load_dict_merging = checkpoint_io_merging.load(cfg['training']['starting_model_merging_file'])
     
 except FileExistsError as e:
     print(f'No checkpoint file found! {e}')
-    
-load_dict = dict()
+    load_dict = dict()
     
 optimizer_backbone = optim.Adam(list(model.parameters()), lr=learning_rate)
 optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rate)
+
+if 'optimizer_backbone_sd' in load_dict:
+    optimizer_backbone.load_state_dict(load_dict['optimizer_backbone_sd'])
+if 'optimizer_merging_sd' in load_dict_merging:
+    optimizer_merging.load_state_dict(load_dict_merging['optimizer_merging_sd'])
 
 trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_merging, cfg, device=device)
 
@@ -195,9 +199,11 @@ while True:
 
             print(f'Saving checkpoint, epoch: {epoch_it}, it: {it}')
             print(f'output path: {cfg["training"]["out_dir"]}')
-             
-            checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it)
-            checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it)
+            optimizer_backbone_sd = optimizer_backbone.state_dict()
+            optimizer_merging_sd = optimizer_merging.state_dict()
+
+            checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it, optimizer_merging_sd = optimizer_merging_sd)
+            checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it, optimizer_backbone_sd = optimizer_backbone_sd)
         print(f'epoch: {epoch_it}, it: {it}, loss: {loss}')
         
     # for batch in val_loader:
