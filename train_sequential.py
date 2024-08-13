@@ -123,8 +123,10 @@ optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rat
 
 if 'optimizer_backbone_sd' in load_dict:
     optimizer_backbone.load_state_dict(load_dict['optimizer_backbone_sd'])
+    print(f'Optimizer Loaded')
 if 'optimizer_merging_sd' in load_dict_merging:
     optimizer_merging.load_state_dict(load_dict_merging['optimizer_merging_sd'])
+    print(f'Optimizer Merging Loaded')
 
 trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_merging, cfg, device=device)
 
