@@ -28,7 +28,7 @@ class VoxelGrid:
             
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
-    def add_voxel_wi(self, center, latent, inputs, overwrite=False, threshold=20):
+    def add_voxel_wi(self, center, latent, inputs, overwrite=False, threshold=0):
         h = self.compute_hash(center)
         # print(h)
         list_keys = list(self.centers_table.keys())
@@ -37,17 +37,25 @@ class VoxelGrid:
         # if n_occ_inputs < threshold and overwrite:
             # print(f'Not enough points in the occ input, skipping {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
         # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
-        if (h not in list(self.centers_table.keys()) and n_occ_inputs > threshold) or (overwrite and h in list(self.centers_table.keys()) and n_occ_inputs > 4 * threshold):
+        h_in_list_bool = h in list(self.centers_table.keys())
+        if (not h_in_list_bool and n_occ_inputs >= threshold) or (overwrite and h_in_list_bool and n_occ_inputs >= 2 * threshold):
             # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
             self.centers_table[h] = center
             self.latents_table[h] = latent
+            block_overwrite = False
+            if h_in_list_bool: 
+                current_occ_inputs = len(self.pcd_table.get(h, None).points)
+                if n_occ_inputs < current_occ_inputs*0.75:
+                    # print(f'Not enough points in the occ input, skipping {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}, current_occ_inputs={current_occ_inputs}')
+                    block_overwrite = True
             
-            pcd = o3d.geometry.PointCloud()
-            points = inputs.cpu().detach().numpy().astype(np.float64)[..., :3]
-            occ = inputs.cpu().detach().numpy().astype(np.float64)[..., 3]
-            pcd.points = o3d.utility.Vector3dVector(points[occ == 1])
-            pcd.paint_uniform_color([1.0, 0.5, 0.0])
-            self.pcd_table[h] = pcd
+            if not block_overwrite:
+                pcd = o3d.geometry.PointCloud()
+                points = inputs.cpu().detach().numpy().astype(np.float64)[..., :3]
+                occ = inputs.cpu().detach().numpy().astype(np.float64)[..., 3]
+                pcd.points = o3d.utility.Vector3dVector(points[occ == 1])
+                pcd.paint_uniform_color([1.0, 0.5, 0.0])
+                self.pcd_table[h] = pcd
             
     def add_pcd(self, center, inputs):
         h = self.compute_hash(center)

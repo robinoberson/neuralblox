@@ -74,6 +74,7 @@ class Generator3DSequential(object):
         self.factor = 2**unet_depth
         self.hdim = unet_hdim
         self.voxel_grid = VoxelGrid()
+        self.points_threshold = self.trainer.points_threshold
         
     def generate_sequence(self, batch, idx_batch):
         self.trainer.model.eval()
@@ -96,7 +97,7 @@ class Generator3DSequential(object):
                 # print(f'Perform latent fusion')
                 
             for merged_latent, center, inputs_frame in zip(merged_latents, centers_frame, inputs_frame):
-                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True)
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True, threshold=self.points_threshold)
                 
             stacked_latents, centers, pcds = self.stack_latents_all()
             mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
@@ -141,7 +142,7 @@ class Generator3DSequential(object):
             times.append(time.time() - t0)
             
             for merged_latent, center, inputs_frame_lat in zip(merged_latents, centers_frame, inputs_frame):
-                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame_lat, overwrite=True)
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame_lat, overwrite=True, threshold=self.points_threshold)
             
             occupied_voxels = inputs_frame[..., 3].sum(dim = -1) > 10
 
@@ -380,7 +381,7 @@ class Generator3DSequential(object):
         centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.trainer.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.trainer.n_max_points_input, 4)
 
-        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded) #contains padded empty latents
+        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded, threshold = self.points_threshold) #contains padded empty latents
         centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
 
@@ -402,7 +403,7 @@ class Generator3DSequential(object):
         centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.trainer.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.trainer.n_max_points_input, 4)
 
-        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded) #contains padded empty latents
+        grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded, self.points_threshold) #contains padded empty latents
         centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
 
@@ -430,5 +431,5 @@ class Generator3DSequential(object):
         stacked_frame = torch.cat((distributed_latents, distributed_latents_existing), dim = 1)
         merged_latents = self.trainer.merge_latent_map(stacked_frame)
         # print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
-        
+        # print(f'should be {(n_x-2)*(n_y-2)*(n_z-2)}, is {merged_latents.shape[0]}')
         return merged_latents, centers_frame, inputs_frame

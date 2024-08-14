@@ -165,6 +165,10 @@ def compute_vol_bound(inputs, query_crop_size, input_crop_size, padding = False)
     return vol_bound, centers
 
 def remove_nearby_points(points, occupied_inputs, thresh):
+    if points.numel() == 0 or occupied_inputs.numel() == 0:
+        # If either is empty, no points can be removed
+        return points, 0
+    
     # Calculate the squared Euclidean distances to avoid the cost of square root computation
     dist_squared = torch.cdist(points[..., :3], occupied_inputs[..., :3], p=2).pow(2)
     
@@ -204,7 +208,9 @@ def maintain_n_sample_points(centers, crop_size, random_points, occupied_inputs,
         n_removed -= n_to_add
         
         n_iter += 1
-        
+        if n_iter > 1000:
+            print("Failed to maintain n_sample points")
+            break
     # Ensure we have exactly n_sample points
     filtered_points = filtered_points[:n_sample]
     # print(f'N iter {n_iter}')

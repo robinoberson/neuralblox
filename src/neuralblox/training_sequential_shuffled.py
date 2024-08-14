@@ -317,9 +317,12 @@ class SequentialTrainerShuffled(BaseTrainer):
         
         return empty_latent_grid
     
-    def encode_occupied_inputs_frame(self, inputs_frame, centers_frame, vol_bounds_frame_padded):
+    def encode_occupied_inputs_frame(self, inputs_frame, centers_frame, vol_bounds_frame_padded, threshold = None):
+        if threshold is None:
+            threshold = self.points_threshold
+            
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
-        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > self.points_threshold
+        occupied_frame_mask = inputs_frame[..., 3].sum(dim = -1) > threshold
         grid_latents_frame_current = self.init_empty_latent_grid(vol_bounds_frame_padded)
 
         if occupied_frame_mask.sum() == 0:
