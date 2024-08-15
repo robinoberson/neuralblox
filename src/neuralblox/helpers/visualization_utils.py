@@ -5,7 +5,7 @@ import yaml
 import numpy as np
 import torch 
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
-
+import matplotlib.cm as cm
 def visualize_weights(weights, p_query, inputs_distributed):
     """
     Visualize point cloud `p_query` with colors based on `weights`.
@@ -47,7 +47,30 @@ def visualize_weights(weights, p_query, inputs_distributed):
         # Visualize using Open3D
     o3d.visualization.draw_geometries(geos)
     
-def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01):
+def create_boxes(loss_batch, centers, query_crop_size):
+    boxes = []
+    loss_batch_sum = loss_batch.sum(dim=1)
+    
+    normalized_loss = (loss_batch_sum - loss_batch_sum.min()) / (loss_batch_sum.max() - loss_batch_sum.min())
+    jet_cmap = cm.get_cmap('jet')
+    jet_colors = jet_cmap(normalized_loss.detach().cpu().numpy())
+    
+    bbox_min = centers - query_crop_size / 2
+    bbox_max = centers + query_crop_size / 2
+
+    # print(loss_batch.shape, loss_batch_sum)
+    for i in range(len(centers)):
+        # box = o3d.geometry.TriangleMesh.create_box(width=query_crop_size, height=query_crop_size, depth=query_crop_size)
+        # box.translate(centers[i].detach().cpu().numpy())
+        # box.paint_uniform_color(jet_colors[i, :3])
+        # boxes.append(box)
+        bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound=bbox_min[i].detach().cpu().numpy(), max_bound=bbox_max[i].detach().cpu().numpy())
+        bbox.color = jet_colors[i, :3]
+        # bbox.LineSet = 7
+        boxes.append(bbox)
+    return boxes
+
+def visualize_logits(logits_sampled, p_query, centers, loss, location,weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01, query_crop_size = 1.0):
     geos = []
     
     current_dir = os.getcwd()
@@ -112,6 +135,9 @@ def visualize_logits(logits_sampled, p_query, location,weights = None, inputs_di
     base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
     
     geos += [pcd, base_axis]
+    
+    boxes_loss = create_boxes(loss, centers, query_crop_size)
+    geos += boxes_loss
     o3d.visualization.draw_geometries(geos)
     
 def visualize_batch(batch, idx, device):

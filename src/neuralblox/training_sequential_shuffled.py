@@ -218,6 +218,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             # print(f'memory_size_gb = {memory_size_gb}')
             
             idx_start = 0
+            
             for scene_idx in range(n_scenes):
                 for frame_idx in range(n_frames):
                     torch.cuda.empty_cache()
@@ -238,11 +239,13 @@ class SequentialTrainerShuffled(BaseTrainer):
                         # return centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded
                         tup = self.process_frame(centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded)
                         if self.debug: return tup
-                    merged_latents_padded, prev_vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame = tup
+                        
+                    merged_latents_padded, vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame = tup
 
                     prev_centers_frame_padded = centers_frame_padded.clone()
                     prev_centers_frame_idx = centers_frame_idx.clone()
                     prev_inputs_frame_padded = inputs_frame_padded.clone()
+                    prev_vol_bounds_padded = vol_bounds_padded.clone()
                     
                     n_voxels_frame = centers_frame_idx.shape[0]
                     
@@ -252,7 +255,6 @@ class SequentialTrainerShuffled(BaseTrainer):
 
                         centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
                         query_points_full[idx_start:idx_end] = query_frame_padded.clone()
-
                         grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
                         centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
                         
@@ -272,9 +274,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             filtered_centers_idx_full = centers_idx_full[mask_occupied]
             filtered_query_points_full = query_points_full[mask_occupied]
             filtered_grid_shapes_full = grid_shapes_full[mask_occupied]
-            filtered_centers_lookup_full = centers_lookup_full[mask_occupied]            
-            filtered_centers_coord_full = centers_coord_full[mask_occupied]
-            filtered_inputs_coord_full = inputs_full[mask_occupied]
+            filtered_centers_lookup_full = centers_lookup_full[mask_occupied]  
+            
+                      
             
             #add empty voxels as well to learn the empty latent code
             centers_frame_idx, query_frame_occupied, grid_shapes_padded, centers_lookup_padded, merged_latents_padded, inputs_frame_occupied, centers_frame_occupied = self.generate_empty_inputs(inputs_full.shape[0])
@@ -291,18 +293,32 @@ class SequentialTrainerShuffled(BaseTrainer):
             # Generate a random permutation
             permutation_mask = torch.randperm(filtered_centers_idx_full.shape[0])
 
+            print(f'filtered_centers_idx_full shape: {filtered_centers_idx_full.shape}')
+            print(f'filtered_query_points_full shape: {filtered_query_points_full.shape}')
+            print(f'filtered_grid_shapes_full shape: {filtered_grid_shapes_full.shape}')
+            print(f'filtered_centers_lookup_full shape: {filtered_centers_lookup_full.shape}')
+            
+            print(f'latents_full shape: {latents_full.shape}')
+            print(f'inputs_full shape: {inputs_full.shape}')
+            print(f'centers_coord_full shape: {centers_coord_full.shape}')
+            
             # Apply the permutation mask
-            centers_idx_full = filtered_centers_idx_full[permutation_mask]
-            query_points_full = filtered_query_points_full[permutation_mask]
-            grid_shapes_full = filtered_grid_shapes_full[permutation_mask]
-            centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
+            # centers_idx_full = filtered_centers_idx_full[permutation_mask]
+            # query_points_full = filtered_query_points_full[permutation_mask]
+            # grid_shapes_full = filtered_grid_shapes_full[permutation_mask]
+            # centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
+            
+            centers_idx_full = filtered_centers_idx_full
+            query_points_full = filtered_query_points_full
+            grid_shapes_full = filtered_grid_shapes_full
+            centers_lookup_full = filtered_centers_lookup_full
             
             print(f'Batch contains {centers_idx_full.shape[0]} voxels')
             
-            if self.debug:
-                centers_coord_full_debug = filtered_centers_coord_full[permutation_mask]
-                inputs_full_debug = filtered_inputs_coord_full[permutation_mask]
-                return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full, centers_coord_full_debug, inputs_full_debug
+            # if self.debug:
+            #     centers_coord_full_debug = filtered_centers_coord_full[permutation_mask]
+            #     inputs_full_debug = filtered_inputs_coord_full[permutation_mask]
+            #     return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full, centers_coord_full_debug, inputs_full_debug
 
             # print(f'finished precomputation batch')
             return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full
@@ -548,8 +564,6 @@ class SequentialTrainerShuffled(BaseTrainer):
             latents_existing = st_utils.get_distributed_voxel(centers_idx_batch, latents_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
             latents_existing = latents_existing.reshape(-1, c, 3*h, 3*w, 3*d)
             
-            inputs_existing = st_utils.get_distributed_voxel(centers_idx_batch, inputs_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
-            
             # compute the latents
             inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch, inputs_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
             centers_distributed_batch = st_utils.get_distributed_voxel(centers_idx_batch, centers_coord_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
@@ -572,7 +586,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, merged_latents, centers)
             
             # compare logits with query 
-            inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            # inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
 
             # max_weights = torch.max(weights)
@@ -588,14 +602,14 @@ class SequentialTrainerShuffled(BaseTrainer):
             # loss_batch_sum = loss_batch.sum()
             # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
-            # saving_path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training_shuffled/debug_files'
+            saving_path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training_shuffled/debug_files'
 
-            # torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
-            # torch.save(inputs_existing, os.path.join(saving_path, f'inputs_existing_{self.iteration}.pt'))
-            # torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
-            # torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
+            torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
+            torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
+            torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
+            torch.save(loss_batch, os.path.join(saving_path, f'loss_batch_{self.iteration}.pt'))
 
-            vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch, force_viz = False)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch, force_viz = False)
             
             loss_batch = loss_batch.sum(dim=-1).mean()
             loss_batch.backward()
