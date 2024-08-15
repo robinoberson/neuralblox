@@ -14,7 +14,8 @@ data:
   val_classes:
   # path: 
     # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
+  # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
   pointcloud_noise: 0.0
   transform:
     specific_angle: true
@@ -32,6 +33,7 @@ generation:
   model_merging_file: model_merging.pt
   resolution_0: 50
   prob_threshold: 0.3
+  n_max_inputs: 2000
 test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
@@ -48,4 +50,4 @@ training:
   n_voxels_max: 10
   batch_group_size: 1
 
-visualization: false
+visualization: true
