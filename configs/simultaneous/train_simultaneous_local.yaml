@@ -50,4 +50,4 @@ training:
   n_voxels_max: 10
   batch_group_size: 1
 
-visualization: true
+visualization: false
