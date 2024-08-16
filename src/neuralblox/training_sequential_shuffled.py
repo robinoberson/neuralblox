@@ -662,9 +662,14 @@ class SequentialTrainerShuffled(BaseTrainer):
             inputs_distributed_batch_prev_int = inputs_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # max_weights = torch.max(weights)
             # min_weights = torch.min(weights)
-            
-            loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            loss_batch = loss_batch_unweighted
+            # pos_weight_value = st_utils.compute_pos_weight(occ)
+            # pos_weight = torch.full_like(occ, pos_weight_value)
+            criterion = nn.BCEWithLogitsLoss(reduction='none')
+
+            # loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            loss_batch_unweighted = criterion(logits_sampled, occ)
+            # dynamic_weights = loss_batch_unweighted**2
+            loss_batch = loss_batch_unweighted #* dynamic_weights
 
             # loss_batch_unweighted_sum = loss_batch_unweighted.sum()
             # loss_batch_sum = loss_batch.sum()
@@ -682,14 +687,16 @@ class SequentialTrainerShuffled(BaseTrainer):
             # vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_current_batch, inputs_distributed_batch_prev)
             vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch_int, force_viz = False)
             
-            loss_batch = loss_batch.sum(dim=-1).mean()
+            loss_batch = loss_batch.mean()
+
             loss_batch.backward()
+            print(f'loss_batch: {loss_batch}')
             if (i + 1) % accumulation_steps == 0:
 
                 if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
                 
-                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
-                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 10)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 10)  # Print gradient norms
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
                 
