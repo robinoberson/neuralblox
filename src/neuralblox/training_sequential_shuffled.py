@@ -690,7 +690,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             loss_batch = loss_batch.mean()
 
             loss_batch.backward()
-            print(f'loss_batch: {loss_batch}')
+            # print(f'loss_batch: {loss_batch}')
             if (i + 1) % accumulation_steps == 0:
 
                 if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
