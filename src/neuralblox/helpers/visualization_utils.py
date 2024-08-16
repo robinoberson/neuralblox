@@ -47,13 +47,17 @@ def visualize_weights(weights, p_query, inputs_distributed):
         # Visualize using Open3D
     o3d.visualization.draw_geometries(geos)
     
-def create_boxes(loss_batch, centers, query_crop_size):
+def create_boxes(centers, query_crop_size, loss_batch = None):
     boxes = []
-    loss_batch_sum = loss_batch.sum(dim=1)
     
-    normalized_loss = (loss_batch_sum - loss_batch_sum.min()) / (loss_batch_sum.max() - loss_batch_sum.min())
-    jet_cmap = cm.get_cmap('jet')
-    jet_colors = jet_cmap(normalized_loss.detach().cpu().numpy())
+    if loss_batch is not None:
+        loss_batch_sum = loss_batch.sum(dim=1)
+        
+        normalized_loss = (loss_batch_sum - loss_batch_sum.min()) / (loss_batch_sum.max() - loss_batch_sum.min())
+        jet_cmap = cm.get_cmap('jet')
+        jet_colors = jet_cmap(normalized_loss.detach().cpu().numpy())
+    else:
+        color = np.random.rand(3)
     
     bbox_min = centers - query_crop_size / 2
     bbox_max = centers + query_crop_size / 2
@@ -65,12 +69,75 @@ def create_boxes(loss_batch, centers, query_crop_size):
         # box.paint_uniform_color(jet_colors[i, :3])
         # boxes.append(box)
         bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound=bbox_min[i].detach().cpu().numpy(), max_bound=bbox_max[i].detach().cpu().numpy())
-        bbox.color = jet_colors[i, :3]
+        if loss_batch is not None: 
+            bbox.color = jet_colors[i, :3]
+        else:
+            bbox.color = color
         # bbox.LineSet = 7
         boxes.append(bbox)
     return boxes
+def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers_prev_int, centers_current, centers_prev, loss, inputs_distributed_current, inputs_distributed_prev, query_crop_size = 1.0, threshold = 0.1):
+    geos = []
+    
+    bboxes_loss = create_boxes(centers_current_int, query_crop_size, loss)
 
-def visualize_logits(logits_sampled, p_query, centers, loss, location,weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01, query_crop_size = 1.0):
+    for i in range(len(centers_current)):
+        geos = []
+        centers_current_i = centers_current[i]
+        centers_prev_i = centers_prev[i]
+        
+        inputs_curr_i = inputs_distributed_current[i].cpu().numpy().reshape(-1, 4)
+        inputs_prev_i = inputs_distributed_prev[i].cpu().numpy().reshape(-1, 4)
+        
+        pcd_curr_i = o3d.geometry.PointCloud()
+        points = inputs_curr_i[inputs_curr_i[:, 3] == 1, :3]
+        pcd_curr_i.points = o3d.utility.Vector3dVector(points + np.array([0, 0, 0.02]))
+        pcd_curr_i.paint_uniform_color([1, 0, 0])
+        
+        pcd_prev_i = o3d.geometry.PointCloud()
+        points = inputs_prev_i[inputs_prev_i[:, 3] == 1, :3]
+        pcd_prev_i.points = o3d.utility.Vector3dVector(points)
+       
+        pcd_prev_i.paint_uniform_color([0, 0, 1])
+        
+        pcd_query = o3d.geometry.PointCloud()
+        query_points_i = p_query[i].cpu().numpy()
+        pcd_query.points = o3d.utility.Vector3dVector(query_points_i[query_points_i[:, 3] == 1, :3])
+        pcd_query.paint_uniform_color([0.5, 1, 1])
+
+        # geos.append(pcd_query)
+        geos.append(pcd_curr_i)
+        geos.append(pcd_prev_i)
+        geos.append(bboxes_loss[i])
+        
+        bboxes_inputs = create_boxes(centers_current_i, query_crop_size)
+        geos += bboxes_inputs
+        
+        p_stacked = p_query[i][..., :3].cpu().numpy()
+        p_occ = p_query[i][..., 3].cpu().numpy()
+        
+        occ_sampled = logits_sampled[i].detach().cpu().numpy()
+        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+        values_sampled[values_sampled < threshold] = 0
+        values_sampled[values_sampled >= threshold] = 1
+        
+        values_gt = p_occ
+
+        both_occ = np.logical_and(values_gt, values_sampled)
+        pcd = o3d.geometry.PointCloud()
+        colors = np.zeros((values_gt.shape[0], 3))
+        colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
+        colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
+        colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
+        mask = np.any(colors != [0, 0, 0], axis=1)
+        colors = colors[mask]
+        pcd.points = o3d.utility.Vector3dVector(p_stacked[mask])
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        
+        geos += [pcd, base_axis]
+        o3d.visualization.draw_geometries(geos)
+def visualize_logits(logits_sampled, p_query, centers, loss, location, weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01, query_crop_size = 1.0):
     geos = []
     
     current_dir = os.getcwd()
@@ -136,7 +203,7 @@ def visualize_logits(logits_sampled, p_query, centers, loss, location,weights = 
     
     geos += [pcd, base_axis]
     
-    boxes_loss = create_boxes(loss, centers, query_crop_size)
+    boxes_loss = create_boxes(centers, query_crop_size, loss)
     geos += boxes_loss
     o3d.visualization.draw_geometries(geos)
     

@@ -98,12 +98,12 @@ class SequentialTrainerShuffled(BaseTrainer):
     
     def train_sequence(self, full_batch):
         with torch.no_grad():
-            centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full = self.precompute_sequence(full_batch)
+            centers_idx_full_current, centers_idx_full_prev, query_points_full_, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full = self.precompute_sequence(full_batch)
         print(f'Finished precomputing')
         torch.cuda.empty_cache()
         gc.collect()
         
-        loss = self.train_batch(centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full)
+        loss = self.train_batch(centers_idx_full_current, centers_idx_full_prev, query_points_full_, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full)
         print(f'Finished training batch, loss = {loss}')
         return loss
     
@@ -199,15 +199,22 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             # storage_latents_padded = torch.zeros(n_voxels_total, c, h, w, d).to(torch.device('cpu'))
             
-            centers_idx_full = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # all centers contained in the frame with grid indices
-            centers_coord_full = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
+            centers_idx_full_current = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # all centers contained in the frame with grid indices
+            centers_idx_full_prev = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # all centers contained in the frame with grid indices
 
-            grid_shapes_full = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # grid shapes contained in the frame
-            centers_lookup_full = torch.zeros(n_voxels_total, 2, dtype = torch.int32).to(torch.device('cpu')) # centers lookup contained in the frame, allows to retrieve the correct centers 
             query_points_full = torch.zeros(n_voxels_total, self.n_max_points_query, 4).to(torch.device('cpu'))
+
+            grid_shapes_full_current = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # grid shapes contained in the frame
+            grid_shapes_full_prev = torch.zeros(n_voxels_total, 3, dtype = torch.int32).to(torch.device('cpu')) # grid shapes contained in the frame
+            
+            centers_lookup_full_current = torch.zeros(n_voxels_total, 2, dtype = torch.int32).to(torch.device('cpu')) # centers lookup contained in the frame, allows to retrieve the correct centers 
+            centers_lookup_full_prev = torch.zeros(n_voxels_total, 2, dtype = torch.int32).to(torch.device('cpu')) # centers lookup contained in the frame, allows to retrieve the correct centers
+            
+            mask_centers_full = torch.zeros(n_voxels_total, dtype = torch.bool).to(torch.device('cpu'))
             
             latents_full = torch.zeros(n_voxels_total, *self.empty_latent_code.shape).to(torch.device('cpu'))
             inputs_full = torch.zeros(n_voxels_total, self.n_max_points_input, 4).to(torch.device('cpu'))
+            centers_coord_full = torch.zeros(n_voxels_total, 3).to(torch.device('cpu'))
 
             mask_force_save_empty = torch.zeros(n_voxels_total, dtype = torch.bool).to(torch.device('cpu'))
 
@@ -239,25 +246,32 @@ class SequentialTrainerShuffled(BaseTrainer):
                         # return centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded
                         tup = self.process_frame(centers_frame_padded, inputs_frame_padded, merged_latents_padded, prev_centers_frame_padded, prev_vol_bounds_padded, prev_inputs_frame_padded)
                         if self.debug: return tup
-                        
-                    merged_latents_padded, vol_bounds_padded, centers_frame_idx, grid_shapes_frame, centers_lookup_frame = tup
+                    
+                    centers_idx_current, centers_idx_prev, grid_shapes_current, grid_shapes_prev, centers_lookup_frame_current, centers_lookup_frame_prev, mask_centers, merged_latents_padded, vol_bounds_frame_padded = tup
 
                     prev_centers_frame_padded = centers_frame_padded.clone()
-                    prev_centers_frame_idx = centers_frame_idx.clone()
+                    prev_centers_idx_prev = centers_idx_current.clone()
                     prev_inputs_frame_padded = inputs_frame_padded.clone()
-                    prev_vol_bounds_padded = vol_bounds_padded.clone()
+                    prev_vol_bounds_padded = vol_bounds_frame_padded.copy()
                     
-                    n_voxels_frame = centers_frame_idx.shape[0]
+                    n_voxels_frame = centers_idx_current.shape[0]
                     
                     idx_end = idx_start + n_voxels_frame #n_voxels = n_x * n_y * n_z
 
                     if save_mask[scene_idx, frame_idx]: #Decide if we drop the frame to get more diverse data
 
-                        centers_idx_full[idx_start:idx_end] = centers_frame_idx.clone()
-                        query_points_full[idx_start:idx_end] = query_frame_padded.clone()
-                        grid_shapes_full[idx_start:idx_end] = grid_shapes_frame.clone() # grid shapes contained in the frame
-                        centers_lookup_full[idx_start:idx_end] = (centers_lookup_frame + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
+                        centers_idx_full_current[idx_start:idx_end] = centers_idx_current.clone()
+                        centers_idx_full_prev[idx_start:idx_end] = centers_idx_prev.clone()
                         
+                        query_points_full[idx_start:idx_end] = query_frame_padded.clone()
+                        
+                        grid_shapes_full_current[idx_start:idx_end] = grid_shapes_current.clone() # grid shapes contained in the frame
+                        grid_shapes_full_prev[idx_start:idx_end] = grid_shapes_prev.clone()
+
+                        centers_lookup_full_current[idx_start:idx_end] = (centers_lookup_frame_current + idx_start).clone() # centers lookup contained in the frame, allows to retrieve the correct centers 
+                        centers_lookup_full_prev[idx_start:idx_end] = (centers_lookup_frame_prev + idx_start).clone()
+                        mask_centers_full[idx_start:idx_end] = mask_centers.clone()
+
                         latents_full[idx_start:idx_end] = merged_latents_padded.clone()
                         inputs_full[idx_start:idx_end] = inputs_frame_padded.clone()
                         centers_coord_full[idx_start:idx_end] = centers_frame_padded.clone()
@@ -271,49 +285,60 @@ class SequentialTrainerShuffled(BaseTrainer):
             # mask_occupied = mask1.sum(dim=1) > 6 #n neighbouring voxels occupied
 
             # Apply the mask to filter the tensors
-            filtered_centers_idx_full = centers_idx_full[mask_occupied]
+            filtered_centers_idx_full_current = centers_idx_full_current[mask_occupied]
+            filtered_centers_idx_full_prev = centers_idx_full_prev[mask_occupied]
+            
             filtered_query_points_full = query_points_full[mask_occupied]
-            filtered_grid_shapes_full = grid_shapes_full[mask_occupied]
-            filtered_centers_lookup_full = centers_lookup_full[mask_occupied]  
             
+            filtered_grid_shapes_full_current = grid_shapes_full_current[mask_occupied]
+            filtered_grid_shapes_full_prev = grid_shapes_full_prev[mask_occupied]
+            
+            filtered_centers_lookup_full_current = centers_lookup_full_current[mask_occupied]  
+            filtered_centers_lookup_full_prev = centers_lookup_full_prev[mask_occupied]
+            filtered_mask_centers_full = mask_centers_full[mask_occupied]
                       
-            
-            #add empty voxels as well to learn the empty latent code
-            centers_frame_idx, query_frame_occupied, grid_shapes_padded, centers_lookup_padded, merged_latents_padded, inputs_frame_occupied, centers_frame_occupied = self.generate_empty_inputs(inputs_full.shape[0])
+            # #add empty voxels as well to learn the empty latent code
+            # centers_idx_current, query_frame_occupied, grid_shapes_padded, centers_lookup_padded, merged_latents_padded, inputs_frame_occupied, centers_frame_occupied = self.generate_empty_inputs(inputs_full.shape[0])
         
-            filtered_centers_idx_full = torch.cat([filtered_centers_idx_full, centers_frame_idx.to(torch.device('cpu'))], dim = 0)
-            filtered_query_points_full = torch.cat([filtered_query_points_full, query_frame_occupied.to(torch.device('cpu'))], dim = 0)
-            filtered_grid_shapes_full = torch.cat([filtered_grid_shapes_full, grid_shapes_padded.to(torch.device('cpu'))], dim = 0)
-            filtered_centers_lookup_full = torch.cat([filtered_centers_lookup_full, centers_lookup_padded.to(torch.device('cpu'))], dim = 0)
+            # filtered_centers_idx_full = torch.cat([filtered_centers_idx_full, centers_idx_current.to(torch.device('cpu'))], dim = 0)
+            # filtered_query_points_full = torch.cat([filtered_query_points_full, query_frame_occupied.to(torch.device('cpu'))], dim = 0)
+            # filtered_grid_shapes_full = torch.cat([filtered_grid_shapes_full, grid_shapes_padded.to(torch.device('cpu'))], dim = 0)
+            # filtered_centers_lookup_full = torch.cat([filtered_centers_lookup_full, centers_lookup_padded.to(torch.device('cpu'))], dim = 0)
             
-            latents_full = torch.cat([latents_full, merged_latents_padded.to(torch.device('cpu'))], dim = 0)
-            inputs_full = torch.cat([inputs_full, inputs_frame_occupied.to(torch.device('cpu'))], dim = 0)
-            centers_coord_full = torch.cat([centers_coord_full, centers_frame_occupied.to(torch.device('cpu'))], dim = 0)
+            # latents_full = torch.cat([latents_full, merged_latents_padded.to(torch.device('cpu'))], dim = 0)
+            # inputs_full = torch.cat([inputs_full, inputs_frame_occupied.to(torch.device('cpu'))], dim = 0)
+            # centers_coord_full = torch.cat([centers_coord_full, centers_frame_occupied.to(torch.device('cpu'))], dim = 0)
             
             # Generate a random permutation
-            permutation_mask = torch.randperm(filtered_centers_idx_full.shape[0])
-
-            print(f'filtered_centers_idx_full shape: {filtered_centers_idx_full.shape}')
-            print(f'filtered_query_points_full shape: {filtered_query_points_full.shape}')
-            print(f'filtered_grid_shapes_full shape: {filtered_grid_shapes_full.shape}')
-            print(f'filtered_centers_lookup_full shape: {filtered_centers_lookup_full.shape}')
-            
-            print(f'latents_full shape: {latents_full.shape}')
-            print(f'inputs_full shape: {inputs_full.shape}')
-            print(f'centers_coord_full shape: {centers_coord_full.shape}')
+            permutation_mask = torch.randperm(filtered_centers_idx_full_current.shape[0])
             
             # Apply the permutation mask
-            # centers_idx_full = filtered_centers_idx_full[permutation_mask]
-            # query_points_full = filtered_query_points_full[permutation_mask]
-            # grid_shapes_full = filtered_grid_shapes_full[permutation_mask]
-            # centers_lookup_full = filtered_centers_lookup_full[permutation_mask]
+            centers_idx_full_current = filtered_centers_idx_full_current[permutation_mask]
+            centers_idx_full_prev = filtered_centers_idx_full_prev[permutation_mask]
             
-            centers_idx_full = filtered_centers_idx_full
-            query_points_full = filtered_query_points_full
-            grid_shapes_full = filtered_grid_shapes_full
-            centers_lookup_full = filtered_centers_lookup_full
+            query_points_full = filtered_query_points_full[permutation_mask]
             
-            print(f'Batch contains {centers_idx_full.shape[0]} voxels')
+            grid_shapes_full_current = filtered_grid_shapes_full_current[permutation_mask]
+            grid_shapes_full_prev = filtered_grid_shapes_full_prev[permutation_mask]
+            
+            centers_lookup_full_current = filtered_centers_lookup_full_current[permutation_mask]
+            centers_lookup_full_prev = filtered_centers_lookup_full_prev[permutation_mask]
+            mask_centers_full = filtered_mask_centers_full[permutation_mask]
+            
+            # centers_idx_full_current = filtered_centers_idx_full_current
+            # centers_idx_full_prev = filtered_centers_idx_full_prev
+            
+            # query_points_full = filtered_query_points_full
+            
+            # grid_shapes_full_current = filtered_grid_shapes_full_current
+            # grid_shapes_full_prev = filtered_grid_shapes_full_prev
+            
+            # centers_lookup_full_current = filtered_centers_lookup_full_current
+            # centers_lookup_full_prev = filtered_centers_lookup_full_prev
+            
+            # mask_centers_full = filtered_mask_centers_full
+            
+            print(f'Batch contains {centers_idx_full_current.shape[0]} voxels')
             
             # if self.debug:
             #     centers_coord_full_debug = filtered_centers_coord_full[permutation_mask]
@@ -321,7 +346,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             #     return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full, centers_coord_full_debug, inputs_full_debug
 
             # print(f'finished precomputation batch')
-            return centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full
+            return centers_idx_full_current, centers_idx_full_prev, query_points_full, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full
         
     def init_empty_latent_grid(self, vol_bounds_frame_padded):
         n_x, n_y, n_z = vol_bounds_frame_padded['axis_n_crop']
@@ -394,12 +419,12 @@ class SequentialTrainerShuffled(BaseTrainer):
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
         grid_shapes_padded = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame_padded), 1).to(self.device)
         
-        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
-        centers_frame_idx_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_idx_current = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_idx_current_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
 
-        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
+        distributed_latents = st_utils.get_distributed_voxel(centers_idx_current, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
         inputs_frame_padded = self.pad_points(inputs_frame, vol_bounds_frame_padded, self.n_max_points_input)
-        distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
+        distributed_inputs = st_utils.get_distributed_voxel(centers_idx_current, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
         
         c, h, w, d = self.empty_latent_code.shape
 
@@ -412,11 +437,15 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
         
+        centers_lookup_frame_current = centers_lookup_padded
+        centers_lookup_frame_prev = centers_lookup_padded 
         
-        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
+        mask_centers = torch.ones(len(centers_frame_padded)).to(self.device)
+         
+        return_tup = [centers_idx_current_padded, centers_idx_current_padded, grid_shapes_padded, grid_shapes_padded, centers_lookup_padded, centers_lookup_padded, mask_centers, merged_latents_padded, vol_bounds_frame_padded]
         # if self.debug:
         #     return_tup.append(distributed_inputs)
-            #  [merged_latents_padded, centers_frame, vol_bounds_frame_padded, centers_frame_idx, distributed_inputs, inputs_frame_padded]
+            #  [merged_latents_padded, centers_frame, vol_bounds_frame_padded, centers_idx_current, distributed_inputs, inputs_frame_padded]
 
         return return_tup
     
@@ -437,14 +466,14 @@ class SequentialTrainerShuffled(BaseTrainer):
         centers_lookup_padded = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame_padded), 1).to(self.device)
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
         grid_shapes_padded = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame_padded), 1).to(self.device)
-        centers_frame_idx = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
-        centers_frame_idx_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_idx_current = st_utils.centers_to_grid_indexes(centers_frame, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_idx_current_padded = st_utils.centers_to_grid_indexes(centers_frame_padded, vol_bounds_frame_padded['lb'], self.query_crop_size).int().reshape(-1, 3)
         
-        distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
+        distributed_latents = st_utils.get_distributed_voxel(centers_idx_current, grid_latents_frame_current, grid_shapes, centers_lookup, self.shifts)
 
         if self.debug:
-            distributed_inputs = st_utils.get_distributed_voxel(centers_frame_idx, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
-            distributed_centers = st_utils.get_distributed_voxel(centers_frame_idx, centers_frame_padded, grid_shapes, centers_lookup, self.shifts)
+            distributed_inputs = st_utils.get_distributed_voxel(centers_idx_current, inputs_frame_padded, grid_shapes, centers_lookup, self.shifts)
+            distributed_centers = st_utils.get_distributed_voxel(centers_idx_current, centers_frame_padded, grid_shapes, centers_lookup, self.shifts)
         c, h, w, d = self.empty_latent_code.shape
 
         distributed_latents = distributed_latents.reshape(-1, c, 3*h, 3*w, 3*d)
@@ -453,22 +482,28 @@ class SequentialTrainerShuffled(BaseTrainer):
         n_x_p, n_y_p, n_z_p = vol_bounds_padded_prev['axis_n_crop'] #padded
         prev_centers_frame = prev_centers_frame_padded.reshape(n_x_p, n_y_p, n_z_p, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         centers_lookup_prev = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame), 1).to(self.device)
+        centers_lookup_prev_padded = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame_padded), 1).to(self.device) - (n_x_p * n_y_p * n_z_p) #will be positive after we add start_idx
         grid_shapes_prev = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame), 1).to(self.device)
-        centers_frame_idx_prev = st_utils.centers_to_grid_indexes(prev_centers_frame, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
+        grid_shapes_prev_padded = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame_padded), 1).to(self.device)
         
-        distributed_latents_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
+        centers_idx_prev = st_utils.centers_to_grid_indexes(prev_centers_frame, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
+        centers_idx_prev_padded = st_utils.centers_to_grid_indexes(prev_centers_frame_padded, vol_bounds_padded_prev['lb'], self.query_crop_size).int().reshape(-1, 3)
+        
+        distributed_latents_prev = st_utils.get_distributed_voxel(centers_idx_prev, prev_merged_latents_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
         distributed_latents_prev = distributed_latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
 
         if self.debug:
-            distributed_inputs_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_undist_inputs_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
-            distributed_centers_prev = st_utils.get_distributed_voxel(centers_frame_idx_prev, prev_centers_frame_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
+            distributed_inputs_prev = st_utils.get_distributed_voxel(centers_idx_prev, prev_undist_inputs_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
+            distributed_centers_prev = st_utils.get_distributed_voxel(centers_idx_prev, prev_centers_frame_padded, grid_shapes_prev, centers_lookup_prev, self.shifts)
             return distributed_inputs, distributed_inputs_prev, distributed_centers, distributed_centers_prev, inputs_frame, prev_undist_inputs_padded
 
         #centers from prev frame present in this frame
         mask_centers_prev_in_current = st_utils.compute_mask_occupied(prev_centers_frame, centers_frame)
         mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_frame, prev_centers_frame)
         
-
+        mask_centers_current_in_prev_padded = st_utils.compute_mask_occupied(centers_frame_padded, prev_centers_frame_padded)
+        mask_centers_prev_in_current_padded = st_utils.compute_mask_occupied(prev_centers_frame_padded, centers_frame_padded)
+        
         distributed_latents_prev_temp = distributed_latents.clone() # allows to merge with itself where possible 
         # print(f'distributed_latents_prev_temp: {distributed_latents_prev_temp.shape}, mask_centers_current_in_prev: {mask_centers_current_in_prev.shape}')
         # print(f'mask_centers_prev_in_current shape: {mask_centers_prev_in_current.shape}, sum: {mask_centers_prev_in_current.sum()}')
@@ -483,8 +518,24 @@ class SequentialTrainerShuffled(BaseTrainer):
 
         merged_latents_padded[1:-1, 1:-1, 1:-1] = merged_latents.reshape(n_x-2, n_y-2, n_z-2, *self.empty_latent_code.shape)
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
-                
-        return_tup = [merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded]
+        
+        #Prepare data for return
+        centers_idx_current = centers_idx_current_padded
+        centers_idx_prev_return = centers_idx_current.clone()
+        centers_idx_prev_return[mask_centers_current_in_prev_padded] = centers_idx_prev_padded[mask_centers_prev_in_current_padded]
+        
+        grid_shapes_current = grid_shapes_padded
+        grid_shapes_prev_return = grid_shapes_current.clone()
+        grid_shapes_prev_return[mask_centers_current_in_prev_padded] = grid_shapes_prev_padded[mask_centers_prev_in_current_padded]
+        
+        centers_lookup_frame_current = centers_lookup_padded
+        centers_lookup_frame_prev = centers_lookup_frame_current.clone()
+        centers_lookup_frame_prev[mask_centers_current_in_prev_padded] = centers_lookup_prev_padded[mask_centers_prev_in_current_padded]
+        
+        mask_centers = mask_centers_current_in_prev_padded
+#       centers_idx_current, centers_idx_prev, grid_shapes_current, grid_shapes_prev, centers_lookup_frame_current, centers_lookup_frame_prev, mask_centers, merged_latents_padded, vol_bounds_frame_padded = tup
+
+        return_tup = [centers_idx_current, centers_idx_prev_return, grid_shapes_current, grid_shapes_prev_return, centers_lookup_frame_current, centers_lookup_frame_prev, mask_centers, merged_latents_padded, vol_bounds_frame_padded]
         
         if self.debug:
             return_tup.append(distributed_inputs)
@@ -511,12 +562,12 @@ class SequentialTrainerShuffled(BaseTrainer):
         mask_keep = torch.nn.functional.pad(mask_keep_int, (1, 1, 1, 1, 1, 1), value=False)
         mask_keep = mask_keep.reshape(-1)
         
-        merged_latents_padded, vol_bounds_frame_padded, centers_frame_idx_padded, grid_shapes_padded, centers_lookup_padded = tup
+        merged_latents_padded, vol_bounds_frame_padded, centers_idx_current_padded, grid_shapes_padded, centers_lookup_padded = tup
         
-        # needed: centers_frame_idx, query_frame_padded, grid_shapes_frame, centers_lookup_frame, merged_latents_padded, inputs_frame_padded, centers_frame_padded
+        # needed: centers_idx_current, query_frame_padded, grid_shapes_frame, centers_lookup_frame, merged_latents_padded, inputs_frame_padded, centers_frame_padded
         
         return_tup = (
-            centers_frame_idx_padded[mask_keep],
+            centers_idx_current_padded[mask_keep],
             query_frame_occupied[mask_keep],
             grid_shapes_padded[mask_keep],
             centers_lookup_padded[mask_keep] + start_idx,
@@ -528,11 +579,11 @@ class SequentialTrainerShuffled(BaseTrainer):
         print(f'Generated empty inputs, {torch.sum(mask_keep)} voxels')
         return return_tup
     
-    def train_batch(self, centers_idx_full, query_points_full, grid_shapes_full, centers_lookup_full, latents_full, inputs_full, centers_coord_full):
+    def train_batch(self, centers_idx_full_current, centers_idx_full_prev, query_points_full, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full):
         self.model.train()
         self.model_merge.train()
                 
-        n_batch_div = len(centers_idx_full) // self.n_batch
+        n_batch_div = len(centers_idx_full_current) // self.n_batch
         idx_start = 0
         iter_batch = 0
         loss_full = 0
@@ -552,48 +603,73 @@ class SequentialTrainerShuffled(BaseTrainer):
             idx_end = idx_start + self.n_batch
     
             # print(f'Process batch {i} out of {n_batch_div}, starting from {idx_start} to {idx_end}, tot length: {len(centers_idx_full)}')           
-            centers_idx_batch = centers_idx_full[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel in its frame
-
-            grid_shapes_batch = grid_shapes_full[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel in its frame
-            centers_lookup_batch = centers_lookup_full[idx_start:idx_end].to(self.device) # centers lookup corresponding to the voxel in its frame
+            centers_idx_batch_current = centers_idx_full_current[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel in its frame
+            grid_shapes_batch_current = grid_shapes_full_current[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel in its frame
+            centers_lookup_batch_current = centers_lookup_full_current[idx_start:idx_end].to(self.device) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_full[idx_start:idx_end].to(self.device) # query points corresponding to the voxel          
+            mask = mask_centers_full[idx_start:idx_end].to(self.device)
             
-            if len(centers_idx_batch) == 0:
+            centers_idx_batch_prev = centers_idx_full_prev[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel to concat with current: will be itself of of the previous frame
+            grid_shapes_batch_prev = grid_shapes_full_prev[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel to concat with current: will be itself of of the previous frame
+            centers_lookup_batch_prev = centers_lookup_full_prev[idx_start:idx_end].to(self.device) # centers lookup corresponding to the voxel to concat with current: will be itself of of the previous frame
+
+            if len(centers_idx_batch_current) == 0:
                 continue
             
-            latents_existing = st_utils.get_distributed_voxel(centers_idx_batch, latents_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
-            latents_existing = latents_existing.reshape(-1, c, 3*h, 3*w, 3*d)
+            latents_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], latents_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
+            latents_prev = latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
+            centers_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev, centers_coord_full, grid_shapes_batch_prev, centers_lookup_batch_prev, self.shifts).to(self.device)
+            centers_coord_batch_prev = centers_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
+            inputs_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev, inputs_full, grid_shapes_batch_prev, centers_lookup_batch_prev, self.shifts).to(self.device)
             
-            # compute the latents
-            inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch, inputs_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
-            centers_distributed_batch = st_utils.get_distributed_voxel(centers_idx_batch, centers_coord_full, grid_shapes_batch, centers_lookup_batch, self.shifts).to(self.device)
+            # compute the latents of the current frame
+            inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch_current, inputs_full, grid_shapes_batch_current, centers_lookup_batch_current, self.shifts).to(self.device)
+            centers_distributed_batch_current = st_utils.get_distributed_voxel(centers_idx_batch_current, centers_coord_full, grid_shapes_batch_current, centers_lookup_batch_current, self.shifts).to(self.device)
 
-            centers_coord_batch = centers_distributed_batch.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
+            centers_coord_batch_current = centers_distributed_batch_current.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
         
-            latents_current = self.encode_occupied_inputs_flat(inputs_current_batch, centers_distributed_batch)
+            latents_current = self.encode_occupied_inputs_flat(inputs_current_batch, centers_distributed_batch_current)
             latents_current = latents_current.reshape(-1, c, 3*h, 3*w, 3*d)
+            
+            # stack the latents 
+            mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_coord_batch_current, centers_coord_batch_prev)
+            mask_centers_prev_in_current = st_utils.compute_mask_occupied(centers_coord_batch_prev, centers_coord_batch_current)
+            
+            sum_centers_current_in_prev = torch.sum(mask_centers_current_in_prev)
+            sum_centers_prev_in_current = torch.sum(mask_centers_prev_in_current)
+            
+            if sum_centers_current_in_prev != sum_centers_prev_in_current:
+                print(f'WARNING: sum_centers_current_in_prev != sum_centers_prev_in_current: {sum_centers_current_in_prev} vs {sum_centers_prev_in_current}')
+            
+            latents_existing_temp = latents_current.clone()
+            latents_existing_temp[mask] = latents_prev
 
-            stacked_latents = torch.cat((latents_current, latents_existing), dim = 1)
+            stacked_latents = torch.cat((latents_current, latents_existing_temp), dim = 1)
         
             merged_latents = self.merge_latent_map(stacked_latents)
             
             # compute logits : latents
             p_stacked = query_points_batch.reshape(-1, self.n_max_points_query, 4)
-            centers = centers_coord_batch.reshape(-1, 3)
+            centers = centers_coord_batch_current.reshape(-1, 3)
             occ = query_points_batch[..., 3]
 
             # return p_stacked, occ, merged_latents, centers
             logits_sampled = self.get_logits(p_stacked, merged_latents, centers)
             
             # compare logits with query 
-            # inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
-
+            inputs_distributed_batch_prev_int = inputs_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # max_weights = torch.max(weights)
             # min_weights = torch.min(weights)
-            
-            loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
-            loss_batch = loss_batch_unweighted
+            # pos_weight_value = st_utils.compute_pos_weight(occ)
+            # pos_weight = torch.full_like(occ, pos_weight_value)
+            criterion = nn.BCEWithLogitsLoss(reduction='none')
+
+            # loss_batch_unweighted = F.binary_cross_entropy_with_logits(logits_sampled, occ, reduction='none')
+            loss_batch_unweighted = criterion(logits_sampled, occ)
+            # dynamic_weights = loss_batch_unweighted**2
+            loss_batch = loss_batch_unweighted #* dynamic_weights
 
             # loss_batch_unweighted_sum = loss_batch_unweighted.sum()
             # loss_batch_sum = loss_batch.sum()
@@ -602,23 +678,25 @@ class SequentialTrainerShuffled(BaseTrainer):
             # loss_batch_sum = loss_batch.sum()
             # inputs_current_batch_vis = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # vis_utils.visualize_logits(logits_sampled, p_stacked, self.location, weights = loss_batch, inputs_distributed = inputs_current_batch_vis.reshape(-1, self.n_max_points_input, 4), force_viz = False)
-            saving_path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training_shuffled/debug_files'
+            # saving_path = '/home/roberson/MasterThesis/master_thesis/Playground/Training/Sequential_training_shuffled/debug_files'
 
-            torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
-            torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
-            torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
-            torch.save(loss_batch, os.path.join(saving_path, f'loss_batch_{self.iteration}.pt'))
-
-            vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch, force_viz = False)
+            # torch.save(inputs_current_batch, os.path.join(saving_path, f'inputs_current_batch_{self.iteration}.pt'))
+            # torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
+            # torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
+            # torch.save(loss_batch, os.path.join(saving_path, f'loss_batch_{self.iteration}.pt'))
+            # vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_current_batch, inputs_distributed_batch_prev)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch_int, force_viz = False)
             
-            loss_batch = loss_batch.sum(dim=-1).mean()
+            loss_batch = loss_batch.mean()
+
             loss_batch.backward()
+            print(f'loss_batch: {loss_batch}')
             if (i + 1) % accumulation_steps == 0:
 
                 if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
                 
-                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
-                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 10)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 10)  # Print gradient norms
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
                 
@@ -635,12 +713,18 @@ class SequentialTrainerShuffled(BaseTrainer):
             
             idx_start = idx_end
             
-            centers_idx_batch = centers_idx_batch.to(torch.device('cpu')) # centers indices corresponding to the voxel in its frame
-
-            grid_shapes_batch = grid_shapes_batch.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
-            centers_lookup_batch = centers_lookup_batch.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
+            centers_idx_batch_current = centers_idx_batch_current.to(torch.device('cpu')) # centers indices corresponding to the voxel in its frame
+            grid_shapes_batch_current = grid_shapes_batch_current.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
+            centers_lookup_batch_current = centers_lookup_batch_current.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_batch.to(torch.device('cpu')) # query points corresponding to the voxel
+            mask = mask.to(torch.device('cpu'))
+            
+            centers_idx_batch_prev = centers_idx_batch_prev.to(torch.device('cpu')) # centers indices corresponding to the voxel in its frame
+            grid_shapes_batch_prev = grid_shapes_batch_prev.to(torch.device('cpu')) # grid shapes corresponding to the voxel in its frame
+            centers_lookup_batch_prev = centers_lookup_batch_prev.to(torch.device('cpu')) # centers lookup corresponding to the voxel in its frame
 
+            
+            torch.cuda.empty_cache()
         
         if iter_batch == 0: return loss_full
         else: return loss_full / iter_batch
@@ -849,7 +933,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 
         distributed_inputs_short[mask] = distributed_inputs[indexes_keep]
         
-        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=1).int() > self.points_threshold #TODO move this to config
+        voxels_occupied = distributed_inputs_short[..., 3].sum(dim=-1).int() > self.points_threshold #TODO move this to config
 
         if isquery:
             for i in range(distributed_inputs.shape[0]):

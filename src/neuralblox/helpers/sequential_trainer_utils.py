@@ -102,6 +102,7 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     shifted_values = grids[shifted_indices.to(grids.device)]
 
     return shifted_values
+
 def get_inputs_from_scene(batch, device):
         
     p_in_3D = batch.get('inputs').to(device)
@@ -280,3 +281,20 @@ def create_batch_groups(train_loader, group_size): #TODO include this as a stand
         batch_groups.append(current_group)
     
     return batch_groups
+
+def compute_pos_weight(occ, min_weight=0.1, max_weight=10.0):
+    num_positives = occ.sum()
+    num_negatives = occ.numel() - num_positives
+
+    # Avoid division by zero
+    if num_positives == 0:
+        pos_weight = max_weight  # Assign maximum weight if no positives
+    elif num_negatives == 0:
+        pos_weight = min_weight  # Assign minimum weight if no negatives
+    else:
+        pos_weight = num_negatives / num_positives
+    
+    # Clip pos_weight to be within the specified range
+    pos_weight = torch.clamp(pos_weight, min=min_weight, max=max_weight)
+    
+    return pos_weight
