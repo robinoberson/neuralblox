@@ -102,6 +102,7 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     shifted_values = grids[shifted_indices.to(grids.device)]
 
     return shifted_values
+
 def get_inputs_from_scene(batch, device):
         
     p_in_3D = batch.get('inputs').to(device)

@@ -41,7 +41,7 @@ training:
   checkpoint_interval_minutes: 0
   limited_gpu: true
   log_comet: false
-  out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot
+  out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot-overfit
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
