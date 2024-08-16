@@ -1,6 +1,6 @@
 import time
 import torch
-
+import os
 def print_timing(t0, operation):
     torch.cuda.synchronize()
     t1 = time.time()
@@ -97,6 +97,13 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     
     # Check if any indices are out of bounds
     if (shifted_indices_min < 0).any() or (shifted_indices_max >= grids.shape[0]).any():
+        print(shifted_indices_min, shifted_indices_max)
+        out_path = os.path.join(os.getcwd(), 'out_debug')
+        torch.save(centers_idx, os.path.join(out_path, 'centers_idx.pt'))
+        torch.save(grids, os.path.join(out_path, 'grids.pt'))
+        torch.save(grid_shapes, os.path.join(out_path, 'grid_shapes.pt'))
+        torch.save(centers_lookup, os.path.join(out_path, 'centers_lookup.pt'))
+        torch.save(shifts, os.path.join(out_path, 'shifts.pt'))
         raise ValueError("Some indices are out of bounds")
     # Fetch the shifted values
     shifted_values = grids[shifted_indices.to(grids.device)]
