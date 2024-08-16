@@ -37,6 +37,13 @@ with open(config_path, 'w') as f:
 
 log_comet = cfg['training']['log_comet']
 
+data_set = os.path.basename(cfg['data']['path'])[9:11]
+if cfg["data"]["transform"]["specific_angle"]:
+    sp = 'T'
+else:
+    sp = 'F'
+experiment_name = f'X: {cfg["data"]["transform"]["angle_x"]}, Y: {cfg["data"]["transform"]["angle_y"]}, sp {sp}, {data_set}'
+
 if log_comet:
     from comet_ml import Experiment
     from comet_ml.integration.pytorch import log_model
@@ -44,8 +51,10 @@ if log_comet:
     experiment = Experiment(
         api_key="PhozpUD8pYftjTWYPEI2hbrnw",
         project_name="train-simultaneously",
-        workspace="robinoberson"
+        workspace="robinoberson",
     )
+    
+    experiment.set_name(experiment_name)
 
 import torch
 import torch.optim as optim
