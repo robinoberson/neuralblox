@@ -79,7 +79,7 @@ def get_empty_inputs(centers, crop_size, n_max_points = 2048):
 
     return random_points
 
-def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shifts):
+def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shifts, out_dir = None):
 
     # Convert centers and centers_lookup to appropriate dimensions
     center_x, center_y, center_z = centers_idx[:, 0], centers_idx[:, 1], centers_idx[:, 2]
@@ -98,7 +98,11 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     # Check if any indices are out of bounds
     if (shifted_indices_min < 0).any() or (shifted_indices_max >= grids.shape[0]).any():
         print(shifted_indices_min, shifted_indices_max)
-        out_path = os.path.join(os.getcwd(), 'out_debug')
+        if out_dir is None:
+            out_dir = os.getcwd()
+        out_path = os.path.join(out_dir, 'out_debug')
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
         torch.save(centers_idx, os.path.join(out_path, 'centers_idx.pt'))
         torch.save(grids, os.path.join(out_path, 'grids.pt'))
         torch.save(grid_shapes, os.path.join(out_path, 'grid_shapes.pt'))

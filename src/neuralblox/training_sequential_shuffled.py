@@ -103,6 +103,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         torch.cuda.empty_cache()
         gc.collect()
         
+        # with torch.no_grad():
         loss = self.train_batch(centers_idx_full_current, centers_idx_full_prev, query_points_full_, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full)
         print(f'Finished training batch, loss = {loss}')
         return loss
@@ -615,8 +616,22 @@ class SequentialTrainerShuffled(BaseTrainer):
 
             if len(centers_idx_batch_current) == 0:
                 continue
-            
-            latents_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], latents_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
+            try:
+                latents_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], latents_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
+            except exception as e:
+                print(e)
+                print(f'mask sum {torch.sum(mask)}')
+                
+                path = os.path.join(self.cfg['training']['out_dir'], 'debug')
+                os.makedirs(path, exist_ok=True)
+                
+                print(f'saving debug files to {path}')
+                torch.save(centers_idx_batch_prev, os.path.join(path, 'centers_idx_batch_prev.pt'))
+                torch.save(grid_shapes_batch_prev, os.path.join(path, 'grid_shapes_batch_prev.pt'))
+                torch.save(centers_lookup_batch_prev, os.path.join(path, 'centers_lookup_batch_prev.pt'))
+                torch.save(mask, os.path.join(path, 'mask.pt'))
+                
+                continue
             latents_prev = latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
             centers_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev, centers_coord_full, grid_shapes_batch_prev, centers_lookup_batch_prev, self.shifts).to(self.device)
             centers_coord_batch_prev = centers_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
