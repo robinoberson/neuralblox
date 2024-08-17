@@ -172,6 +172,47 @@ class Generator3DSequential(object):
             times.append(time.time() - t0)
         
         return mesh_list, inputs_frame_list, times, logits
+    
+    def generate_logits_at_index(self, batch, index, idx_batch, n_points_query=8192):
+        self.trainer.model.eval()
+        self.trainer.model_merge.eval()
+        
+        p_in_full, p_query_full = st_utils.get_inputs_from_scene(batch, self.device)
+        p_in = p_in_full[idx_batch]
+        p_query = p_query_full[idx_batch]
+        
+        n_sequence = p_in.shape[0]
+        
+        logits = []
+        
+        for idx_sequence in range(n_sequence):
+            if idx_sequence > index:
+                break
+            
+            inputs_frame = p_in[idx_sequence]
+            if idx_sequence == 0:
+                merged_latents, centers_frame, inputs_frame = self.fuse_cold_start(inputs_frame)
+            else:
+                merged_latents, centers_frame, inputs_frame = self.fuse(inputs_frame)
+                
+            for merged_latent, center, inputs_frame_lat in zip(merged_latents, centers_frame, inputs_frame):
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame_lat, overwrite=True, threshold=self.points_threshold)
+                
+            occupied_voxels = inputs_frame[..., 3].sum(dim = -1) > self.points_threshold
+            
+            query_points = st_utils.get_empty_inputs(centers_frame, crop_size = self.trainer.query_crop_size, n_max_points = n_points_query)
+            
+            logits_sampled = self.trainer.get_logits(query_points, merged_latents, centers_frame)
+            
+            logits.append([logits_sampled, query_points, inputs_frame, centers_frame])
+        
+        return logits
+
+            
+                
+            
+        
+
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
         p_in_occ = batch.get('inputs.occ').to(self.device).squeeze(0).unsqueeze(-1)
