@@ -63,7 +63,7 @@ training:
   load_optimizer: false
   lr: 0.01
   lr_reduce_factor: 0.9
-  lr_patience: 50
+  lr_patience: 40
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt
@@ -96,5 +96,7 @@ generation:
   resolution_0: 30
   voxel_threshold: 0.001
   n_max_inputs: 4096
-# visualization: false
+visualization: false
+k_value: 0.2
+
 #   k: 0.2
