@@ -228,9 +228,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             idx_start = 0
             
             for scene_idx in range(n_scenes):
+                torch.cuda.empty_cache()
+                gc.collect()
                 for frame_idx in range(n_frames):
-                    torch.cuda.empty_cache()
-
                     centers_frame_padded = centers_scene_list[scene_idx][frame_idx]
                     inputs_frame_padded = inputs_scene_distributed_list[scene_idx][frame_idx]
                     query_frame_padded = query_scene_distributed_list[scene_idx][frame_idx].reshape(-1, self.n_max_points_query, 4)
@@ -502,8 +502,13 @@ class SequentialTrainerShuffled(BaseTrainer):
         mask_centers_prev_in_current = st_utils.compute_mask_occupied(prev_centers_frame, centers_frame)
         mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_frame, prev_centers_frame)
         
-        mask_centers_current_in_prev_padded = st_utils.compute_mask_occupied(centers_frame_padded, prev_centers_frame_padded)
-        mask_centers_prev_in_current_padded = st_utils.compute_mask_occupied(prev_centers_frame_padded, centers_frame_padded)
+        # mask_centers_current_in_prev_padded = st_utils.compute_mask_occupied(centers_frame_padded, prev_centers_frame_padded)
+        # mask_centers_prev_in_current_padded = st_utils.compute_mask_occupied(prev_centers_frame_padded, centers_frame_padded)
+        mask_centers_prev_in_current_reshaped = mask_centers_prev_in_current.reshape(n_x_p-2, n_y_p-2, n_z_p-2)
+        mask_centers_current_in_prev_reshaped = mask_centers_current_in_prev.reshape(n_x-2, n_y-2, n_z-2)
+        
+        mask_centers_current_in_prev_padded = torch.nn.functional.pad(mask_centers_current_in_prev_reshaped, (1, 1, 1, 1, 1, 1), value = False).reshape(-1)
+        mask_centers_prev_in_current_padded = torch.nn.functional.pad(mask_centers_prev_in_current_reshaped, (1, 1, 1, 1, 1, 1), value = False).reshape(-1)
         
         distributed_latents_prev_temp = distributed_latents.clone() # allows to merge with itself where possible 
         # print(f'distributed_latents_prev_temp: {distributed_latents_prev_temp.shape}, mask_centers_current_in_prev: {mask_centers_current_in_prev.shape}')
@@ -618,7 +623,7 @@ class SequentialTrainerShuffled(BaseTrainer):
                 continue
             try:
                 latents_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], latents_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
-            except exception as e:
+            except ValueError as e:
                 print(e)
                 print(f'mask sum {torch.sum(mask)}')
                 
@@ -710,8 +715,8 @@ class SequentialTrainerShuffled(BaseTrainer):
 
                 if self.log_experiment and self.location != 'euler': self.GPU_monitor.update_memory_usage()
                 
-                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 10)  # Print gradient norms
-                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 10)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model_merge, print_every = 100)  # Print gradient norms
+                st_utils.print_gradient_norms(self.iteration, self.model, print_every = 100)  # Print gradient norms
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 torch.nn.utils.clip_grad_norm_(self.model_merge.parameters(), max_norm=2.0)
                 
