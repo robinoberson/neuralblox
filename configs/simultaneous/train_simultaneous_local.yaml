@@ -7,8 +7,8 @@ data:                                                                           
   # path: 
     # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
   path: 
-    # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
+    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
+  # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
   pointcloud_noise: 0.0
   transform:
     specific_angle: true

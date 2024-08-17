@@ -198,20 +198,17 @@ class Generator3DSequential(object):
             for merged_latent, center, inputs_frame_lat in zip(merged_latents, centers_frame, inputs_frame):
                 self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame_lat, overwrite=True, threshold=self.points_threshold)
                 
+            stacked_latents, centers, pcds = self.stack_latents_all()
+            
             occupied_voxels = inputs_frame[..., 3].sum(dim = -1) > self.points_threshold
             
-            query_points = st_utils.get_empty_inputs(centers_frame, crop_size = self.trainer.query_crop_size, n_max_points = n_points_query)
+            query_points = st_utils.get_empty_inputs(centers, crop_size = self.trainer.query_crop_size, n_max_points = n_points_query)
             
-            logits_sampled = self.trainer.get_logits(query_points, merged_latents, centers_frame)
+            logits_sampled = self.trainer.get_logits(query_points, stacked_latents, centers)
             
-            logits.append([logits_sampled, query_points, inputs_frame, centers_frame])
+            logits.append([logits_sampled, query_points, inputs_frame, centers])
         
         return logits
-
-            
-                
-            
-        
 
     def get_inputs(self, batch):
         p_in_3D = batch.get('inputs').to(self.device).squeeze(0)
