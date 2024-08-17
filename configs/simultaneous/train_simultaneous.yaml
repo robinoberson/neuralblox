@@ -60,7 +60,7 @@ training:
   reset_training: true
   monitor_gpu_usage: false 
   log_comet: false
-  reset_optimizer: false
+  load_optimizer: false
   lr: 0.01
   lr_reduce_factor: 0.9
   lr_patience: 50

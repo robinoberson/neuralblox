@@ -18,7 +18,6 @@ training:
   # out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_-10to10_5scenes_lr0001
   limited_gpu: true
   save_data_viz: true
-  reset_optimizer: true
   log_comet: true
   n_voxels_max: 30
   n_batch: 50

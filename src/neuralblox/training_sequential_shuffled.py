@@ -720,9 +720,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             # torch.save(p_stacked, os.path.join(saving_path, f'p_stacked_{self.iteration}.pt'))
             # torch.save(centers, os.path.join(saving_path, f'centers_{self.iteration}.pt'))
             # torch.save(loss_batch, os.path.join(saving_path, f'loss_batch_{self.iteration}.pt'))
-            vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_current_batch, inputs_distributed_batch_prev, location = self.location)
+            # vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_current_batch, inputs_distributed_batch_prev, location = self.location)
             # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch, inputs_distributed = inputs_current_batch, force_viz = False)
-            # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch_int, force_viz = False)
+            vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch_int, force_viz = False)
             
             loss_batch = loss_batch.mean()
 
