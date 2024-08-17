@@ -96,5 +96,5 @@ generation:
   resolution_0: 30
   voxel_threshold: 0.001
   n_max_inputs: 4096
-
-
+# visualization: false
+#   k: 0.2

@@ -77,12 +77,33 @@ def create_boxes(centers, query_crop_size, loss_batch = None, color = None):
         # bbox.LineSet = 7
         boxes.append(bbox)
     return boxes
-def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers_prev_int, centers_current, centers_prev, loss, inputs_distributed_current, inputs_distributed_prev, query_crop_size = 1.0, threshold = 0.1):
+def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers_prev_int, centers_current, centers_prev, loss, inputs_distributed_current, inputs_distributed_prev, location, query_crop_size = 1.0, threshold = 0.1):    
+    current_dir = os.getcwd()
+        
+    file_path = f'configs/simultaneous/train_simultaneous_{location}.yaml'
+    # file_path = '/home/robin/Dev/MasterThesis/GithubRepos/master_thesis/neuralblox/configs/fusion/train_fusion_home.yaml'
+
+    try:
+        with open(os.path.join(current_dir, file_path), 'r') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        print(e)
+        return
+        
+    if not(config['visualization']):
+        return    
+    
     geos = []
     
     bboxes_loss = create_boxes(centers_current_int, query_crop_size, loss)
-
+    summed_loss = loss.sum(dim=1)
+    
+    k = int(config['k_value'] * len(summed_loss))
+    thresh = torch.topk(summed_loss, k).values[-1]
+    
     for i in range(len(centers_current)):
+        if summed_loss[i] < thresh:
+            continue
         geos = []
         centers_current_i = centers_current[i]
         centers_prev_i = centers_prev[i]

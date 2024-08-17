@@ -37,7 +37,7 @@ with open(config_path, 'w') as f:
 
 log_comet = cfg['training']['log_comet']
 
-data_set = os.path.basename(cfg['data']['path'])[9:11]
+data_set = os.path.basename(cfg['data']['path'])[9:12]
 if cfg["data"]["transform"]["specific_angle"]:
     sp = 'T'
 else:
