@@ -98,22 +98,48 @@ def get_distributed_voxel(centers_idx, grids, grid_shapes, centers_lookup, shift
     # Check if any indices are out of bounds
     if (shifted_indices_min < 0).any() or (shifted_indices_max >= grids.shape[0]).any():
         print(shifted_indices_min, shifted_indices_max)
-        if out_dir is None:
-            out_dir = os.getcwd()
-        out_path = os.path.join(out_dir, 'out_debug')
-        if not os.path.exists(out_path):
-            os.makedirs(out_path)
-        torch.save(centers_idx, os.path.join(out_path, 'centers_idx.pt'))
-        torch.save(grids, os.path.join(out_path, 'grids.pt'))
-        torch.save(grid_shapes, os.path.join(out_path, 'grid_shapes.pt'))
-        torch.save(centers_lookup, os.path.join(out_path, 'centers_lookup.pt'))
-        torch.save(shifts, os.path.join(out_path, 'shifts.pt'))
         raise ValueError("Some indices are out of bounds")
     # Fetch the shifted values
     shifted_values = grids[shifted_indices.to(grids.device)]
 
     return shifted_values
 
+def get_distributed_voxel_debug(centers_idx, grids, grid_shapes, centers_lookup, shifts, out_dir = None):
+
+    # Convert centers and centers_lookup to appropriate dimensions
+    center_x, center_y, center_z = centers_idx[:, 0], centers_idx[:, 1], centers_idx[:, 2]
+    grid_offsets = centers_lookup[:, 0]
+
+    # Create index matrices for shifts
+    base_indices = grid_offsets + (center_x * grid_shapes[:, 1] + center_y) * grid_shapes[:, 2] + center_z
+
+    # Calculate shifted indices
+    shift_dx, shift_dy, shift_dz = shifts[:, 0], shifts[:, 1], shifts[:, 2]
+    shifted_indices = base_indices.unsqueeze(1) + (shift_dx.unsqueeze(0) * grid_shapes[:, 1].unsqueeze(1) + shift_dy.unsqueeze(0)) * grid_shapes[:, 2].unsqueeze(1) + shift_dz.unsqueeze(0)
+
+    shifted_indices_min = torch.min(shifted_indices)
+    shifted_indices_max = torch.max(shifted_indices)
+    
+    success = True
+    # Check if any indices are out of bounds
+    if (shifted_indices_min < 0).any() or (shifted_indices_max >= grids.shape[0]).any():
+        success = False
+        print(shifted_indices_min, shifted_indices_max)
+        # if out_dir is None:
+        #     out_dir = os.getcwd()
+        # out_path = os.path.join(out_dir, 'out_debug')
+        # if not os.path.exists(out_path):
+        #     os.makedirs(out_path)
+        # torch.save(centers_idx, os.path.join(out_path, 'centers_idx.pt'))
+        # torch.save(grids, os.path.join(out_path, 'grids.pt'))
+        # torch.save(grid_shapes, os.path.join(out_path, 'grid_shapes.pt'))
+        # torch.save(centers_lookup, os.path.join(out_path, 'centers_lookup.pt'))
+        # torch.save(shifts, os.path.join(out_path, 'shifts.pt'))
+        # raise ValueError("Some indices are out of bounds")
+    # Fetch the shifted values
+    # shifted_values = grids[shifted_indices.to(grids.device)]
+
+    return success
 def get_inputs_from_scene(batch, device):
         
     p_in_3D = batch.get('inputs').to(device)

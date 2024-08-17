@@ -1,13 +1,5 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
-data:
-  # classes: [2024-06-27_15-00-39, 2024-06-27_15-01-39, 2024-06-27_15-01-40, 2024-06-27_15-01-42,
-  #   2024-06-27_15-01-46, 2024-06-27_15-01-48, 2024-06-27_15-01-51, 2024-06-27_15-01-55,
-  #   2024-06-27_15-01-57, 2024-06-27_15-01-58, 2024-06-27_15-01-59, 2024-06-27_15-02-00,
-  #   2024-06-27_15-02-01, 2024-06-27_15-02-02, 2024-06-27_15-02-03, 2024-06-27_15-11-13,
-  #   2024-06-27_15-11-14, 2024-06-27_15-11-15, 2024-06-27_15-11-18, 2024-06-27_15-11-19,
-  #   2024-06-27_15-11-23, 2024-06-27_15-11-31, 2024-06-27_15-11-34, 2024-06-27_15-11-35,
-  #   2024-06-27_15-11-37, 2024-06-27_15-11-38, 2024-06-27_15-11-41, 2024-06-27_15-11-45,
-  #   2024-06-27_15-11-46, 2024-06-27_15-11-48, 2024-06-27_15-11-53]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
+data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
   # train_classes: ['2024-06-27_15-00-39', '2024-06-27_15-01-39']
   # val_classes: ['2024-06-27_15-11-18', '2024-06-27_15-11-19']
   train_classes:
@@ -19,8 +11,8 @@ data:
   pointcloud_noise: 0.0
   transform:
     specific_angle: true
-    angle_x: 0
-    angle_y: -33
+    angle_x: 5
+    angle_y: 180
     angle_z: 0
     # angle_x: 0
     # angle_y: 33
@@ -40,7 +32,7 @@ test:
 training:
   checkpoint_interval_minutes: 0
   limited_gpu: true
-  log_comet: true
+  log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot-overfit
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
@@ -48,6 +40,6 @@ training:
   # starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_backbone.pt
   # starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_merging.pt
   n_voxels_max: 10
-  batch_group_size: 3
+  batch_group_size: 2
 
 visualization: true

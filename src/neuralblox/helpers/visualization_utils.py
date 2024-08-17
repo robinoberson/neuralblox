@@ -47,7 +47,7 @@ def visualize_weights(weights, p_query, inputs_distributed):
         # Visualize using Open3D
     o3d.visualization.draw_geometries(geos)
     
-def create_boxes(centers, query_crop_size, loss_batch = None):
+def create_boxes(centers, query_crop_size, loss_batch = None, color = None):
     boxes = []
     
     if loss_batch is not None:
@@ -56,7 +56,8 @@ def create_boxes(centers, query_crop_size, loss_batch = None):
         normalized_loss = (loss_batch_sum - loss_batch_sum.min()) / (loss_batch_sum.max() - loss_batch_sum.min())
         jet_cmap = cm.get_cmap('jet')
         jet_colors = jet_cmap(normalized_loss.detach().cpu().numpy())
-    else:
+    
+    if color is None:
         color = np.random.rand(3)
     
     bbox_min = centers - query_crop_size / 2
