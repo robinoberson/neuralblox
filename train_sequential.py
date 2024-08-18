@@ -121,11 +121,17 @@ checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_mer
 
 try:
     load_dict = checkpoint_io.load(cfg['training']['starting_model_backbone_file'])
-    load_dict_merging = checkpoint_io_merging.load(cfg['training']['starting_model_merging_file'])
     
 except FileExistsError as e:
     print(f'No checkpoint file found! {e}')
     load_dict = dict()
+
+try:
+    load_dict_merging = checkpoint_io_merging.load(cfg['training']['starting_model_merging_file'])
+    
+except FileExistsError as e:
+    print(f'No checkpoint file found! {e}')
+    load_dict_merging = dict()
     
 optimizer_backbone = optim.Adam(list(model.parameters()), lr=learning_rate)
 optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=learning_rate)
