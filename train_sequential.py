@@ -227,7 +227,19 @@ while True:
             checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it, optimizer_backbone_sd = optimizer_backbone_sd)
         print(f'epoch: {epoch_it}, it: {it}, loss: {loss}')
         
-    # for batch in val_loader:
-    #     with torch.no_grad():
-    #         loss = trainer.validate_sequence(batch)
+    loss_validation = 0
+    for batch in val_loader:
+        for key in batch:
+            batch[key] = batch[key].squeeze(0)
+            
+        with torch.no_grad():
+            loss = trainer.validate_sequence(batch)
+            if log_comet:
+                experiment.log_metric("val loss batch", loss, step=it)
+            loss_validation += loss
+
+    loss_validation /= len(val_loader)
+    if log_comet:
+        experiment.log_metric("val loss", loss_validation, step=it)
+    print(f'epoch: {epoch_it}, it: {it}, val loss: {loss_validation}')
     

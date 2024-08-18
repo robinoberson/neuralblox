@@ -11,9 +11,9 @@ data:
     angle_y: 180
     angle_z: 0
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_72h_18_August_x5_y180_gt_robot_s20_b3_l20-lr0_002-Scratch
-  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_17_August_x5_y180_gt_robot_s20_b3_l20-lr0_002/model_backboneNone.pt
-  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_17_August_x5_y180_gt_robot_s20_b3_l20-lr0_002/model_mergingNone.pt
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_120h_18_August_x5_y180_gt_robot_s20_b3_l20-lr0_001-2
+  starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_17_August_x5_y180_gt_robot_s20_b3_l20-lr0_001-2/model_backbone.pt
+  starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_17_August_x5_y180_gt_robot_s20_b3_l20-lr0_001-2/model_merging.pt
   # starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_23_July_gt_robot_x5_y180_s10_b20/model_merging.pt
   # out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_4h_17_July_gt_robot_-10to10_5scenes_lr0001
   limited_gpu: true
@@ -22,6 +22,7 @@ training:
   n_voxels_max: 30
   n_batch: 50
   lr: 0.002
+  load_optimizer: true
   batch_group_size: 8
 generation:
   generation_dir_models: /cluster/scratch/roberson/neuralblox/out_simultaneous/models
