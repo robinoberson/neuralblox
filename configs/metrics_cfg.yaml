@@ -4,6 +4,6 @@ generator_robot:
 
 generation:
   skip_frames: 1
-  n_max_inputs: 2000
+  n_max_inputs: 4000
   n_logits: 8192
   threshold_prob: 0.1

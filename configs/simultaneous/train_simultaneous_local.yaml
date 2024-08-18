@@ -6,8 +6,7 @@ data:                                                                           
   val_classes:
   # path: 
     # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
-  path: 
-    /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s1_b2_l20_overfit
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
   # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
   pointcloud_noise: 0.0
   transform:
@@ -38,7 +37,7 @@ training:
   save_data_viz: true
   starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
   starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
-  
+
   # starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_backbone.pt
   # starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_merging.pt
   n_voxels_max: 10
