@@ -6,8 +6,9 @@ data:                                                                           
   val_classes:
   # path: 
     # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
-  # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
+  # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
+  # path: /scratch/roberson/data/simultaneous/sequential_training/rosbag_dataset
+  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
   pointcloud_noise: 0.0
   transform:
     specific_angle: true
@@ -35,13 +36,14 @@ training:
   log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot-overfit
   save_data_viz: true
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone432.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging432pt
+  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
+  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
 
   # starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_backbone.pt
   # starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_merging.pt
+  n_seq_scene: 3
   n_voxels_max: 10
-  batch_group_size: 1
+  batch_group_size: 8
 
 visualization: false
 k_value: 0.2

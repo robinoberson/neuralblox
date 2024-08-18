@@ -137,7 +137,7 @@ class Shapes3dDataset(data.Dataset):
         #randomly shuffle models
         models_grouping = random.sample(self.models, len(self.models))
         
-        if group_size > len(models_grouping):
+        if group_size * self.cfg['training']['n_seq_scene'] > len(models_grouping):
             print(f'group size {group_size} is larger than number of models {len(self.models)}')
             while len(current_group) < group_size:
                 current_group += random.sample(self.models, len(self.models))[:group_size - len(current_group)]
@@ -147,7 +147,7 @@ class Shapes3dDataset(data.Dataset):
         else:
             print(f'group size: {group_size}, total models: {len(self.models)}')
             it = 0
-            while len(models_grouping) > 0 and it < 1000:
+            while len(models_grouping) > 0:
                 for idx_model, model_info in enumerate(models_grouping): #models_grouping[0]
                     category = model_info['category']
                     if category not in current_categories:
@@ -157,13 +157,18 @@ class Shapes3dDataset(data.Dataset):
                         models_grouping.pop(idx_model)
                     
                         # Check if adding this model would exceed the batch group size or duplicate a category
-                        if len(current_group) == group_size or len(models_grouping) == 0 or it > 1000:
+                        if len(current_group) == group_size or len(models_grouping) == 0 :
                             print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
                             batch_groups.append(current_group)
                             current_group = []
                             current_categories = set()
                             it = 0
                         break
+                if it > 1000:
+                    print('Max iteration in grouping reached')
+                    print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
+                    batch_groups.append(current_group)
+                    break
                 it += 1
         return batch_groups
                 
