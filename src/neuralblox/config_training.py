@@ -246,7 +246,7 @@ def get_transform(mode, cfg):
             rand_rot = R.from_euler('xyz', angles_deg, degrees=True)
             
             rand_translation = np.random.uniform(low=[-0.5, -0.5, -0.5], high=[0.5, 0.5, 0.5], size=(3,)).astype(np.float32)
-            print(f'rand_translation: {rand_translation}')
+            # print(f'rand_translation: {rand_translation}')
             # Apply transformation to relevant keys
             for key in data:
                 if key == 'points' or key == 'inputs':

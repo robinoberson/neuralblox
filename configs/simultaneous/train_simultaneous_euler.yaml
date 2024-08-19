@@ -33,4 +33,4 @@ generation:
   resolution_0: 75
   prob_threshold: 0.1
 
-visualization: true
+visualization: false
