@@ -434,14 +434,33 @@ class Generator3DSequential(object):
         
         return merged_latents, centers_frame, inputs_frame
     
+    def init_timing(self):
+        self.start = torch.cuda.Event(enable_timing=True)
+        self.end = torch.cuda.Event(enable_timing=True)
+
+        self.start.record()
+        
+    def print_timing(self, description):
+        self.end.record()
+        torch.cuda.synchronize()
+        print(f'{description}: {self.start.elapsed_time(self.end)} ms')
+        self.start.record()
+        
     def fuse(self, inputs_frame_raw):
+        self.init_timing()
+        
         inputs_frame_padded, centers_frame_padded, vol_bound_frame_padded = self.trainer.get_distributed_inputs(inputs_frame_raw, self.trainer.n_max_points_input, 1.0, return_empty = True, isquery = False, padding = True)
         n_x, n_y, n_z = vol_bound_frame_padded['axis_n_crop'] #padded
 
         centers_frame = centers_frame_padded.reshape(n_x, n_y, n_z, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         inputs_frame = inputs_frame_padded.reshape(n_x, n_y, n_z, self.trainer.n_max_points_input, 4)[1:-1, 1:-1, 1:-1, :, :].reshape(-1, self.trainer.n_max_points_input, 4)
 
+        # self.print_timing('get_distributed_inputs')
+        
         grid_latents_frame_current = self.trainer.encode_occupied_inputs_frame(inputs_frame, centers_frame, vol_bound_frame_padded, self.points_threshold) #contains padded empty latents
+
+        # self.print_timing('encode_occupied_inputs_frame')
+        
         centers_lookup = torch.tensor([0, (n_x * n_y * n_z)]).repeat(len(centers_frame), 1).to(self.device)
         grid_shapes = torch.tensor([n_x, n_y, n_z]).repeat(len(centers_frame), 1).to(self.device)
 
@@ -450,6 +469,8 @@ class Generator3DSequential(object):
         distributed_latents = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_current, grid_shapes, centers_lookup, self.trainer.shifts)
         c, h, w, d = self.trainer.empty_latent_code.shape
         distributed_latents = distributed_latents.reshape(-1, c, 3*h, 3*w, 3*d)
+        
+        # self.print_timing('get_distributed_voxel')
         
         ### retrieve existing latents 
         grid_latents_frame_existing = grid_latents_frame_current.clone()
@@ -466,8 +487,15 @@ class Generator3DSequential(object):
         distributed_latents_existing = st_utils.get_distributed_voxel(centers_frame_idx, grid_latents_frame_existing, grid_shapes, centers_lookup, self.trainer.shifts)
         distributed_latents_existing = distributed_latents_existing.reshape(-1, c, 3*h, 3*w, 3*d)
         
+        # self.print_timing('get_distributed_voxel_existing')
+        
         stacked_frame = torch.cat((distributed_latents, distributed_latents_existing), dim = 1)
         merged_latents = self.trainer.merge_latent_map(stacked_frame)
+        
+        self.print_timing('merge_latent_map')
+        
+        print('*' * 50)
+        print('')
         # print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
         # print(f'should be {(n_x-2)*(n_y-2)*(n_z-2)}, is {merged_latents.shape[0]}')
         return merged_latents, centers_frame, inputs_frame
