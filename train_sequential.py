@@ -42,7 +42,7 @@ if cfg["data"]["transform"]["specific_angle"]:
     sp = 'T'
 else:
     sp = 'F'
-experiment_name = f'X: {cfg["data"]["transform"]["angle_x"]}, Y: {cfg["data"]["transform"]["angle_y"]}, sp {sp}, {data_set}'
+experiment_name = f'X: {cfg["data"]["transform"]["angle_x"]}, Y: {cfg["data"]["transform"]["angle_y"]}, sp {sp}, {data_set}, transT'
 
 if log_comet:
     from comet_ml import Experiment

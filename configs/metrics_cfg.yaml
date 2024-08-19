@@ -3,8 +3,8 @@ generator_robot:
   points_threshold: 10
 
 generation:
-  skip_frames: 5
+  skip_frames: 1
   n_max_inputs: 4000
   n_logits: 8192
   threshold_prob: 0.05
-  idx_vis: 30
+  idx_vis: 10

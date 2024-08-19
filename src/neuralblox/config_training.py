@@ -243,15 +243,17 @@ def get_transform(mode, cfg):
             # Generate random rotation angles
             angles_deg = np.random.uniform(low=low, high=high)
             # print(f'angles_deg: {angles_deg}')
-            rand_trans = R.from_euler('xyz', angles_deg, degrees=True)
+            rand_rot = R.from_euler('xyz', angles_deg, degrees=True)
             
+            rand_translation = np.random.uniform(low=[-0.5, -0.5, -0.5], high=[0.5, 0.5, 0.5], size=(3,)).astype(np.float32)
+            print(f'rand_translation: {rand_translation}')
             # Apply transformation to relevant keys
             for key in data:
                 if key == 'points' or key == 'inputs':
                     shape = data[key].shape
                     # Ensure data[key] is a numpy array
                     if isinstance(data[key], np.ndarray):
-                        data[key] = rand_trans.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32)
+                        data[key] = rand_rot.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32) + rand_translation
                     else:
                         raise TypeError(f"Expected numpy array for key '{key}', but got {type(data[key])}")
 
