@@ -24,7 +24,7 @@ training:
   lr: 0.002
   load_optimizer: false
   n_seq_scene: 3
-  batch_group_size: 8
+  batch_group_size: 7
 generation:
   generation_dir_models: /cluster/scratch/roberson/neuralblox/out_simultaneous/models
   generation_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/meshes
