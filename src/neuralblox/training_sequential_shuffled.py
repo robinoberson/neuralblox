@@ -104,7 +104,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         gc.collect()
         
         loss = self.train_batch(centers_idx_full_current, centers_idx_full_prev, query_points_full_, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full)
-        print(f'Finished training batch, loss = {loss}')
+        # print(f'Finished training batch, loss = {loss}')
         return loss
     
     def validate_sequence(self, full_batch):
@@ -138,7 +138,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             n_voxels = torch.zeros(n_scenes, n_frames, dtype = torch.int32).to(device = self.device)
             prob = self.cfg['training']['prob']
             save_mask = torch.rand(n_scenes, n_frames, device=self.device) < prob         
-            print(f'first pass through data')
+            if self.iteration == 0: print(f'first pass through data')
             for scene_idx in range(n_scenes):
                 inputs_frame_distributed_padded_list = []
                 query_frame_distributed_padded_list = []
@@ -193,7 +193,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             # print(f'Second pass through data')
             n_voxels_total = torch.sum(n_voxels[save_mask])
             
-            print(f'n_voxels_total = {n_voxels_total}')
+            # print(f'n_voxels_total = {n_voxels_total}')
             
             c, h, w, d = self.empty_latent_code.shape
 
@@ -602,7 +602,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             inputs_frame_occupied, 
             centers_frame_occupied)
 
-        print(f'Generated empty inputs, {torch.sum(mask_keep)} voxels')
+        # print(f'Generated empty inputs, {torch.sum(mask_keep)} voxels')
         return return_tup
     
     def train_batch(self, centers_idx_full_current, centers_idx_full_prev, query_points_full, grid_shapes_full_current, grid_shapes_full_prev, centers_lookup_full_current, centers_lookup_full_prev, mask_centers_full, latents_full, inputs_full, centers_coord_full, training = True):

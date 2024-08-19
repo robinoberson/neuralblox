@@ -62,6 +62,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
+print('')
+print(device)
+print('')
 # device = torch.device("cpu")
 # Set t0
 t0 = time.time()
@@ -154,15 +157,7 @@ if log_comet:
 epoch_it = 0
 it = 0
 
-print('Loading model from epoch %d, iteration %d' % (epoch_it, it))
-
-# Print model
-nparameters = sum(p.numel() for p in model.parameters())
-nparameters_merging = sum(p.numel() for p in model_merging.parameters())
-print('Total number of parameters: %d' % nparameters)
-print('Total number of parameters in merging model: %d' % nparameters_merging)
-
-print('output path: ', cfg['training']['out_dir'])
+print('Output path: ', cfg['training']['out_dir'])
 scheduler_backbone = ReduceLROnPlateau(optimizer_backbone, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 scheduler_merging = ReduceLROnPlateau(optimizer_merging, mode='min', factor=0.9, patience=cfg['training']['lr_patience'])
 
@@ -174,7 +169,7 @@ last_checkpoint_time = time.time()
 while True:
     torch.cuda.empty_cache()
     epoch_it += 1
-    print(epoch_it)
+    print(f'Epoch it: {epoch_it}')
     
     for batch in train_loader:
         #squeeze batch
@@ -219,13 +214,13 @@ while True:
             last_checkpoint_time = current_time
 
             print(f'Saving checkpoint, epoch: {epoch_it}, it: {it}')
-            print(f'output path: {cfg["training"]["out_dir"]}')
+            print(f'Output path: {cfg["training"]["out_dir"]}')
             optimizer_backbone_sd = optimizer_backbone.state_dict()
             optimizer_merging_sd = optimizer_merging.state_dict()
 
             checkpoint_io_merging.save(cfg['training']['model_merging'], epoch_it=epoch_it, it=it, optimizer_merging_sd = optimizer_merging_sd)
             checkpoint_io.save(cfg['training']['model_backbone'], epoch_it=epoch_it, it=it, optimizer_backbone_sd = optimizer_backbone_sd)
-        print(f'epoch: {epoch_it}, it: {it}, loss: {loss}')
+        print(f'Epoch: {epoch_it}, it: {it}, loss: {loss}')
         
     loss_validation = 0
     for batch in val_loader:
