@@ -8,3 +8,5 @@ generation:
   n_logits: 8192
   threshold_prob: 0.05
   idx_vis: 10
+  output_dir_prefix: '/media/roberson/T7/neuralblox/out_data_report'
+  folder_gen: '18_08_q1i1'
