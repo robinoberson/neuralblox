@@ -64,7 +64,7 @@ training:
   load_optimizer: false
   lr: 0.01
   lr_reduce_factor: 0.9
-  lr_patience: 40
+  lr_patience: 60
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt

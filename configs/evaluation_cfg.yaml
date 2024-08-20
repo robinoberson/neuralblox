@@ -1,0 +1,12 @@
+inherit_from: configs/simultaneous/train_simultaneous.yaml
+generator_robot:
+  n_max_points_inputs: 10
+  points_threshold: 10
+
+generation:
+  skip_frames: 1
+  n_max_inputs: 4000
+  n_logits: 8192
+  threshold_prob: 0.05
+  idx_vis: 10
+  folder_gen: '18_08_q1i1'
