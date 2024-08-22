@@ -200,19 +200,22 @@ def get_dataset(mode, cfg, return_idx=False):
         categories = cfg['data']['val_classes']
     elif mode == 'test':
         categories = cfg['data']['test_classes']
-    else:
+    elif mode == 'train':
         categories = cfg['data']['train_classes']
+    else:
+        raise ValueError('Unknown mode: {}'.format(mode))
         
     if categories is None:
+        print(f'Using all classes in {dataset_folder}, splitting into train/val')
         categories = sorted(os.listdir(dataset_folder))
         categories = [c for c in categories
                         if os.path.isdir(os.path.join(dataset_folder, c))]
-        
         if len(categories) > 1:
             if mode == 'train':
                 categories = categories[:int(0.8*len(categories))]
             elif mode == 'val':
                 categories = categories[int(0.8*len(categories)):]
+            #if mode is test, then use all categories
         
     split = None
     
@@ -270,7 +273,9 @@ def get_inputs_field(mode, cfg):
     input_type = cfg['data']['input_type']
 
     if input_type is None:
-        inputs_field = None
+        raise ValueError(
+            'No input type specified')
+        
     elif input_type == 'pointcloud' or input_type == 'pointcloud_merge' or input_type == 'pointcloud_sequential':
         transform = transforms.Compose([
             data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
