@@ -1,6 +1,6 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  path: /media/roberson/T7/data/sequential/sequential_training/training_s25_b3_l20
+  path: /media/roberson/T7/data/sequential/sequential_training/set_s45_b3_l20
   scene_folder: /media/roberson/T7/terrains
   pointcloud_noise: 0.0
   pointcloud_n: 8192 #number of inputs when loading for each frame
@@ -8,7 +8,7 @@ data:                                                                           
   transform:
     specific_angle: true
     angle_x: 0
-    angle_y: 33
+    angle_y: 0
     angle_z: 0
     specific_translation: true
     translation_x: 0
@@ -18,7 +18,7 @@ data:                                                                           
 generation:
   generation_dir: /media/roberson/T7/neuralblox/sequential
   points_threshold: 10
-  dataset: train
+  dataset: test
 
   model_backbone_file: model_backbone.pt
   model_merging_file: model_merging.pt

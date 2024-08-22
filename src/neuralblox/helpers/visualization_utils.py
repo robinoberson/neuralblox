@@ -139,6 +139,7 @@ def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers
     pcd_inputs_full_prev = create_pcd(inputs_distributed_prev, inputs_distributed_prev[..., 3], [0.58, 0.58, 0.337]) #dark yellow
     pcd_query_full = create_pcd(p_query[..., :3], p_query[..., 3], [0.49, 0.176, 0.341]) #light pink
     
+    full_geos = []
     for i in range(len(centers_current)):
         if summed_loss[i] < thresh:
             continue
@@ -169,6 +170,10 @@ def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers
         geos += [pcd, base_axis]
         # geos += [base_axis]
         o3d.visualization.draw_geometries(geos)
+        
+        full_geos.append(geos)
+
+    return full_geos
 def visualize_logits(logits_sampled, p_query, centers, loss, location, weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01, query_crop_size = 1.0):
     geos = []
     

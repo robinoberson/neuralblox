@@ -1,6 +1,5 @@
 import os
 import torch
-from torch.profiler import profile, record_function, ProfilerActivity
 
 from src.common import (
     add_key, coord2index, normalize_coord

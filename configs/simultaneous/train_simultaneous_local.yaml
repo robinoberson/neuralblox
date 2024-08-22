@@ -1,7 +1,7 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:      
   path: /media/roberson/T7/data/sequential/sequential_training/set_s45_b3_l20       
-  val_classes: ['2024-08-21_16-54-17', '2024-08-21_16-54-18']
+  val_classes: ['2024-08-21_16-54-17']
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
   transform:
     specific_angle: true
@@ -9,9 +9,12 @@ data:
     angle_y: 33
     angle_z: 0
     specific_translation: false
-    translation_x: 0.5
-    translation_y: 0.5
-    translation_z: 0.5
+    # translation_x: 0.5
+    # translation_y: 0.5
+    # translation_z: 0.5
+    translation_x: 0.
+    translation_y: 0.
+    translation_z: 0.
     # angle_x: 0
     # angle_y: 33
     # angle_z: 0
