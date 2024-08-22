@@ -40,7 +40,7 @@ class SequentialTrainerShuffled(BaseTrainer):
 
 
     def __init__(self, model, model_merge, optimizer_backbone, optimizer_merge, cfg, input_crop_size = 1.6, query_crop_size = 1.0, device=None, input_type='pointcloud',
-                 vis_dir=None, threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_batch = 40, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
+                 threshold=0.5, query_n = 8192, unet_hdim = 32, unet_depth = 2, grid_reso = 24, limited_gpu = False, n_voxels_max = 20, n_batch = 40, n_max_points = 2048, n_max_points_query = 8192, occ_per_query = 0.5, return_flat = True,
                  sigma = 0.8):
         self.model = model
         self.model_merge = model_merge
@@ -49,7 +49,6 @@ class SequentialTrainerShuffled(BaseTrainer):
         self.device = device
         self.input_crop_size = input_crop_size
         self.query_crop_size = query_crop_size
-        self.vis_dir = vis_dir
         self.hdim = unet_hdim
         self.unet = None
         self.limited_gpu = limited_gpu
@@ -88,9 +87,6 @@ class SequentialTrainerShuffled(BaseTrainer):
             self.GPU_monitor.update_memory_usage()
             
         print(f'Location: {self.location}')
-        
-        if vis_dir is not None and not os.path.exists(vis_dir):
-            os.makedirs(vis_dir)
     
     def set_experiment(self, experiment):
         self.experiment = experiment
@@ -504,7 +500,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         n_x_p, n_y_p, n_z_p = vol_bounds_padded_prev['axis_n_crop'] #padded
         prev_centers_frame = prev_centers_frame_padded.reshape(n_x_p, n_y_p, n_z_p, 3)[1:-1, 1:-1, 1:-1, :].reshape(-1, 3)
         centers_lookup_prev = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame), 1).to(self.device)
-        centers_lookup_prev_padded = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame_padded), 1).to(self.device) - (n_x_p * n_y_p * n_z_p) #will be positive after we add start_idx
+        centers_lookup_prev_padded = torch.tensor([0, (n_x_p * n_y_p * n_z_p)]).repeat(len(prev_centers_frame_padded), 1).to(self.device) - (n_x_p * n_y_p * n_z_p) #will be positive after we add start_idx, allows to retrieve data in the previous frame
         grid_shapes_prev = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame), 1).to(self.device)
         grid_shapes_prev_padded = torch.tensor([n_x_p, n_y_p, n_z_p]).repeat(len(prev_centers_frame_padded), 1).to(self.device)
         
@@ -547,6 +543,10 @@ class SequentialTrainerShuffled(BaseTrainer):
         merged_latents_padded = merged_latents_padded.reshape(-1, *self.empty_latent_code.shape)
         
         #Prepare data for return
+        # Idea here is the following: we use the current data as default (would then merge with itself) 
+        # Overwrite the indices where we have overlap with the previous frame data 
+        # centers_idx_prev_padded allows to search in the correct frame (previous where overlap, current by default)
+        
         centers_idx_current = centers_idx_current_padded
         centers_idx_prev_return = centers_idx_current.clone()
         centers_idx_prev_return[mask_centers_current_in_prev_padded] = centers_idx_prev_padded[mask_centers_prev_in_current_padded]
@@ -559,8 +559,7 @@ class SequentialTrainerShuffled(BaseTrainer):
         centers_lookup_frame_prev = centers_lookup_frame_current.clone()
         centers_lookup_frame_prev[mask_centers_current_in_prev_padded] = centers_lookup_prev_padded[mask_centers_prev_in_current_padded]
         
-        mask_centers = mask_centers_current_in_prev_padded
-#       centers_idx_current, centers_idx_prev, grid_shapes_current, grid_shapes_prev, centers_lookup_frame_current, centers_lookup_frame_prev, mask_centers, merged_latents_padded, vol_bounds_frame_padded = tup
+        mask_centers = mask_centers_current_in_prev_padded #this mask indicates where overlap between current and previous happens
 
         return_tup = [centers_idx_current, centers_idx_prev_return, grid_shapes_current, grid_shapes_prev_return, centers_lookup_frame_current, centers_lookup_frame_prev, mask_centers, merged_latents_padded, vol_bounds_frame_padded]
         
@@ -635,7 +634,7 @@ class SequentialTrainerShuffled(BaseTrainer):
             grid_shapes_batch_current = grid_shapes_full_current[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel in its frame
             centers_lookup_batch_current = centers_lookup_full_current[idx_start:idx_end].to(self.device) # centers lookup corresponding to the voxel in its frame
             query_points_batch = query_points_full[idx_start:idx_end].to(self.device) # query points corresponding to the voxel          
-            mask = mask_centers_full[idx_start:idx_end].to(self.device)
+            mask = mask_centers_full[idx_start:idx_end].to(self.device) # mask indicates if there is overlap between the current and previous frame, if True: use merged latent and encoded latent, if False: use only encoded latent (double stack)
             
             centers_idx_batch_prev = centers_idx_full_prev[idx_start:idx_end].to(self.device) # centers indices corresponding to the voxel to concat with current: will be itself of of the previous frame
             grid_shapes_batch_prev = grid_shapes_full_prev[idx_start:idx_end].to(self.device) # grid shapes corresponding to the voxel to concat with current: will be itself of of the previous frame
@@ -653,33 +652,36 @@ class SequentialTrainerShuffled(BaseTrainer):
                 continue
             
             latents_prev = latents_prev.reshape(-1, c, 3*h, 3*w, 3*d)
-            centers_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev, centers_coord_full, grid_shapes_batch_prev, centers_lookup_batch_prev, self.shifts).to(self.device)
-            centers_coord_batch_prev = centers_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
-            inputs_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev, inputs_full, grid_shapes_batch_prev, centers_lookup_batch_prev, self.shifts).to(self.device)
+            centers_distributed_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], centers_coord_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
+            centers_coord_batch_prev = centers_distributed_batch_prev.reshape(-1, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
+            inputs_batch_prev = st_utils.get_distributed_voxel(centers_idx_batch_prev[mask], inputs_full, grid_shapes_batch_prev[mask], centers_lookup_batch_prev[mask], self.shifts).to(self.device)
             
             # compute the latents of the current frame
-            inputs_current_batch = st_utils.get_distributed_voxel(centers_idx_batch_current, inputs_full, grid_shapes_batch_current, centers_lookup_batch_current, self.shifts).to(self.device)
+            inputs_batch_current = st_utils.get_distributed_voxel(centers_idx_batch_current, inputs_full, grid_shapes_batch_current, centers_lookup_batch_current, self.shifts).to(self.device)
             centers_distributed_batch_current = st_utils.get_distributed_voxel(centers_idx_batch_current, centers_coord_full, grid_shapes_batch_current, centers_lookup_batch_current, self.shifts).to(self.device)
 
-            centers_coord_batch_current = centers_distributed_batch_current.reshape(self.n_batch, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
+            centers_coord_batch_current = centers_distributed_batch_current.reshape(-1, 3, 3, 3, 3)[:, 1, 1, 1, :].reshape(-1, 3)
         
-            latents_current = self.encode_occupied_inputs_flat(inputs_current_batch, centers_distributed_batch_current)
+            latents_current = self.encode_occupied_inputs_flat(inputs_batch_current, centers_distributed_batch_current)
             latents_current = latents_current.reshape(-1, c, 3*h, 3*w, 3*d)
             
             # stack the latents 
-            mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_coord_batch_current, centers_coord_batch_prev)
-            mask_centers_prev_in_current = st_utils.compute_mask_occupied(centers_coord_batch_prev, centers_coord_batch_current)
+            # mask_centers_current_in_prev = st_utils.compute_mask_occupied(centers_coord_batch_current, centers_coord_batch_prev)
+            # mask_centers_prev_in_current = st_utils.compute_mask_occupied(centers_coord_batch_prev, centers_coord_batch_current)
             
-            sum_centers_current_in_prev = torch.sum(mask_centers_current_in_prev)
-            sum_centers_prev_in_current = torch.sum(mask_centers_prev_in_current)
+            # sum_centers_current_in_prev = torch.sum(mask_centers_current_in_prev)
+            # sum_centers_prev_in_current = torch.sum(mask_centers_prev_in_current)
             
-            if sum_centers_current_in_prev != sum_centers_prev_in_current:
-                print(f'WARNING: sum_centers_current_in_prev != sum_centers_prev_in_current: {sum_centers_current_in_prev} vs {sum_centers_prev_in_current}')
+            # if sum_centers_current_in_prev != sum_centers_prev_in_current:
+            #     print(f'WARNING: sum_centers_current_in_prev != sum_centers_prev_in_current: {sum_centers_current_in_prev} vs {sum_centers_prev_in_current}')
             
-            latents_existing_temp = latents_current.clone()
-            latents_existing_temp[mask] = latents_prev
+            latents_prev_temp = latents_current.clone() #Use current latents as default
+            latents_prev_temp[mask] = latents_prev #overwrite current latents with precomputed merged latents where there is overlap
+            
+            inputs_batch_prev_temp = inputs_batch_current.clone()
+            inputs_batch_prev_temp[mask] = inputs_batch_prev
 
-            stacked_latents = torch.cat((latents_current, latents_existing_temp), dim = 1)
+            stacked_latents = torch.cat((latents_current, latents_prev_temp), dim = 1)
         
             merged_latents = self.merge_latent_map(stacked_latents)
             
@@ -692,9 +694,9 @@ class SequentialTrainerShuffled(BaseTrainer):
             logits_sampled = self.get_logits(p_stacked, merged_latents, centers)
             
             # compare logits with query 
-            inputs_current_batch_int = inputs_current_batch.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
-            # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_current_batch_int, sigma = self.sigma)
-            inputs_distributed_batch_prev_int = inputs_distributed_batch_prev.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            inputs_batch_current_int = inputs_batch_current.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
+            # weights = st_utils.compute_gaussian_weights(p_stacked, inputs_batch_current_int, sigma = self.sigma)
+            inputs_batch_prev_int = inputs_batch_prev_temp.reshape(self.n_batch, 3, 3, 3, self.n_max_points_input, 4)[:, 1, 1, 1, ...].reshape(-1, self.n_max_points_input, 4)
             # max_weights = torch.max(weights)
             # min_weights = torch.min(weights)
             # pos_weight_value = st_utils.compute_pos_weight(occ)
@@ -706,9 +708,10 @@ class SequentialTrainerShuffled(BaseTrainer):
             # dynamic_weights = loss_batch_unweighted**2
             loss_batch = loss_batch_unweighted #* dynamic_weights
 
-            # vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_current_batch, inputs_distributed_batch_prev, location = self.location)
-            # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch, inputs_distributed = inputs_current_batch, force_viz = False)
-            # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_current_batch_int, inputs_distributed = inputs_current_batch_int, force_viz = False)
+            # return logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_batch_current, inputs_batch_prev_temp
+            # vis_utils.visualize_logits_voxel(logits_sampled, p_stacked, centers_coord_batch_current, centers_coord_batch_prev, centers_distributed_batch_current, centers_distributed_batch_prev, loss_batch, inputs_batch_current, inputs_batch_prev_temp, location = self.location, threshold = 0.02)
+            # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_batch_current, inputs_distributed = inputs_batch_current, force_viz = False)
+            # vis_utils.visualize_logits(logits_sampled, p_stacked, centers, loss_batch, self.location, weights = inputs_batch_current_int, inputs_distributed = inputs_batch_current_int, force_viz = False)
             
             loss_batch = loss_batch.mean()
 
@@ -769,15 +772,16 @@ class SequentialTrainerShuffled(BaseTrainer):
             
         #     o3d.visualization.draw_geometries([pcd, bbox])
         p_n_stacked = normalize_coord(p_stacked, vol_bound)
+        n_max = self.n_voxels_max * 5
 
-        n_batch = int(np.ceil(n_crops_total / self.n_voxels_max))
+        n_batch = int(np.ceil(n_crops_total / n_max))
 
         logits_stacked = None  # Initialize logits directly
 
         torch.cuda.empty_cache()
         for i in range(n_batch):
-            start = i * self.n_voxels_max
-            end = min((i + 1) * self.n_voxels_max, n_crops_total)
+            start = i * n_max
+            end = min((i + 1) * n_max, n_crops_total)
 
             p_stacked_batch = p_stacked[start:end]
             p_n_stacked_batch = p_n_stacked[start:end]

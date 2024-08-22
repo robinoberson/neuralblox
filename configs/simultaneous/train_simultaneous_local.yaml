@@ -1,20 +1,15 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
-data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  # train_classes: ['2024-06-27_15-00-39', '2024-06-27_15-01-39']
-  # val_classes: ['2024-06-27_15-11-18', '2024-06-27_15-11-19']
-  train_classes:
-  val_classes:
-  # path: 
-    # /scratch/roberson/data/simultaneous/sequential_training/gt_robot_x_-5to5_y_25to25_9scenes
-  path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_val-robot
-  # path: /scratch/roberson/data/simultaneous/sequential_training/rosbag_dataset
-  # path: /scratch/roberson/data/simultaneous/sequential_training/gt_robot_s20_b3_l20
-  pointcloud_noise: 0.0
+data:      
+  path: /media/roberson/T7/data/sequential/sequential_training/training_s25_b3_l20                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
   transform:
     specific_angle: true
     angle_x: 0
     angle_y: 33
     angle_z: 0
+    specific_translation: false
+    translation_x: 0.5
+    translation_y: 0.5
+    translation_z: 0.5
     # angle_x: 0
     # angle_y: 33
     # angle_z: 0
@@ -25,8 +20,9 @@ generation:
   model_backbone_file: model_backbone.pt
   model_merging_file: model_merging.pt
   resolution_0: 50
-  prob_threshold: 0.3
+  prob_threshold: 0.1
   n_max_inputs: 2000
+
 test:
   model_backbone_file: model.pt
   model_merging_file: model_merging.pt
@@ -36,14 +32,15 @@ training:
   log_comet: false
   out_dir: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot-overfit
   save_data_viz: true
-  starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_backbone.pt
-  starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/models/model_merging.pt
+  starting_model_backbone_file: /media/roberson/T7/neuralblox/sequential/models/model_backbone.pt
+  starting_model_merging_file: /media/roberson/T7/neuralblox/sequential/models/model_merging.pt
 
   # starting_model_backbone_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_backbone.pt
   # starting_model_merging_file: /scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot/model_merging.pt
   n_seq_scene: 3
-  n_voxels_max: 300
+  n_voxels_max: 100
+  n_batch: 50
   batch_group_size: 1
 
-visualization: false
+visualization: true
 k_value: 0.2

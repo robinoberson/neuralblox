@@ -216,19 +216,20 @@ def get_generator_sequential(cfg, device):
     batch_norm = cfg['model']['batch_norm']
     model_merging = layers.Conv3D_one_input(batch_norm = batch_norm).to(device)
 
-    checkpoint_io = CheckpointIO(cfg['training']['out_dir'], model=model)
-    checkpoint_io_merging = CheckpointIO(cfg['training']['out_dir'], model=model_merging)
+    checkpoint_io = CheckpointIO(cfg['generation']['generation_dir'], model=model)
+    checkpoint_io_merging = CheckpointIO(cfg['generation']['generation_dir'], model=model_merging)
 
     try:
-        checkpoint_io.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_backbone_file']))#cfg['generation']['model_backbone_file'])
-        checkpoint_io_merging.load(os.path.join(cfg['generation']['generation_dir_models'], cfg['generation']['model_merging_file']))#cfg['generation']['model_merging_file'])
+        generation_dir_models = os.path.join(cfg['generation']['generation_dir'], 'models')
+        checkpoint_io.load(os.path.join(generation_dir_models, cfg['generation']['model_backbone_file']))#cfg['generation']['model_backbone_file'])
+        checkpoint_io_merging.load(os.path.join(generation_dir_models, cfg['generation']['model_merging_file']))#cfg['generation']['model_merging_file'])
         
     except FileExistsError as e:
         print(f'No checkpoint file found! {e}')
         return None
     
     optimizer_backbone = optim.Adam(list(model.parameters()), lr=cfg['training']['lr'])
-    optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=cfg['training']['lr']/10)
+    optimizer_merging = optim.Adam(list(model_merging.parameters()), lr=cfg['training']['lr'])
     trainer = config_training.get_trainer_sequential_shuffled(model, model_merging, optimizer_backbone, optimizer_backbone, cfg, device=device)
     
     generator = generation_fusion_sequential.Generator3DSequential(
@@ -236,6 +237,7 @@ def get_generator_sequential(cfg, device):
             model_merging,
             trainer,
             prob_threshold=cfg['generation']['prob_threshold'],
+            points_threshold = cfg['generation']['points_threshold'],
             device=device,
             resolution0=cfg['generation']['resolution_0'],
             upsampling_steps=cfg['generation']['upsampling_steps'],

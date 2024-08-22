@@ -38,6 +38,7 @@ class Generator3DSequential(object):
     def __init__(self, model, model_merge, trainer,
                  points_batch_size=3000000,
                  prob_threshold=0.3, 
+                 points_threshold=20,
                  device=None,
                  resolution0=16, 
                  upsampling_steps=3,
@@ -447,7 +448,7 @@ class Generator3DSequential(object):
         self.start.record()
         
     def fuse(self, inputs_frame_raw):
-        self.init_timing()
+        # self.init_timing()
         
         inputs_frame_padded, centers_frame_padded, vol_bound_frame_padded = self.trainer.get_distributed_inputs(inputs_frame_raw, self.trainer.n_max_points_input, 1.0, return_empty = True, isquery = False, padding = True)
         n_x, n_y, n_z = vol_bound_frame_padded['axis_n_crop'] #padded
@@ -492,10 +493,10 @@ class Generator3DSequential(object):
         stacked_frame = torch.cat((distributed_latents, distributed_latents_existing), dim = 1)
         merged_latents = self.trainer.merge_latent_map(stacked_frame)
         
-        self.print_timing('merge_latent_map')
+        # self.print_timing('merge_latent_map')
         
-        print('*' * 50)
-        print('')
+        # print('*' * 50)
+        # print('')
         # print(f'found {existing_latent} existing latents out of {(n_x-2)*(n_y-2)*(n_z-2)}')
         # print(f'should be {(n_x-2)*(n_y-2)*(n_z-2)}, is {merged_latents.shape[0]}')
         return merged_latents, centers_frame, inputs_frame

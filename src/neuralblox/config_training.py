@@ -79,8 +79,6 @@ def get_trainer_sequential_shuffled(model, model_merge, optimizer_backbone, opti
         device (device): pytorch device
     '''
     threshold = cfg['test']['threshold']
-    out_dir = cfg['training']['out_dir']
-    vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
@@ -101,7 +99,6 @@ def get_trainer_sequential_shuffled(model, model_merge, optimizer_backbone, opti
         cfg = cfg,
         device=device, 
         input_type=input_type,
-        vis_dir=vis_dir, 
         threshold=threshold,
         query_n = query_n,
         unet_hdim = unet_hdim,
@@ -129,8 +126,6 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
         device (device): pytorch device
     '''
     threshold = cfg['test']['threshold']
-    out_dir = cfg['training']['out_dir']
-    vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
@@ -177,8 +172,6 @@ def get_trainer_overfit(model, model_merge, optimizer, cfg, device, **kwargs):
         device (device): pytorch device
     '''
     threshold = cfg['test']['threshold']
-    out_dir = cfg['training']['out_dir']
-    vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
@@ -231,21 +224,33 @@ def get_transform(mode, cfg):
     angle_y = cfg['data']['transform']['angle_y']
     angle_z = cfg['data']['transform']['angle_z']
     
+    specific_translation = cfg['data']['transform']['specific_translation']
+    translation_x = cfg['data']['transform']['translation_x']
+    translation_y = cfg['data']['transform']['translation_y']
+    translation_z = cfg['data']['transform']['translation_z']
+    
     if specific_angle:
-        low = [angle_x, angle_y, angle_z]
-        high = [angle_x, angle_y, angle_z]
+        rot_low = [angle_x, angle_y, angle_z]
+        rot_high = [angle_x, angle_y, angle_z]
     else:
-        low=[-angle_x, -angle_y, -angle_z]
-        high=[angle_x, angle_y, angle_z]
+        rot_low=[-angle_x, -angle_y, -angle_z]
+        rot_high=[angle_x, angle_y, angle_z]
+    
+    if specific_translation:
+        trans_low = [translation_x, translation_y, translation_z]
+        trans_high = [translation_x, translation_y, translation_z]
+    else:  
+        trans_low=[-translation_x, -translation_y, -translation_z]
+        trans_high=[translation_x, translation_y, translation_z]
         
     def transform(data_list):
         for data in data_list:
             # Generate random rotation angles
-            angles_deg = np.random.uniform(low=low, high=high)
+            angles_deg = np.random.uniform(low=rot_low, high=rot_high)
             # print(f'angles_deg: {angles_deg}')
             rand_rot = R.from_euler('xyz', angles_deg, degrees=True)
             
-            rand_translation = np.random.uniform(low=[-0.5, -0.5, -0.5], high=[0.5, 0.5, 0.5], size=(3,)).astype(np.float32)
+            rand_translation = np.random.uniform(low=trans_low, high=trans_high, size=(3,)).astype(np.float32)
             # print(f'rand_translation: {rand_translation}')
             # Apply transformation to relevant keys
             for key in data:
@@ -256,5 +261,5 @@ def get_transform(mode, cfg):
                         data[key] = rand_rot.apply(data[key].reshape(-1, 3)).reshape(shape).astype(np.float32) + rand_translation
                     else:
                         raise TypeError(f"Expected numpy array for key '{key}', but got {type(data[key])}")
-
+        return [angles_deg, rand_translation]
     return transform

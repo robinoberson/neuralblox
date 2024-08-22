@@ -172,9 +172,10 @@ while True:
     print(f'Epoch it: {epoch_it}')
     
     for batch in train_loader:
-        #squeeze batch
+        # squeeze batch
         for key in batch:
-            batch[key] = batch[key].squeeze(0)
+            if key not in ['transform', 'model_infos']:
+                batch[key] = batch[key].squeeze(0)
             
         it += 1
     
@@ -225,7 +226,8 @@ while True:
     loss_validation = 0
     for batch in val_loader:
         for key in batch:
-            batch[key] = batch[key].squeeze(0)
+            if key not in ['transform', 'model_infos']:
+                batch[key] = batch[key].squeeze(0)
             
         with torch.no_grad():
             loss = trainer.validate_sequence(batch)

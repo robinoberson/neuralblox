@@ -77,6 +77,40 @@ def create_boxes(centers, query_crop_size, loss_batch = None, color = None):
         # bbox.LineSet = 7
         boxes.append(bbox)
     return boxes
+
+def create_pcd(points3d, occupancy, color, shift = None):
+    pcd = o3d.geometry.PointCloud()
+    points3d = points3d.detach().cpu().numpy()[..., :3].reshape(-1, 3)
+    if shift is not None:
+        points3d = points3d + shift
+    occupancy = occupancy.detach().cpu().numpy().reshape(-1)
+    pcd.points = o3d.utility.Vector3dVector(points3d[occupancy == 1])
+    pcd.paint_uniform_color(color)
+    
+    return pcd
+
+def create_pcd_logits(p_query, logits_sampled, threshold = 0.01):
+    p_stacked = p_query[..., :3].detach().cpu().numpy().reshape(-1, 3)
+    values_gt = p_query[..., 3].detach().cpu().numpy().reshape(-1)
+    
+    occ_sampled = logits_sampled.detach().cpu().numpy()
+    values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
+    values_sampled[values_sampled < threshold] = 0
+    values_sampled[values_sampled >= threshold] = 1
+    
+    both_occ = np.logical_and(values_gt, values_sampled)
+    
+    colors = np.zeros((values_gt.shape[0], 3))
+    colors[values_gt == 1] = [1,0,0] # red
+    colors[values_sampled == 1] = [0,0,1] # blue
+    colors[both_occ == 1] = [0,1,0] # purple
+    mask = np.any(colors != [0, 0, 0], axis=1)
+    colors = colors[mask]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(p_stacked[mask])
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    return pcd
 def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers_prev_int, centers_current, centers_prev, loss, inputs_distributed_current, inputs_distributed_prev, location, query_crop_size = 1.0, threshold = 0.1):    
     current_dir = os.getcwd()
         
@@ -101,63 +135,39 @@ def visualize_logits_voxel(logits_sampled, p_query, centers_current_int, centers
     k = int(config['k_value'] * len(summed_loss))
     thresh = torch.topk(summed_loss, k).values[-1]
     
+    pcd_inputs_full_current = create_pcd(inputs_distributed_current, inputs_distributed_current[..., 3], [1, 1, 0.278]) #light yellow
+    pcd_inputs_full_prev = create_pcd(inputs_distributed_prev, inputs_distributed_prev[..., 3], [0.58, 0.58, 0.337]) #dark yellow
+    pcd_query_full = create_pcd(p_query[..., :3], p_query[..., 3], [0.49, 0.176, 0.341]) #light pink
+    
     for i in range(len(centers_current)):
         if summed_loss[i] < thresh:
             continue
+        # geos = [pcd_inputs_full_current.voxel_down_sample(voxel_size=0.1), pcd_inputs_full_prev.voxel_down_sample(voxel_size=0.1)]
         geos = []
         centers_current_i = centers_current[i]
         centers_prev_i = centers_prev[i]
         
-        inputs_curr_i = inputs_distributed_current[i].cpu().numpy().reshape(-1, 4)
-        inputs_prev_i = inputs_distributed_prev[i].cpu().numpy().reshape(-1, 4)
-        
-        pcd_curr_i = o3d.geometry.PointCloud()
-        points = inputs_curr_i[inputs_curr_i[:, 3] == 1, :3]
-        pcd_curr_i.points = o3d.utility.Vector3dVector(points + np.array([0, 0, 0.02]))
-        pcd_curr_i.paint_uniform_color([1, 0, 0])
-        
-        pcd_prev_i = o3d.geometry.PointCloud()
-        points = inputs_prev_i[inputs_prev_i[:, 3] == 1, :3]
-        pcd_prev_i.points = o3d.utility.Vector3dVector(points)
-       
-        pcd_prev_i.paint_uniform_color([0, 0, 1])
-        
-        pcd_query = o3d.geometry.PointCloud()
-        query_points_i = p_query[i].cpu().numpy()
-        pcd_query.points = o3d.utility.Vector3dVector(query_points_i[query_points_i[:, 3] == 1, :3])
-        pcd_query.paint_uniform_color([0.5, 1, 1])
+        inputs_curr_i = inputs_distributed_current[i].reshape(-1, 4)
+        inputs_prev_i = inputs_distributed_prev[i].reshape(-1, 4)
+               
+        pcd_curr_i = create_pcd(inputs_curr_i[..., :3], inputs_curr_i[..., 3], [1, 0.592, 0.973], shift = np.array([0, 0, 0.1])) #light pink
+        pcd_prev_i = create_pcd(inputs_prev_i[..., :3], inputs_prev_i[..., 3], [0.58, 0.337, 0.565], shift = np.array([0, 0, 0.1])) #dark pink    
+        # pcd_query = create_pcd(p_query[i][..., :3], query_points_i[..., 3], [0,1,0])
 
         # geos.append(pcd_query)
         geos.append(pcd_curr_i)
         geos.append(pcd_prev_i)
         geos.append(bboxes_loss[i])
         
-        bboxes_inputs = create_boxes(centers_current_i, query_crop_size)
-        geos += bboxes_inputs
+        # bboxes_inputs = create_boxes(centers_current_i, query_crop_size, color = [0,0,0])
+        # geos += bboxes_inputs
         
-        p_stacked = p_query[i][..., :3].cpu().numpy()
-        p_occ = p_query[i][..., 3].cpu().numpy()
+        pcd = create_pcd_logits(p_query[i], logits_sampled[i], threshold = threshold)
         
-        occ_sampled = logits_sampled[i].detach().cpu().numpy()
-        values_sampled = np.exp(occ_sampled) / (1 + np.exp(occ_sampled))
-        values_sampled[values_sampled < threshold] = 0
-        values_sampled[values_sampled >= threshold] = 1
-        
-        values_gt = p_occ
-
-        both_occ = np.logical_and(values_gt, values_sampled)
-        pcd = o3d.geometry.PointCloud()
-        colors = np.zeros((values_gt.shape[0], 3))
-        colors[values_gt == 1] = [0.7372549019607844, 0.2784313725490196, 0.28627450980392155] # red
-        colors[values_sampled == 1] = [0.231372549019607850, 0.95686274509803930, 0.9843137254901961] # blue
-        colors[both_occ == 1] = [0.8117647058823529, 0.8196078431372549, 0.5254901960784314] # purple
-        mask = np.any(colors != [0, 0, 0], axis=1)
-        colors = colors[mask]
-        pcd.points = o3d.utility.Vector3dVector(p_stacked[mask])
-        pcd.colors = o3d.utility.Vector3dVector(colors)
         base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
         
         geos += [pcd, base_axis]
+        # geos += [base_axis]
         o3d.visualization.draw_geometries(geos)
 def visualize_logits(logits_sampled, p_query, centers, loss, location, weights = None, inputs_distributed=None, force_viz = False, threshold = 0.01, query_crop_size = 1.0):
     geos = []

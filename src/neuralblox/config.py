@@ -77,8 +77,6 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
         device (device): pytorch device
     '''
     threshold = cfg['test']['threshold']
-    out_dir = cfg['training']['out_dir']
-    vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
     query_n = cfg['data']['points_subsample']
     unet_hdim = cfg['model']['encoder_kwargs']['unet3d_kwargs']['f_maps']
@@ -97,7 +95,6 @@ def get_trainer_sequential(model, model_merge, optimizer, cfg, device, **kwargs)
         cfg = cfg,
         device=device, 
         input_type=input_type,
-        vis_dir=vis_dir, 
         threshold=threshold,
         query_n = query_n,
         unet_hdim = unet_hdim,

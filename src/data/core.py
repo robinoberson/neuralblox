@@ -188,7 +188,7 @@ class Shapes3dDataset(data.Dataset):
         
         batch_group = self.batch_groups[idx]
         data_batch = []
-        
+        model_infos = []
         for model_info in batch_group:
 
             category = model_info['category']
@@ -224,9 +224,10 @@ class Shapes3dDataset(data.Dataset):
                     data[field_name] = field_data
 
             data_batch.append(data)
+            model_infos.append(model_info)
             
         if self.transform is not None:
-            self.transform(data_batch)
+            [angles_deg, rand_translation] = self.transform(data_batch)
             
         # Initialize a dictionary to store lists of tensors
         array_dict = {key: [] for key in data_batch[0].keys()}
@@ -238,6 +239,8 @@ class Shapes3dDataset(data.Dataset):
 
         # Stack tensors for each key
         data_batch = {key: np.stack(array_dict[key], axis=0) for key in array_dict}
+        data_batch['transform'] = [angles_deg, rand_translation]
+        data_batch['model_infos'] = model_infos
         
         return data_batch
        
