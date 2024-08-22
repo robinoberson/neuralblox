@@ -19,7 +19,7 @@ training:
   n_voxels_max: 30
   n_batch: 50
   lr: 0.002
-  load_optimizer: true
+  load_optimizer: false
   n_seq_scene: 3
   batch_group_size: 7
 generation:
