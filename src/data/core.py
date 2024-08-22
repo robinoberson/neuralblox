@@ -138,12 +138,11 @@ class Shapes3dDataset(data.Dataset):
         models_grouping = random.sample(self.models, len(self.models))
         
         if group_size * self.cfg['training']['n_seq_scene'] > len(models_grouping):
-            print(f'group size {group_size} is larger than number of models {len(self.models)}')
-            while len(current_group) < group_size:
-                current_group += random.sample(self.models, len(self.models))[:group_size - len(current_group)]
-
-            batch_groups.append(current_group)
-            print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
+            print(f'group size {group_size} is larger than number of models {len(self.models)}, setting group size to 1')
+            group_size = 1
+            for idx_model, model_info in enumerate(models_grouping):
+                batch_groups.append([model_info])
+                print(f'added group, size: {1}, total groups: {len(batch_groups)}')
         else:
             print(f'group size: {group_size}, total models: {len(self.models)}')
             it = 0
@@ -166,11 +165,19 @@ class Shapes3dDataset(data.Dataset):
                         break
                 if it > 1000:
                     print('Max iteration in grouping reached')
+                    while len(current_group) < group_size and len(models_grouping) > 0:
+                        current_group.append(models_grouping.pop(0))
                     print(f'added group, size: {len(current_group)}, total groups: {len(batch_groups)}')
                     batch_groups.append(current_group)
                     break
                 it += 1
+                
+            if len(models_grouping) > 0:
+                print(f'Adding remaining models as a separate group, size: {len(models_grouping)}')
+                batch_groups.append(models_grouping)
+                
         return batch_groups
+    
                 
     def __len__(self):
         ''' Returns the length of the dataset.

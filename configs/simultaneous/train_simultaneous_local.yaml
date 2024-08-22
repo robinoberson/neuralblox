@@ -1,6 +1,8 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:      
-  path: /media/roberson/T7/data/sequential/sequential_training/training_s25_b3_l20                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
+  path: /media/roberson/T7/data/sequential/sequential_training/set_s45_b3_l20       
+  val_classes: ['2024-08-21_16-54-17', '2024-08-21_16-54-18']
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
   transform:
     specific_angle: true
     angle_x: 0
@@ -40,7 +42,7 @@ training:
   n_seq_scene: 3
   n_voxels_max: 100
   n_batch: 50
-  batch_group_size: 1
+  batch_group_size: 7
 
 visualization: true
 k_value: 0.2
