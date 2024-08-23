@@ -18,10 +18,6 @@ os.chdir(os.path.join(master_thesis_path, 'neuralblox'))
 import torch
 import numpy as np
 
-from src import data
-from src.neuralblox import config_training
-from src.checkpoints import CheckpointIO
-from src import layers
 import open3d as o3d
 from src.utils.debug_utils import *
 is_cuda = (torch.cuda.is_available())
@@ -52,64 +48,91 @@ generator_robot = config_generators.get_generator_sequential(cfg, device=device)
 
 from src import config, data as data_src
 
-test_dataset = config.get_dataset('test', cfg)
+# for n_max_inputs in cfg['evaluation']['n_max_inputs']:
+#     for iter in range(5):
 
-test_loader = torch.utils.data.DataLoader(
-    test_dataset, batch_size=1, 
-    num_workers=cfg['training']['n_workers'], 
-    shuffle=False,
-    collate_fn=data_src.collate_remove_none,
-    worker_init_fn=data_src.worker_init_fn)
+iter = 0
+if cfg['evaluation']['is_neuralblox']:
+    processed_data_dir = cfg['evaluation']['processed_data_dir_neuralblox']
+else:
+    processed_data_dir = cfg['evaluation']['processed_data_dir']
 
-accuracy = 0
-completeness = 0
-recall = 0
-
-for batch in test_loader:
-    batch_subsampled_reduced = metrics_utils.process_batch(batch, cfg)
+full_metrics = {}
+for n_max_inputs in cfg['evaluation']['n_max_inputs']:
+    # get the number of files that begin with f'data_saving_{n_max_inputs}'
+    # in the processed_data_dir
+    metrics_n_max_inputs = {}
     
-    logits_sampled, query_points = metrics_utils.generate_logits(generator_robot, batch_subsampled_reduced, cfg, 20)
+    files = sorted([f for f in sorted(os.listdir(processed_data_dir)) if f.startswith(f'data_saving_{n_max_inputs}')])
+    n_files = len(files)
+    print(f'Number of files for n_max_inputs = {n_max_inputs}: {n_files}')
+    for file in files:
+        batch_path = os.path.join(processed_data_dir, file)
+        print(f'Computing metrics for {batch_path}, is neuralblox = {cfg["evaluation"]["is_neuralblox"]}')
+        
+        batch = torch.load(batch_path)
+            
+        accuracy = 0
+        completeness = 0
+        recall = 0
+
+        model_infos = batch['model_infos']
+        terrain = model_infos[0]['category'][0]
+        
+        transform = batch['transform']
     
-    model_infos = batch['model_infos']
-    terrain = model_infos[0]['category'][0]
-    
-    gt_mesh_o3d, gt_mesh_points = metrics_utils.load_ground_truth(cfg, terrain)
-    gt_mesh_o3d, gt_mesh_points = metrics_utils.apply_transformations(batch_subsampled_reduced, gt_mesh_o3d, gt_mesh_points)
-    
-    if cfg['evaluation']['discard_ground']:
-        gt_mesh_points, query_points, logits_sampled = metrics_utils.filter_ground_points(gt_mesh_points, query_points, logits_sampled, batch_subsampled_reduced)
         
-    if cfg['evaluation']['visualize']:
-        input_points = batch_subsampled_reduced['inputs'].squeeze(0).cpu().numpy().reshape(-1, 3)
-        input_occ = batch_subsampled_reduced['inputs.occ'].squeeze(0).cpu().numpy().reshape(-1)
+        query_points = batch['query_points']
+        logits_sampled = batch['logits_sampled']
         
-        pcd_inputs = o3d.geometry.PointCloud()
-        pcd_inputs.points = o3d.utility.Vector3dVector(input_points[input_occ == 1])
-        pcd_inputs.paint_uniform_color([1, 0, 1])
+        if torch.is_tensor(query_points):
+            query_points = query_points.cpu().numpy()
+            logits_sampled = logits_sampled.cpu().numpy() # Convert to float32 for NumPy arrays
+
+        query_points = query_points.astype(np.float32)
+            
+        gt_mesh_o3d, gt_mesh_points = metrics_utils.load_ground_truth(batch['cfg'], terrain)
+        gt_mesh_o3d, gt_mesh_points = metrics_utils.apply_transformations(transform, gt_mesh_o3d, gt_mesh_points)
         
-        pcd_gt = o3d.geometry.PointCloud()
-        pcd_gt.points = o3d.utility.Vector3dVector(gt_mesh_points)
-        pcd_gt.paint_uniform_color([0, 1, 0])
+        if cfg['evaluation']['discard_ground']:
+            input_points = batch['inputs'].squeeze(0).cpu().numpy().reshape(-1, 3)
+            gt_mesh_points, query_points, logits_sampled = metrics_utils.filter_ground_points(gt_mesh_points, query_points, logits_sampled, input_points)
+            
+        if cfg['evaluation']['visualize']:
+            input_points = batch['inputs'].squeeze(0).cpu().numpy().reshape(-1, 3)
+            input_occ = batch['inputs.occ'].squeeze(0).cpu().numpy().reshape(-1)
+            
+            pcd_inputs = o3d.geometry.PointCloud()
+            pcd_inputs.points = o3d.utility.Vector3dVector(input_points[input_occ == 1])
+            pcd_inputs.paint_uniform_color([1, 0, 1])
+            
+            pcd_gt = o3d.geometry.PointCloud()
+            pcd_gt.points = o3d.utility.Vector3dVector(gt_mesh_points)
+            pcd_gt.paint_uniform_color([0, 1, 0])
+            
+            pcd_query = o3d.geometry.PointCloud()
+            occ_sampled = 1 / (1 + np.exp(-logits_sampled))
+            occ_sampled = (occ_sampled > 0.1)
+            
+            query_pts_occ = query_points[occ_sampled]
+            pcd_query.points = o3d.utility.Vector3dVector(query_pts_occ)
+            pcd_query.paint_uniform_color([1, 0, 0])
+            base_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+
+            o3d.visualization.draw_geometries([pcd_inputs, pcd_gt, pcd_query, gt_mesh_o3d, base_axis])
+
+        model_infos = batch['model_infos']
+        terrain = model_infos[0]['category'][0]
         
-        pcd_query = o3d.geometry.PointCloud()
-        occ_sampled = 1 / (1 + np.exp(-logits_sampled))
-        occ_sampled = (occ_sampled > 0.1)
-        
-        query_pts_occ = query_points[occ_sampled]
-        pcd_query.points = o3d.utility.Vector3dVector(query_pts_occ)
-        pcd_query.paint_uniform_color([1, 0, 0])
+        if cfg['evaluation']['is_neuralblox']:
+            thresholds = [0.01]
+        else:
+            thresholds = [0.1, 0.2, 0.3, 0.4]
 
-        o3d.visualization.draw_geometries([pcd_inputs, pcd_gt, pcd_query, gt_mesh_o3d])
+        best_metrics, metrics = metrics_utils.evaluate_points(query_points, logits_sampled, cfg, gt_mesh_o3d, gt_mesh_points, thresholds = thresholds)
 
-    model_infos = batch['model_infos']
-    terrain = model_infos[0]['category'][0]
+        metrics_n_max_inputs[file] = {'metrics': metrics, 'best_metrics': best_metrics}
 
-    acc, comp, rec = metrics_utils.evaluate_points(query_points, logits_sampled, cfg, gt_mesh_o3d, gt_mesh_points)
+    full_metrics[n_max_inputs] = metrics_n_max_inputs
 
-    accuracy += acc
-    completeness += comp
-    recall += rec
-
-print(f'Accuracy: {accuracy/len(test_loader)}')
-print(f'Completeness: {completeness/len(test_loader)}')
-print(f'Recall: {recall/len(test_loader)}')
+torch.save(full_metrics, os.path.join(processed_data_dir, 'full_metrics.pth'))

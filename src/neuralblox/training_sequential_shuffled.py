@@ -772,13 +772,14 @@ class SequentialTrainerShuffled(BaseTrainer):
             
         #     o3d.visualization.draw_geometries([pcd, bbox])
         p_n_stacked = normalize_coord(p_stacked, vol_bound)
-        n_max = self.n_voxels_max * 5
+        n_max = self.n_voxels_max
 
         n_batch = int(np.ceil(n_crops_total / n_max))
 
         logits_stacked = None  # Initialize logits directly
 
         torch.cuda.empty_cache()
+        
         for i in range(n_batch):
             start = i * n_max
             end = min((i + 1) * n_max, n_crops_total)

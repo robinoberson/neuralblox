@@ -1,32 +1,32 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  path: /media/roberson/T7/data/sequential/sequential_training/set_s45_b3_l20
-  scene_folder: /media/roberson/T7/terrains
+  path: /media/robin/T7/data/sequential/sequential_training/set_s45_b1_l20-robot
+  scene_folder: /media/robin/T7/terrains
   pointcloud_noise: 0.0
   pointcloud_n: 8192 #number of inputs when loading for each frame
 
   transform:
-    specific_angle: true
+    specific_angle: false
     angle_x: 0
-    angle_y: 0
+    angle_y: 180
     angle_z: 0
-    specific_translation: true
-    translation_x: 0
+    specific_translation: false
+    translation_x: 0.5
     translation_y: 0.1
-    translation_z: 0
+    translation_z: 0.5
 
 generation:
-  generation_dir: /media/roberson/T7/neuralblox/sequential
+  generation_dir: /media/robin/T7/neuralblox/sequential
   points_threshold: 10
   dataset: test
 
   model_backbone_file: model_backbone.pt
   model_merging_file: model_merging.pt
 
-  prob_threshold: 0.1
+  prob_threshold: 0.2
   resolution_0: 60
   skip_frames: 1
-  n_max_inputs: 8192
+  n_max_inputs: 4096
   idx_vis: 10
   folder_gen: 18_08_q1i1
 
@@ -38,18 +38,26 @@ training:
   limited_gpu: true
   log_comet: false
   save_data_viz: true
-  starting_model_backbone_file: /media/roberson/T7/neuralblox/sequential/models/model_backbone.pt
-  starting_model_merging_file: /media/roberson/T7/neuralblox/sequential/models/model_merging.pt
+  starting_model_backbone_file: /media/robin/T7/neuralblox/sequential/models/model_backbone.pt
+  starting_model_merging_file: /media/robin/T7/neuralblox/sequential/models/model_merging.pt
   n_seq_scene: 3
-  n_voxels_max: 1000
+  n_voxels_max: 20
   batch_group_size: 1
 
 evaluation:
+  processed_data_dir: /media/robin/T7/neuralblox/evaluation/preprocessed_data
+  processed_data_dir_neuralblox: '/media/robin/T7/neuralblox/evaluation/processed_data_neuralblox/processed_data'
   skip_frames: 1
-  n_max_inputs: 8192
+  n_max_inputs: [8192, 4096, 2048, 1024]
   n_logits: 20000
   prob_threshold: 0.01
-  n_max_query_points: 50000
-  discard_ground: true
+  n_max_query_points: 10000
+  discard_ground: false
   tau_r: 0.05
-  visualize: true
+  visualize: false
+  is_neuralblox: true
+  discard_patches:
+    bool: false
+    x_intervals: 4
+    z_intervals: 2
+

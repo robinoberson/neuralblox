@@ -28,7 +28,7 @@ class VoxelGrid:
             
         if self.latent_shape is None:
             self.latent_shape = latent.shape    
-    def add_voxel_wi(self, center, latent, inputs, overwrite=False, threshold=0):
+    def add_voxel_wi(self, center, latent, inputs, center_frame, overwrite_distance, overwrite=False, threshold=0):
         h = self.compute_hash(center)
         # print(h)
         list_keys = list(self.centers_table.keys())
@@ -40,14 +40,18 @@ class VoxelGrid:
         h_in_list_bool = h in list(self.centers_table.keys())
         if (not h_in_list_bool and n_occ_inputs >= threshold) or (overwrite and h_in_list_bool and n_occ_inputs >= 2 * threshold):
             # print(f'Adding {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}')
-            self.centers_table[h] = center
-            self.latents_table[h] = latent
+            
             block_overwrite = False
+            
             if h_in_list_bool: 
                 current_occ_inputs = len(self.pcd_table.get(h, None).points)
-                if n_occ_inputs < current_occ_inputs*0.75:
+                if n_occ_inputs < current_occ_inputs*0.75: #if the number of points is less than 75% of the current number of points, do not overwrite
                     # print(f'Not enough points in the occ input, skipping {h}, threshold={threshold}, n_occ_inputs={n_occ_inputs}, current_occ_inputs={current_occ_inputs}')
                     block_overwrite = True
+
+                if torch.norm(center - center_frame) > overwrite_distance:
+                    # print(f'Center too far from frame, skipping {h}, distance = {torch.norm(center - center_frame)}, overwrite_distance = {overwrite_distance}')
+                    block_overwrite = True #if the distance is greater than the overwrite distance, do not overwrite
             
             if not block_overwrite:
                 pcd = o3d.geometry.PointCloud()
@@ -55,7 +59,10 @@ class VoxelGrid:
                 occ = inputs.cpu().detach().numpy().astype(np.float64)[..., 3]
                 pcd.points = o3d.utility.Vector3dVector(points[occ == 1])
                 pcd.paint_uniform_color([1.0, 0.5, 0.0])
+                
                 self.pcd_table[h] = pcd
+                self.centers_table[h] = center
+                self.latents_table[h] = latent
             
     def add_pcd(self, center, inputs):
         h = self.compute_hash(center)
