@@ -135,4 +135,5 @@ for n_max_inputs in cfg['evaluation']['n_max_inputs']:
 
     full_metrics[n_max_inputs] = metrics_n_max_inputs
 
-torch.save(full_metrics, os.path.join(processed_data_dir, f'full_metrics_og{cfg["evaluation"]["is_neuralblox"]}_ground{cfg["evaluation"]["discard_ground"]}.pth'))
+file_path = os.path.join(processed_data_dir, f'full_metrics_og{cfg["evaluation"]["is_neuralblox"]}_ground{cfg["evaluation"]["discard_ground"]}.pth')
+torch.save(full_metrics, file_path)

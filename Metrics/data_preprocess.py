@@ -30,17 +30,17 @@ import src.neuralblox.helpers.metrics_utils as metrics_utils
 
 if 'robin' in os.getcwd():
     bool_location = 1
+    cfg_path = 'configs/evaluation_cfg.yaml'
     print(f'On home')
-
 elif 'cluster' in os.getcwd():
     bool_location = 2
     print(f'On euler')
 else:
     bool_location = 0
+    cfg_path = 'configs/evaluation_cfg_local.yaml'
     print(f'On local')
 
 cfg_default_path = 'configs/default.yaml'
-cfg_path = 'configs/evaluation_cfg.yaml'
 
 cfg = config.load_config(cfg_path, cfg_default_path)
 
