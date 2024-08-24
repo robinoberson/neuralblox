@@ -1,14 +1,14 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   path: /cluster/scratch/roberson/data/simultaneous/sequential_training/set_s45_b3_l20
-  pointcloud_noise: 0.000
+  pointcloud_noise: 0.008
   transform:
     specific_angle: false
     angle_x: 5
     angle_y: 180
     angle_z: 0
 training:
-  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_120h_22_August_transT_x5_y180_gt_robot_s20_b3_l20-lr0_002-Scratch
+  out_dir: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_120h_24_August_transT_x5_y180_gt_robot_s20_b3_l20-lr0_002-Noise
   starting_model_backbone_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_120h_22_August_transT_x5_y180_gt_robot_s20_b3_l20-lr0_002-Scratch/model_backbone.pt
   starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_120h_22_August_transT_x5_y180_gt_robot_s20_b3_l20-lr0_002-Scratch/model_merging.pt
   # starting_model_merging_file: /cluster/scratch/roberson/neuralblox/out_simultaneous/sequential_training_robot_24h_23_July_gt_robot_x5_y180_s10_b20/model_merging.pt
@@ -18,7 +18,7 @@ training:
   log_comet: true
   n_voxels_max: 30
   n_batch: 50
-  lr: 0.002
+  lr: 0.0015
   load_optimizer: false
   n_seq_scene: 3
   batch_group_size: 7
