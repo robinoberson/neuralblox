@@ -1,7 +1,7 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  path: /media/robin/T7/data/sequential/sequential_training/set_s45_b1_l20-robot
-  scene_folder: /media/robin/T7/terrains
+  path: /scratch/roberson/report/datasets/set_s45_b1_l20-robot
+  scene_folder: /scratch/roberson/report/terrains
   pointcloud_noise: 0.0
   pointcloud_n: 8192 #number of inputs when loading for each frame
 
@@ -14,9 +14,9 @@ data:                                                                           
     translation_x: 0.5
     translation_y: 0.1
     translation_z: 0.5
-models_dir: /media/robin/T7/report/models
+models_dir: /scratch/roberson/report/models/
 generation:
-  generation_dir: /media/robin/T7/neuralblox/sequential
+  generation_dir: /scratch/roberson/report/generation
   points_threshold: 10
   dataset: test
 
@@ -38,20 +38,20 @@ training:
   limited_gpu: true
   log_comet: false
   save_data_viz: true
-  starting_model_backbone_file: /media/robin/T7/report/models/model_backbone.pt
-  starting_model_merging_file: /media/robin/T7/report/models/model_merging.pt
+  starting_model_backbone_file: /scratch/roberson/report/models/model_backbone.pt
+  starting_model_merging_file: /scratch/roberson/report/models/model_merging.pt
   n_seq_scene: 3
   n_voxels_max: 20
   batch_group_size: 1
 
 evaluation:
-  processed_data_dir: /media/robin/T7/neuralblox/evaluation/preprocessed_data
-  processed_data_dir_neuralblox: /media/robin/T7/neuralblox/evaluation/processed_data_neuralblox/processed_data
+  processed_data_dir: /scratch/roberson/report/preprocessed_data
+  processed_data_dir_neuralblox: /scratch/roberson/report/processed_data_neuralblox
   skip_frames: 1
   n_max_inputs: [8192, 4096, 2048, 1024]
   n_logits: 20000
   prob_threshold: 0.01
-  n_max_query_points: 10000
+  n_max_query_points: 50000
   discard_ground: false
   tau_r: 0.05
   visualize: false

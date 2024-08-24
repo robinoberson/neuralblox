@@ -220,9 +220,9 @@ def get_generator_sequential(cfg, device):
     checkpoint_io_merging = CheckpointIO(cfg['generation']['generation_dir'], model=model_merging)
 
     try:
-        generation_dir_models = os.path.join(cfg['generation']['generation_dir'], 'models')
-        checkpoint_io.load(os.path.join(generation_dir_models, cfg['generation']['model_backbone_file']))#cfg['generation']['model_backbone_file'])
-        checkpoint_io_merging.load(os.path.join(generation_dir_models, cfg['generation']['model_merging_file']))#cfg['generation']['model_merging_file'])
+        models_dir = cfg['models_dir']
+        checkpoint_io.load(os.path.join(models_dir, cfg['generation']['model_backbone_file']))#cfg['generation']['model_backbone_file'])
+        checkpoint_io_merging.load(os.path.join(models_dir, cfg['generation']['model_merging_file']))#cfg['generation']['model_merging_file'])
         
     except FileExistsError as e:
         print(f'No checkpoint file found! {e}')

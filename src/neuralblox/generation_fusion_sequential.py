@@ -96,9 +96,9 @@ class Generator3DSequential(object):
             else:
                 merged_latents, centers_frame, inputs_frame = self.fuse(inputs_frame)
                 # print(f'Perform latent fusion')
-                
+            center_frame = torch.mean(centers_frame, dim = 0)
             for merged_latent, center, inputs_frame in zip(merged_latents, centers_frame, inputs_frame):
-                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, overwrite=True, threshold=self.points_threshold)
+                self.voxel_grid.add_voxel_wi(center, merged_latent, inputs_frame, center_frame, overwrite_distance = 3*self.trainer.query_crop_size, overwrite=True, threshold=self.points_threshold)
                 
             stacked_latents, centers, pcds = self.stack_latents_all()
             mesh, _ = self.generate_mesh_from_neural_map(stacked_latents, centers, crop_size = self.trainer.query_crop_size, return_stats=False)
