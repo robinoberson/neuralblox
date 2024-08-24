@@ -29,17 +29,17 @@ import src.neuralblox.helpers.metrics_utils as metrics_utils
 
 if 'robin' in os.getcwd():
     bool_location = 1
+    cfg_path = 'configs/evaluation_cfg.yaml'
     print(f'On home')
-
 elif 'cluster' in os.getcwd():
     bool_location = 2
     print(f'On euler')
 else:
     bool_location = 0
+    cfg_path = 'configs/evaluation_cfg_local.yaml'
     print(f'On local')
 
 cfg_default_path = 'configs/default.yaml'
-cfg_path = 'configs/evaluation_cfg.yaml'
 
 cfg = config.load_config(cfg_path, cfg_default_path)
 
@@ -91,7 +91,7 @@ for n_max_inputs in cfg['evaluation']['n_max_inputs']:
 
         query_points = query_points.astype(np.float32)
             
-        gt_mesh_o3d, gt_mesh_points = metrics_utils.load_ground_truth(batch['cfg'], terrain)
+        gt_mesh_o3d, gt_mesh_points = metrics_utils.load_ground_truth(cfg, terrain)
         gt_mesh_o3d, gt_mesh_points = metrics_utils.apply_transformations(transform, gt_mesh_o3d, gt_mesh_points)
         
         if cfg['evaluation']['discard_ground']:
@@ -135,4 +135,4 @@ for n_max_inputs in cfg['evaluation']['n_max_inputs']:
 
     full_metrics[n_max_inputs] = metrics_n_max_inputs
 
-torch.save(full_metrics, os.path.join(processed_data_dir, 'full_metrics.pth'))
+torch.save(full_metrics, os.path.join(processed_data_dir, f'full_metrics_og{cfg["evaluation"]["is_neuralblox"]}_ground{cfg["evaluation"]["discard_ground"]}.pth'))

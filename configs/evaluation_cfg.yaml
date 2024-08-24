@@ -46,15 +46,16 @@ training:
 
 evaluation:
   processed_data_dir: /media/robin/T7/neuralblox/evaluation/preprocessed_data
-  processed_data_dir_neuralblox: /media/robin/T7/neuralblox/evaluation/processed_data_neuralblox/processed_data
+  processed_data_dir_neuralblox: /media/robin/T7/neuralblox/evaluation/processed_data_neuralblox
   skip_frames: 1
   n_max_inputs: [8192, 4096, 2048, 1024]
   n_logits: 20000
   prob_threshold: 0.01
   n_max_query_points: 10000
-  discard_ground: false
+  discard_ground: true
   tau_r: 0.05
-  visualize: false
+  thresh: 0.01
+  visualize: true
   is_neuralblox: true
   discard_patches:
     bool: false
