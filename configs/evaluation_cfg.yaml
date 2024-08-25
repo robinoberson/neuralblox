@@ -16,7 +16,7 @@ data:                                                                           
     translation_z: 0.5
 models_dir: /media/robin/T7/report/models
 generation:
-  generation_dir: /media/robin/T7/neuralblox/sequential
+  generation_dir: /media/robin/T7/neuralblox/sequential/generation
   points_threshold: 10
   dataset: test
 

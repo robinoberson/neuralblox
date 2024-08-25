@@ -379,7 +379,7 @@ def visu_debug_2(self):
     o3d.visualization.draw_geometries([pcd_existing, pcd_current, pcd_existing_2, pcd_current_2, pcd_existing_i, pcd_current_i])       
     
 
-def visualize_mesh_and_points(inputs_frame_list, mesh_list, points_perc = 1.0):
+def visualize_mesh_and_points(inputs_frame_list, mesh_list, add_geos = [], points_perc = 1.0):
     """
     Visualize a 3D mesh and a point cloud.
 
@@ -430,4 +430,4 @@ def visualize_mesh_and_points(inputs_frame_list, mesh_list, points_perc = 1.0):
     pcd_full.paint_uniform_color([0,0,1])
 
     # Visualize the mesh, point cloud, and coordinate frame
-    o3d.visualization.draw_geometries([mesho3d, base_axis, pcd_full, pcd])
+    o3d.visualization.draw_geometries([mesho3d, base_axis, pcd_full, pcd] + add_geos)
