@@ -1,23 +1,23 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  path: /media/robin/T7/data/sequential/sequential_training/set_s45_b1_l20-robot
-  scene_folder: /media/robin/T7/terrains
+  path: /cluster/scratch/roberson/data/simultaneous/sequential_training/set_s45_b3_l20
+  scene_folder: /cluster/scratch/roberson/terrains
   pointcloud_noise: 0.001
   pointcloud_n: 8192 #number of inputs when loading for each frame
 
   transform:
-    specific_angle: false
+    specific_angle: true
     angle_x: 0
-    angle_y: 180
+    angle_y: 33
     angle_z: 0
     specific_translation: false
     translation_x: 0.5
     translation_y: 0.1
     translation_z: 0.5
-models_dir: /media/robin/T7/report/models
+models_dir: /cluster/scratch/roberson/report/models
 
 generation:
-  generation_dir: /media/robin/T7/report-mesh-gen/generation
+  generation_dir: /cluster/scratch/roberson/report-mesh-gen/generation
   points_threshold: 10
   dataset: test
 
@@ -32,8 +32,8 @@ generation:
   folder_gen: 18_08_q1i1
 
   real_world_robot: false
-  dir_robot: /media/robin/T7/data/pclds/
-  generation_dir_robot: /media/robin/T7/report-mesh-gen/robot
+  dir_robot: /cluster/scratch/roberson/data/pclds/
+  generation_dir_robot: /cluster/scratch/roberson/report-mesh-gen/robot
 
 test:
   model_backbone_file: model.pt
@@ -43,15 +43,15 @@ training:
   limited_gpu: true
   log_comet: false
   save_data_viz: true
-  starting_model_backbone_file: /media/robin/T7/report/models/model_backbone.pt
-  starting_model_merging_file: /media/robin/T7/report/models/model_merging.pt
+  starting_model_backbone_file: /cluster/scratch/roberson/report/models/model_backbone.pt
+  starting_model_merging_file: /cluster/scratch/roberson/report/models/model_merging.pt
   n_seq_scene: 3
   n_voxels_max: 20
   batch_group_size: 1
 
 evaluation:
-  processed_data_dir: /media/robin/T7/neuralblox/evaluation/preprocessed_data
-  processed_data_dir_neuralblox: /media/robin/T7/neuralblox/evaluation/processed_data_neuralblox
+  processed_data_dir: /cluster/scratch/roberson/neuralblox/evaluation/preprocessed_data
+  processed_data_dir_neuralblox: /cluster/scratch/roberson/neuralblox/evaluation/processed_data_neuralblox
   skip_frames: 1
   n_max_inputs: [8192, 4096, 2048, 1024]
   n_logits: 20000
@@ -68,18 +68,18 @@ evaluation:
     z_intervals: 2
 
 plotoptix:
-  path_dir: /media/robin/T7/neuralblox/evaluation/processed_data
+  path_dir: /cluster/scratch/roberson/neuralblox/evaluation/processed_data
   og: true
   dispatch: false
   n_points: 8192
-  out_dir_images: /media/robin/T7/report/images/results
+  out_dir_images: /cluster/scratch/roberson/report/images/results
   image_name: mesh_real_world
   threshold: 0.1
   acc_steps: 100
 
 plotoptix_animation:
   save_images: false
-  out_dir_images: /media/robin/T7/report/animation
+  out_dir_images: /cluster/scratch/roberson/report/animation
   min_accumulation_step: 1
   factor: 18
   shift: 10

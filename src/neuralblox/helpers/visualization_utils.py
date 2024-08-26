@@ -6,6 +6,8 @@ import numpy as np
 import torch 
 import src.neuralblox.helpers.sequential_trainer_utils as st_utils
 import matplotlib.cm as cm
+import json
+
 def visualize_weights(weights, p_query, inputs_distributed):
     """
     Visualize point cloud `p_query` with colors based on `weights`.
@@ -431,3 +433,5 @@ def visualize_mesh_and_points(inputs_frame_list, mesh_list, add_geos = [], point
 
     # Visualize the mesh, point cloud, and coordinate frame
     o3d.visualization.draw_geometries([mesho3d, base_axis, pcd_full, pcd] + add_geos)
+
+    return mesho3d
