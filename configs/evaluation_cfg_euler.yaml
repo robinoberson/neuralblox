@@ -25,7 +25,7 @@ generation:
   model_merging_file: model_merging.pt
 
   prob_threshold: 0.05
-  resolution_0: 60
+  resolution_0: 100
   skip_frames: 1
   n_max_inputs: 4096
   idx_vis: 10
