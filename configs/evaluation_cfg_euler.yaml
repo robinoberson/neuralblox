@@ -1,6 +1,6 @@
 inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             #took the last 2 out '2024-06-27_15-12-02', '2024-06-27_15-12-03' 
-  path: /cluster/scratch/roberson/data/simultaneous/sequential_training/set_s45_b3_l20
+  path: /cluster/scratch/roberson/data/simultaneous/sequential_training/set_s45_b1_l20-robot
   scene_folder: /cluster/scratch/roberson/terrains
   pointcloud_noise: 0.001
   pointcloud_n: 8192 #number of inputs when loading for each frame
