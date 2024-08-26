@@ -10,9 +10,9 @@ data:                                                                           
     angle_x: 0
     angle_y: 180
     angle_z: 0
-    specific_translation: false
+    specific_translation: true
     translation_x: 0.5
-    translation_y: 0.1
+    translation_y: 0.0
     translation_z: 0.5
 models_dir: /media/robin/T7/report/models
 
@@ -24,8 +24,8 @@ generation:
   model_backbone_file: model_backbone.pt
   model_merging_file: model_merging.pt
 
-  prob_threshold: 0.05
-  resolution_0: 10
+  prob_threshold: 0.1
+  resolution_0: 50
   skip_frames: 1
   n_max_inputs: 4096
   idx_vis: 10
@@ -69,16 +69,17 @@ evaluation:
 
 plotoptix:
   path_dir: /media/robin/T7/neuralblox/evaluation/processed_data
-  og: true
+  og: false
   dispatch: false
   n_points: 8192
   out_dir_images: /media/robin/T7/report/images/results
-  image_name: mesh_real_world
+  image_name: problematics
   threshold: 0.1
   acc_steps: 100
 
 plotoptix_animation:
   save_images: false
+  generation_dir: /media/robin/T7/report-mesh-gen/sim/euler/generation
   out_dir_images: /media/robin/T7/report/animation
   min_accumulation_step: 1
   factor: 18

@@ -10,9 +10,9 @@ data:                                                                           
     angle_x: 0
     angle_y: 33
     angle_z: 0
-    specific_translation: false
+    specific_translation: true
     translation_x: 0.5
-    translation_y: 0.1
+    translation_y: 0.0
     translation_z: 0.5
 models_dir: /cluster/scratch/roberson/report/models
 
