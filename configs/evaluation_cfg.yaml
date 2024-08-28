@@ -73,23 +73,24 @@ plotoptix:
   dispatch: false
   n_points: 8192
   out_dir_images: /media/robin/T7/report/images/results
-  image_name: problematics
+  image_name: gen_8192
   threshold: 0.1
   acc_steps: 100
 
 plotoptix_animation:
   save_images: true
-  real_robot: true
-  generation_dir_robot: /media/robin/T7/report-mesh-gen/robot
+  real_robot: false
+  # generation_dir_robot: /media/robin/T7/report-mesh-gen/robot
+  generation_dir_robot: /media/robin/T7/report-mesh-gen/sim/euler/generation/generation
   generation_dir: /media/robin/T7/report-mesh-gen/sim/euler/generation
   out_dir_images: /media/robin/T7/report/animation/images
-  min_accumulation_step: 1
+  min_accumulation_step: 100
   factor: 18
   shift: 10
   dt: 0.01
   period: 3.0
-  # rotation: 33
-  rotation: -60
-  angle_amplitude: 40
+  rotation: 33
+  # rotation: -60
+  angle_amplitude: 90
   # change_factor: 6
-  change_factor: 25
+  change_factor: 6
