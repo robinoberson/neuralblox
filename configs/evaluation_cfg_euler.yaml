@@ -31,8 +31,8 @@ generation:
   idx_vis: 10
   folder_gen: 18_08_q1i1
 
-  real_world_robot: false
-  dir_robot: /cluster/scratch/roberson/data/pclds/
+  real_world_robot: true
+  dir_robot: /cluster/scratch/roberson/data/rosdata/pclds/
   generation_dir_robot: /cluster/scratch/roberson/report-mesh-gen/robot
 
 test:

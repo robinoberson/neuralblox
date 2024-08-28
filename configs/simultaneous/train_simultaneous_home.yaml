@@ -2,11 +2,22 @@ inherit_from: configs/simultaneous/train_simultaneous.yaml
 data:
   path: 
     /media/robin/T7/data/sequential/sequential_training/set_s45_b3_l20
+  val_classes: ['2024-08-21_16-54-17']
+  transform:
+    specific_angle: true
+    angle_x: 0
+    angle_y: 20
+    angle_z: 0
+    specific_translation: true
+    # translation_x: 0.5
+    # translation_y: 0.5
+    # translation_z: 0.5
+    translation_x: 0.
+    translation_y: 0.
+    translation_z: 0.
   grid_resolution: 24
   pointcloud_noise: 0.0
-model:
-  encoder_kwargs:
-    grid_resolution: 24
+
 training:
   out_dir: /home/robin/Dev/MasterThesis/neuralblox/out_simultaneous/sequential_training
   starting_model_backbone_file: 

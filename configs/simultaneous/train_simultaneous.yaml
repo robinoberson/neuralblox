@@ -20,11 +20,11 @@ data:
   input_vol: 1.0
   query_vol: 1.0
   transform:
-    specific_angle: false
+    specific_angle: false # if true, specific angle
     angle_x: 5
     angle_y: 180
     angle_z: 0
-    specific_translation: false
+    specific_translation: false # if true, specific translation
     translation_x: 0.5
     translation_y: 0.5
     translation_z: 0.5
@@ -50,7 +50,7 @@ model:
   pos_encoding: sin_cos
   c_dim: 32
 training:
-  out_dir: null
+  out_dir: null # dir where the models will be saved
   batch_size: 10
   model_selection_metric: iou
   model_selection_mode: maximize
@@ -60,10 +60,10 @@ training:
   prob: 1.0
   n_max_points: 2048 #max number of inputs per voxel (approx 400 occupied points per voxel)
   n_max_points_query: 8192 #max number of query points per voxel (between 900 to 3500 occupied points per voxel if no limitation)
-  n_fusions: 20
-  n_seq_scene: 3
-  occ_per_query: 0.5
-  batch_group_size: 1
+  n_fusions: 20 #number of frames inside a sequence
+  n_seq_scene: 3 #number of different sequences in a scene
+  occ_per_query: 0.5 #percentage of occupied points per query voxel
+  batch_group_size: 1 #number of voxels in a batch for training
   n_workers: 8
   n_workers_val: 4
   reset_training: true
@@ -71,15 +71,15 @@ training:
   log_comet: false
   load_optimizer: false
   lr: 0.01
-  lr_reduce_factor: 0.9
-  lr_patience: 60
+  lr_reduce_factor: 0.9 #used for scheduler
+  lr_patience: 60 #used for scheduler
   starting_model_backbone_file: model_backbone.pt
   starting_model_merging_file: model_merging.pt
   model_backbone: model_backbone.pt
   model_merging: model_merging.pt
   limited_gpu: true
   save_data_viz: true
-  n_voxels_max: 40
+  n_voxels_max: 40 #change this if you want to limit the number of voxels passed at the same time to the GPU
   n_batch: 20
   return_flat: true # if true, cost computed on all voxels, if false, cost computed on some (not all) flat voxels + elevated voxels
   sigma: 0.7 # used for the weighting of the cost, lower sigma -> higher emphasis on points close to inputs
@@ -105,7 +105,8 @@ generation:
   resolution_0: 30
   voxel_threshold: 0.001
   n_max_inputs: 4096
+  
 visualization: false
-k_value: 0.2
+k_value: 0.2 #used for debugging, top k values will be visualized
 
 #   k: 0.2

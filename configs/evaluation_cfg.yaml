@@ -78,10 +78,10 @@ plotoptix:
   acc_steps: 100
 
 plotoptix_animation:
-  save_images: false
+  save_images: true
   generation_dir: /media/robin/T7/report-mesh-gen/sim/euler/generation
-  out_dir_images: /media/robin/T7/report/animation
-  min_accumulation_step: 1
+  out_dir_images: /media/robin/T7/report/animation/images
+  min_accumulation_step: 50
   factor: 18
   shift: 10
   dt: 0.01
