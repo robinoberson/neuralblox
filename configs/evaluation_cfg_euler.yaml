@@ -33,7 +33,7 @@ generation:
 
   real_world_robot: true
   dir_robot: /cluster/scratch/roberson/data/rosdata/pclds/
-  generation_dir_robot: /cluster/scratch/roberson/report-mesh-gen/robot
+  generation_dir_robot: /cluster/scratch/roberson/report-mesh-gen/robot-40
 
 test:
   model_backbone_file: model.pt
