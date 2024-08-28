@@ -48,14 +48,15 @@ evaluation:
   processed_data_dir: /scratch/roberson/report/preprocessed_data
   processed_data_dir_neuralblox: /scratch/roberson/report/processed_data_neuralblox
   skip_frames: 1
-  n_max_inputs: [8192, 4096, 2048, 1024]
+  n_max_inputs: [8192, 4096, 2048]
   n_logits: 20000
   prob_threshold: 0.01
-  n_max_query_points: 50000
-  discard_ground: false
+  n_max_query_points: 50000  
+  thresh: 0.01
+  discard_ground: True
   tau_r: 0.05
   visualize: false
-  is_neuralblox: true
+  is_neuralblox: false
   discard_patches:
     bool: false
     x_intervals: 4

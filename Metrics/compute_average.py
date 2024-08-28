@@ -26,28 +26,66 @@ if cfg['evaluation']['is_neuralblox']:
 else:
     processed_data_dir = cfg['evaluation']['processed_data_dir']
     
-path = os.path.join(processed_data_dir, f'full_metrics_og{cfg["evaluation"]["is_neuralblox"]}_ground{cfg["evaluation"]["discard_ground"]}.pth')
-path = os.path.join('/media/robin/T7/neuralblox/evaluation/processed_data_neuralblox', 'full_metrics.pth')
+path = os.path.join(processed_data_dir, f'full_metrics_with_ground.pth')
+# path = os.path.join(processed_data_dir, 'full_metrics.pth')
 
-full_metrics = torch.load(path)
+metrics = torch.load(path)
+import pandas as pd
 
-acc = 0
-completeness = 0
-recall = 0
-thresh = cfg['evaluation']['thresh']
-for key in full_metrics.keys():
-    n_sum = 0
+# Initialize lists to store data
+discard_patches_list = []
+is_neuralblox_list = []
+n_points = []
+accuracies = []
+completenesses = []
+recalls = []
 
-    for key2 in full_metrics[key].keys():
-        print(f'\t{key2}')
-        for thr in full_metrics[key][key2]['metrics'].keys():
-            print(f'\t\t{full_metrics[key][key2]["metrics"][thr]}')
-        acc += full_metrics[key][key2]['metrics'][thresh]['Accuracy']
-        completeness += full_metrics[key][key2]['metrics'][thresh]['Completeness']
-        recall += full_metrics[key][key2]['metrics'][thresh]['Recall']
-        n_sum += 1
-    print(f'{key}')
-    print(f'Accuracy: {acc/n_sum}')
-    print(f'Completeness: {completeness/n_sum}')
-    print(f'Recall: {recall/n_sum}')
-    print()
+# Loop through full_metrics to collect the data
+for discard_patch in [False, True]:
+    for is_neuralblox in [False, True]:
+        if is_neuralblox:
+            thresh = 0.01
+        else:
+            thresh = 0.1
+            
+        full_metrics = metrics[discard_patch][is_neuralblox]
+        for n_inputs in full_metrics.keys():
+            n_sum = 0
+            acc = 0
+            completeness = 0
+            recall = 0
+            
+            for file_name in full_metrics[n_inputs].keys():
+                acc += full_metrics[n_inputs][file_name]['metrics'][thresh]['Accuracy']
+                completeness += full_metrics[n_inputs][file_name]['metrics'][thresh]['Completeness']
+                recall += full_metrics[n_inputs][file_name]['metrics'][thresh]['Recall']
+                n_sum += 1
+            
+            # Calculate averages
+            avg_acc = acc / n_sum
+            avg_completeness = completeness / n_sum
+            avg_recall = recall / n_sum
+            
+            # Append data to lists
+            discard_patches_list.append(discard_patch)
+            is_neuralblox_list.append(is_neuralblox)
+            n_points.append(n_inputs)
+            accuracies.append(avg_acc)
+            completenesses.append(avg_completeness)
+            recalls.append(avg_recall)
+
+# Create a DataFrame
+df = pd.DataFrame({
+    'discard_patches': discard_patches_list,
+    'is_neuralblox': is_neuralblox_list,
+    'n_points': n_points,
+    'Accuracy': accuracies,
+    'Completeness': completenesses,
+    'Recall': recalls
+})
+
+name_df = f'metrics_og_with_ground.csv'
+# Display the DataFrame
+print(df)
+#save 
+df.to_csv(os.path.join(processed_data_dir, name_df))

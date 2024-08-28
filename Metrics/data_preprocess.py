@@ -62,22 +62,30 @@ iter = 0
 if not os.path.exists(cfg['evaluation']['processed_data_dir']):
     os.makedirs(cfg['evaluation']['processed_data_dir'])
 
-for n_max_inputs in cfg['evaluation']['n_max_inputs']:
-    iter = 0
-    for batch in test_loader:
-        torch.cuda.empty_cache()
-        gc.collect()
-        print(f'preprocessing batch {iter} for n_max_inputs = {n_max_inputs}')
-        with torch.no_grad():
-            batch_subsampled_reduced = metrics_utils.process_batch(batch, cfg, n_max_inputs)
-            
-            logits_sampled, query_points = metrics_utils.generate_logits(generator_robot, batch_subsampled_reduced, cfg, 20)
-            generator_robot = config_generators.get_generator_sequential(cfg, device=device)
+for discard_patch in [False, True]:
+    cfg['evaluation']['discard_patches']['bool'] = discard_patch
 
-            data_saving = metrics_utils.prepare_data_saving(batch_subsampled_reduced, query_points, logits_sampled, cfg)
-            out_path = os.path.join(cfg['evaluation']['processed_data_dir'], f'data_saving_{n_max_inputs}_{iter}.pth')
-            torch.save(data_saving, out_path)
-            iter += 1
-            print(f'Saved to {out_path}')
+    for is_neuralblox in [False, True]:
+        cfg['evaluation']['is_neuralblox'] = is_neuralblox
+    #overwrite discard_patch in config
+        for n_max_inputs in cfg['evaluation']['n_max_inputs']:
+            iter = 0
+            for batch in test_loader:
+                torch.cuda.empty_cache()
+                gc.collect()
+                print(f'preprocessing batch {iter} for n_max_inputs = {n_max_inputs}')
+                out_path = os.path.join(cfg['evaluation']['processed_data_dir'], f'data_saving_{n_max_inputs}_{iter}_og{cfg["evaluation"]["is_neuralblox"]}_dispatch-{cfg["evaluation"]["discard_patches"]["bool"]}_.pth')
+                print(out_path)
+                with torch.no_grad():
+                    
+                    batch_subsampled_reduced = metrics_utils.process_batch(batch, cfg, n_max_inputs)
+                    
+                    logits_sampled, query_points = metrics_utils.generate_logits(generator_robot, batch_subsampled_reduced, cfg, 20)
+                    generator_robot = config_generators.get_generator_sequential(cfg, device=device)
+
+                    data_saving = metrics_utils.prepare_data_saving(batch_subsampled_reduced, query_points, logits_sampled, cfg)
+                    torch.save(data_saving, out_path)
+                    iter += 1
+                    print(f'Saved to {out_path}')
         
 print(f"scp -r {cfg['evaluation']['processed_data_dir']} roberson@129.132.39.165:/scratch/roberson/data/simultaneous/sequential_training")
